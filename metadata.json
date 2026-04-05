@@ -1,0 +1,7 @@
+{
+  "name": "Wafi Pro (وافي برو)",
+  "description": "A high-performance, data-dense accounting system built for speed and modern aesthetics, featuring smart accounting assistance.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
