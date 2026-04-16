@@ -76,7 +76,7 @@ const LeaveRequest = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl text-right" dir="rtl">
+        <div className="app-page" dir="rtl">
             <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                 <Calendar className="text-blue-600" />
                 إدارة الإجازات والطلبات
@@ -168,7 +168,7 @@ const LeaveRequest = () => {
                 </div>
 
                 {/* History List */}
-                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="lg:col-span-2 card overflow-hidden">
                     <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
                         <h3 className="font-bold text-gray-800">سجل الطلبات</h3>
                         <button onClick={() => loadRequests()} className="text-sm text-blue-600 hover:underline">عرض الكل ({requests.length})</button>
@@ -232,3 +232,4 @@ const LeaveRequest = () => {
 };
 
 export default LeaveRequest;
+

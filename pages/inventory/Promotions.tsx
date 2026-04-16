@@ -13,7 +13,7 @@ export const Promotions = () => {
                 </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+            <div className="card p-12 text-center">
                 <Percent size={64} className="mx-auto text-gray-200 mb-4" />
                 <h3 className="text-lg font-bold text-gray-500">لا توجد عروض نشطة حالياً</h3>
                 <p className="text-gray-400 mt-2">قم بإنشاء حملات ترويجية وخصومات لزيادة المبيعات</p>

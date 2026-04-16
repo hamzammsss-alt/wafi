@@ -26,7 +26,7 @@ export const PrintLayoutEditor = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50/50 min-h-screen font-cairo flex gap-6" dir="rtl">
+        <div className="app-page flex gap-6" dir="rtl">
 
             {/* Settings Panel */}
             <div className="w-[400px] shrink-0 flex flex-col gap-6">

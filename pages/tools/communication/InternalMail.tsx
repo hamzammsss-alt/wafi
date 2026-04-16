@@ -3,12 +3,12 @@ import { Mail, Inbox, Send, Star, AlertCircle } from 'lucide-react';
 
 export const InternalMail = () => {
     return (
-        <div className="p-6 bg-gray-50 h-full flex flex-col max-h-screen" dir="rtl">
+        <div className="app-page h-full flex flex-col max-h-screen" dir="rtl">
             <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                 <Mail className="text-indigo-600" /> البريد الداخلي
             </h1>
 
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex overflow-hidden">
+            <div className="flex-1 card flex overflow-hidden">
                 {/* Sidebar */}
                 <div className="w-64 bg-gray-50 border-l p-4 flex flex-col gap-2">
                     <button className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold shadow mb-4">رسالة جديدة</button>
@@ -61,3 +61,4 @@ export const InternalMail = () => {
         </div>
     );
 };
+

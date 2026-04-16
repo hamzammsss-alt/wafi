@@ -13,10 +13,14 @@ const ItemGeneralTab: React.FC<Props> = ({ data, onChange }) => {
     const [workCenters, setWorkCenters] = useState<any[]>([]);
 
     useEffect(() => {
-        window.electronAPI.inventory.getBrands().then(setBrands);
-        window.electronAPI.inventory.getCategories().then(setCategories);
-        window.electronAPI.partner.getPartners('SUPPLIER').then(setSuppliers);
-        window.electronAPI.manufacturing.getWorkCenters().then(setWorkCenters);
+        void Promise.all([
+            window.electronAPI.inventory.getBrands().then(setBrands),
+            window.electronAPI.inventory.getCategories().then(setCategories),
+            window.electronAPI.partner.getPartners('SUPPLIER').then(setSuppliers),
+            window.electronAPI.manufacturing.getWorkCenters().then(setWorkCenters),
+        ]).catch((error) => {
+            console.error('Failed to load item master references', error);
+        });
     }, []);
 
     const handleChange = (field: keyof Item, value: any) => {
@@ -24,198 +28,241 @@ const ItemGeneralTab: React.FC<Props> = ({ data, onChange }) => {
     };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4" dir="rtl">
-            {/* Right Column (Code/Name) - First in DOM = Right in RTL */}
-            <div className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 text-right">رمز الصنف *</label>
-                    <input
-                        type="text"
-                        value={data.code || ''}
-                        onChange={e => handleChange('code', e.target.value)}
-                        className="w-full border rounded p-2 focus:ring-blue-500 text-right"
-                        dir="ltr"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 text-right">الاسم بالعربي *</label>
-                    <input
-                        type="text"
-                        value={data.name_ar || ''}
-                        onChange={e => handleChange('name_ar', e.target.value)}
-                        className="w-full border rounded p-2 focus:ring-blue-500 text-right"
-                        dir="rtl"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 text-right">الاسم بالإنجليزي</label>
-                    <input
-                        type="text"
-                        value={data.name_en || ''}
-                        onChange={e => handleChange('name_en', e.target.value)}
-                        className="w-full border rounded p-2 focus:ring-blue-500 text-right"
-                        dir="ltr"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 text-right">الاسم التجاري</label>
-                    <input
-                        type="text"
-                        value={data.trade_name || ''}
-                        onChange={e => handleChange('trade_name', e.target.value)}
-                        className="w-full border rounded p-2 focus:ring-blue-500 text-right"
-                    />
-                </div>
-
-                <div className="flex space-x-4 space-x-reverse">
-                    <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1 text-right">المجموعة / الفئة</label>
-                        <select
-                            value={data.category_id || ''}
-                            onChange={e => handleChange('category_id', e.target.value)}
-                            className="w-full border rounded p-2 bg-white text-right"
-                        >
-                            <option value="">اختر المجموعة...</option>
-                            {categories.map(c => <option key={c.id} value={c.id}>{c.name_ar}</option>)}
-                        </select>
+        <div className="space-y-6 p-4" dir="rtl">
+            <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="mb-5">
+                        <h3 className="text-lg font-black text-slate-800">الهوية الأساسية</h3>
+                        <p className="mt-1 text-sm text-slate-500">الرقم، الأسماء، والتصنيف الرئيسي للصنف.</p>
                     </div>
-                    <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1 text-right">العلامة التجارية</label>
-                        <select
-                            value={data.brand_id || ''}
-                            onChange={e => handleChange('brand_id', e.target.value)}
-                            className="w-full border rounded p-2 bg-white text-right"
-                        >
-                            <option value="">اختر العلامة...</option>
-                            {brands.map(b => <option key={b.id} value={b.id}>{b.name_ar}</option>)}
-                        </select>
-                    </div>
-                </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 text-right">المورد الافتراضي</label>
-                    <select
-                        value={data.default_supplier_id || ''}
-                        onChange={e => handleChange('default_supplier_id', e.target.value)}
-                        className="w-full border rounded p-2 bg-white text-right"
-                    >
-                        <option value="">اختر المورد...</option>
-                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name_ar}</option>)}
-                    </select>
-                </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">رقم الصنف *</span>
+                            <input
+                                type="text"
+                                value={data.code || ''}
+                                onChange={(e) => handleChange('code', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                                dir="ltr"
+                            />
+                        </label>
+
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">نوع الصنف</span>
+                            <select
+                                value={data.type || 'Goods'}
+                                onChange={(e) => handleChange('type', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                            >
+                                <option value="Goods">بضاعة وخدمات</option>
+                                <option value="Service">خدمي</option>
+                                <option value="Raw Material">مواد أولية</option>
+                                <option value="Finished Good">منتج تام</option>
+                                <option value="Asset">موجودات ثابتة</option>
+                            </select>
+                        </label>
+
+                        <label className="block md:col-span-2">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">الاسم بالعربية *</span>
+                            <input
+                                type="text"
+                                value={data.name_ar || ''}
+                                onChange={(e) => handleChange('name_ar', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                                dir="rtl"
+                            />
+                        </label>
+
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">الاسم English</span>
+                            <input
+                                type="text"
+                                value={data.name_en || ''}
+                                onChange={(e) => handleChange('name_en', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                                dir="ltr"
+                            />
+                        </label>
+
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">الاسم بالعبرية</span>
+                            <input
+                                type="text"
+                                value={data.name_he || ''}
+                                onChange={(e) => handleChange('name_he', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                                dir="rtl"
+                            />
+                        </label>
+
+                        <label className="block md:col-span-2">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">الاسم التجاري</span>
+                            <input
+                                type="text"
+                                value={data.trade_name || ''}
+                                onChange={(e) => handleChange('trade_name', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                            />
+                        </label>
+                    </div>
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="mb-5">
+                        <h3 className="text-lg font-black text-slate-800">المعايير والربط</h3>
+                        <p className="mt-1 text-sm text-slate-500">الفئة، العلامة، المورد، وخط الإنتاج الافتراضي.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">مجموعة الصنف</span>
+                            <select
+                                value={data.category_id || ''}
+                                onChange={(e) => handleChange('category_id', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                            >
+                                <option value="">اختر المجموعة</option>
+                                {categories.map((category) => (
+                                    <option key={category.id} value={category.id}>{category.name_ar}</option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">العلامة التجارية</span>
+                            <select
+                                value={data.brand_id || ''}
+                                onChange={(e) => handleChange('brand_id', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                            >
+                                <option value="">اختر العلامة</option>
+                                {brands.map((brand) => (
+                                    <option key={brand.id} value={brand.id}>{brand.name_ar}</option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">المورد الافتراضي</span>
+                            <select
+                                value={data.default_supplier_id || ''}
+                                onChange={(e) => handleChange('default_supplier_id', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                            >
+                                <option value="">اختر المورد</option>
+                                {suppliers.map((supplier) => (
+                                    <option key={supplier.id} value={supplier.id}>{supplier.name_ar}</option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-semibold text-slate-700">خط الإنتاج</span>
+                            <select
+                                value={data.production_line || ''}
+                                onChange={(e) => handleChange('production_line', e.target.value)}
+                                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                            >
+                                <option value="">اختر خط الإنتاج</option>
+                                {workCenters.map((workCenter) => (
+                                    <option key={workCenter.id} value={workCenter.name}>{workCenter.name}</option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <label className="block">
+                                <span className="mb-1 block text-sm font-semibold text-slate-700">الدرجة</span>
+                                <input
+                                    type="text"
+                                    value={data.grade || ''}
+                                    onChange={(e) => handleChange('grade', e.target.value)}
+                                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                                />
+                            </label>
+
+                            <label className="block">
+                                <span className="mb-1 block text-sm font-semibold text-slate-700">الكفالة</span>
+                                <input
+                                    type="text"
+                                    value={data.warranty_info || ''}
+                                    onChange={(e) => handleChange('warranty_info', e.target.value)}
+                                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                                />
+                            </label>
+                        </div>
+                    </div>
+                </section>
             </div>
 
-            {/* Left Column (Details/Image) - Second in DOM = Left in RTL */}
-            <div className="space-y-4">
-                <div className="flex space-x-4 space-x-reverse">
-                    <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1 text-right">نوع الصنف</label>
-                        <select
-                            value={data.type || 'Goods'}
-                            onChange={e => handleChange('type', e.target.value)}
-                            className="w-full border rounded p-2 bg-white text-right"
-                        >
-                            <option value="Goods">سلعة مخزنية (Goods)</option>
-                            <option value="Service">خدمة (Service)</option>
-                            <option value="Raw Material">مادة خام (Raw Material)</option>
-                            <option value="Finished Good">منتج تام (Finished Good)</option>
-                            <option value="Asset">أصل ثابت (Asset)</option>
-                        </select>
-                    </div>
-                    <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1 text-right">تصنيف / نخب</label>
-                        <input
-                            type="text"
-                            value={data.grade || ''}
-                            onChange={e => handleChange('grade', e.target.value)}
-                            placeholder="مثال: نخب أول"
-                            className="w-full border rounded p-2 focus:ring-blue-500 text-right placeholder-right"
-                        />
-                    </div>
-                </div>
+            <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <h3 className="text-lg font-black text-slate-800">الوصف</h3>
+                    <p className="mt-1 text-sm text-slate-500">وصف تشغيلي يساعد المستخدمين في البحث والتعامل مع الصنف.</p>
 
-                <div className="flex space-x-4 space-x-reverse">
-                    <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1 text-right">خط الإنتاج</label>
-                        <select
-                            value={data.production_line || ''}
-                            onChange={e => handleChange('production_line', e.target.value)}
-                            className="w-full border rounded p-2 bg-white text-right"
-                        >
-                            <option value="">اختر خط الإنتاج...</option>
-                            {workCenters.map(wc => <option key={wc.id} value={wc.name}>{wc.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1 text-right">معلومات الكفالة</label>
-                        <input
-                            type="text"
-                            value={data.warranty_info || ''}
-                            onChange={e => handleChange('warranty_info', e.target.value)}
-                            placeholder="مثال: سنة واحدة"
-                            className="w-full border rounded p-2 focus:ring-blue-500 text-right placeholder-right"
-                        />
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 text-right">الوصف</label>
                     <textarea
                         value={data.description || ''}
-                        onChange={e => handleChange('description', e.target.value)}
-                        className="w-full border rounded p-2 h-24 text-right"
+                        onChange={(e) => handleChange('description', e.target.value)}
+                        className="mt-4 h-40 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                     />
-                </div>
+                </section>
 
-                <div className="border p-4 rounded bg-gray-50 flex flex-col items-center">
-                    <label className="block text-sm font-bold mb-2 text-gray-600">صورة الصنف</label>
-                    <div className="w-32 h-32 bg-gray-200 rounded mb-2 flex items-center justify-center overflow-hidden">
-                        {data.image_url ? (
-                            <img src={data.image_url?.startsWith('wafi://') ? data.image_url : `wafi://${data.image_url}`} alt="Item" className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="text-gray-400">لا توجد صورة</span>
-                        )}
-                    </div>
-                    {/* Placeholder for upload logic */}
-                    <button
-                        onClick={async () => {
-                            document.getElementById('imageUploadInput')?.click();
-                        }}
-                        className="text-sm text-blue-600 hover:underline"
-                    >
-                        اختيار صورة...
-                    </button>
-                    <input
-                        type="file"
-                        id="imageUploadInput"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <h3 className="text-lg font-black text-slate-800">الصورة والحالة</h3>
+                    <p className="mt-1 text-sm text-slate-500">صورة مرجعية وحالة تفعيل الصنف داخل النظام.</p>
+
+                    <div className="mt-4 flex flex-col items-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5">
+                        <div className="mb-3 flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl bg-slate-200">
+                            {data.image_url ? (
+                                <img
+                                    src={data.image_url?.startsWith('wafi://') ? data.image_url : `wafi://${data.image_url}`}
+                                    alt="Item"
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : (
+                                <span className="text-sm text-slate-400">لا توجد صورة</span>
+                            )}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => document.getElementById('item-image-upload')?.click()}
+                            className="rounded-2xl border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-50"
+                        >
+                            اختيار صورة
+                        </button>
+
+                        <input
+                            type="file"
+                            id="item-image-upload"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
                                 const buffer = await file.arrayBuffer();
                                 const result = await window.electronAPI.system.saveImage(buffer, file.name);
                                 if (result.success) {
                                     handleChange('image_url', result.path);
                                 }
-                            }
-                        }}
-                    />
-                </div>
+                            }}
+                        />
 
-                <div className="flex items-center space-x-2 space-x-reverse pt-4" dir="rtl">
-                    <input
-                        type="checkbox"
-                        id="isActive"
-                        checked={!!data.is_active}
-                        onChange={e => handleChange('is_active', e.target.checked ? 1 : 0)}
-                        className="w-5 h-5 text-blue-600 rounded"
-                    />
-                    <label htmlFor="isActive" className="text-gray-900 font-medium mr-2">الصنف نشط</label>
-                </div>
+                        <label className="mt-5 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                            <div>
+                                <div className="text-sm font-semibold text-slate-700">الصنف فعال</div>
+                                <div className="text-xs text-slate-500">يظهر في البحث والسندات وشاشات الحركة.</div>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={!!data.is_active}
+                                onChange={(e) => handleChange('is_active', e.target.checked ? 1 : 0)}
+                                className="h-5 w-5 rounded border-slate-300 text-sky-600 focus:ring-sky-400"
+                            />
+                        </label>
+                    </div>
+                </section>
             </div>
         </div>
     );

@@ -12,6 +12,11 @@ type GlobalShortcutMap = {
 
 export const useGlobalShortcuts = (handlers: GlobalShortcutMap) => {
     useEffect(() => {
+        const hasEscapeLock = (): boolean => {
+            if (typeof document === 'undefined') return false;
+            return Boolean(document.querySelector('[data-esc-lock="true"], [aria-modal="true"], [role="dialog"]'));
+        };
+
         const handleKeyDown = (e: KeyboardEvent) => {
             // Ignore if user is typing in an input field, textarea, or select
             const target = e.target as HTMLElement;
@@ -19,6 +24,11 @@ export const useGlobalShortcuts = (handlers: GlobalShortcutMap) => {
                 target.tagName === 'TEXTAREA' ||
                 target.tagName === 'SELECT' ||
                 target.isContentEditable;
+
+            if (isInputField && e.key === 'Escape') {
+                target.blur();
+                return;
+            }
 
             // Don't intercept if user is in an input field
             if (isInputField) {
@@ -58,8 +68,10 @@ export const useGlobalShortcuts = (handlers: GlobalShortcutMap) => {
                     break;
                 case 'Escape':
                     if (handlers.onCancel) {
-                        e.preventDefault();
-                        handlers.onCancel();
+                        window.setTimeout(() => {
+                            if (e.defaultPrevented || hasEscapeLock()) return;
+                            handlers.onCancel?.();
+                        }, 0);
                     }
                     break;
             }

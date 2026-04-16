@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Edit, Coins, RefreshCw, X, TrendingUp, DollarSign } from 'lucide-react';
+import { Save, Plus, Trash2, Edit, Coins, RefreshCw, X, TrendingUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
 export const Currencies = () => {
     const [currencies, setCurrencies] = useState<any[]>([]);
@@ -48,11 +50,7 @@ export const Currencies = () => {
         }
 
         try {
-            if (isEditing) {
-                await api.updateCurrency(currentCurrency);
-            } else {
-                await api.createCurrency(currentCurrency);
-            }
+            await api.saveCurrency(currentCurrency);
             await fetchCurrencies();
             closeModal();
         } catch (err: any) {
@@ -105,45 +103,45 @@ export const Currencies = () => {
         setCurrentCurrency(initialCurrencyState);
     };
 
+    useCreateIntent(openModal);
+
     const baseCurrency = currencies.find(c => c.is_base);
 
     // Filter out base currency for "Other Currencies" list if needed, 
     // but in a grid it's nice to show all together with a badge.
 
     return (
-        <div className="p-8 bg-gray-50 min-h-screen font-sans" dir="rtl">
+        <div className="h-full bg-gray-50 p-4 md:p-6" dir="rtl">
+            <WorkspaceHeader
+                icon={<Coins size={24} />}
+                title="إدارة العملات وأسعار الصرف"
+                subtitle={`تحديث ومتابعة أسعار العملات مقابل العملة الأساسية${baseCurrency?.name_ar ? ` (${baseCurrency.name_ar})` : ''}`}
+                badges={[
+                    { label: `العملات ${currencies.length}`, tone: 'warning' },
+                    ...(baseCurrency ? [{ label: `العملة الأساسية ${baseCurrency.code || baseCurrency.name_ar}`, tone: 'info' as const }] : []),
+                ]}
+                actions={
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            onClick={handleScrape}
+                            disabled={scraping}
+                            className="bg-white border text-gray-700 px-4 py-2 rounded-xl font-medium shadow-sm hover:bg-gray-50 hover:text-blue-600 transition flex items-center gap-2"
+                        >
+                            <RefreshCw size={18} className={scraping ? 'animate-spin text-blue-600' : ''} />
+                            {scraping ? 'جاري التحديث...' : 'تحديث الأسعار'}
+                        </button>
 
-            {/* Header Section */}
-            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                        <div className="bg-amber-100 p-3 rounded-xl text-amber-600">
-                            <Coins size={32} />
-                        </div>
-                        إدارة العملات وأسعار الصرف
-                    </h1>
-                    <p className="text-gray-500 mt-1 mr-16">تحديث ومتابعة أسعار العملات مقابل العملة الأساسية ({baseCurrency?.name_ar || 'غير محدد'})</p>
-                </div>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={handleScrape}
-                        disabled={scraping}
-                        className="bg-white border text-gray-700 px-4 py-2 rounded-lg font-medium shadow-sm hover:bg-gray-50 hover:text-blue-600 transition flex items-center gap-2"
-                    >
-                        <RefreshCw size={18} className={scraping ? 'animate-spin text-blue-600' : ''} />
-                        {scraping ? 'جاري التحديث...' : 'تحديث الاسعار من سلطة النقد الفلسطينية'}
-                    </button>
-
-                    <button
-                        onClick={openModal}
-                        className="bg-emerald-600 text-white px-5 py-2 rounded-lg font-bold shadow-md hover:bg-emerald-700 hover:shadow-lg transition flex items-center gap-2"
-                    >
-                        <Plus size={20} />
-                        إضافة عملة
-                    </button>
-                </div>
-            </div>
+                        <button
+                            onClick={openModal}
+                            className="bg-emerald-600 text-white px-5 py-2 rounded-xl font-bold shadow-md hover:bg-emerald-700 hover:shadow-lg transition flex items-center gap-2"
+                        >
+                            <Plus size={20} />
+                            إضافة عملة
+                        </button>
+                    </div>
+                }
+                className="mb-6"
+            />
 
             {/* Grid Stats */}
             {/* You could add a stats bar here later */}
@@ -154,7 +152,7 @@ export const Currencies = () => {
                     <RefreshCw className="animate-spin mr-2" /> جاري تحميل البيانات...
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                     {currencies.map((currency) => (
                         <CurrencyCard
                             key={currency.id}
@@ -183,14 +181,14 @@ export const Currencies = () => {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center p-4 backdrop-blur-sm"
+                        className="fixed inset-0 bg-black/50 z-50 flex justify-center items-start p-3 md:p-4 pt-6 md:pt-10 backdrop-blur-sm overflow-y-auto"
                         onClick={closeModal}
                     >
                         <motion.div
                             initial={{ scale: 0.95, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+                            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[calc(100vh-4rem)]"
                             onClick={e => e.stopPropagation()}
                         >
                             <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
@@ -255,7 +253,10 @@ export const Currencies = () => {
                                             step="0.0001"
                                             className="w-full p-3 pl-12 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none font-mono text-lg font-bold text-right"
                                             value={currentCurrency.exchange_rate}
-                                            onChange={e => setCurrentCurrency({ ...currentCurrency, exchange_rate: parseFloat(e.target.value) })}
+                                            onChange={e => {
+                                                const parsed = Number(e.target.value);
+                                                setCurrentCurrency({ ...currentCurrency, exchange_rate: Number.isFinite(parsed) ? parsed : 0 });
+                                            }}
                                         />
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                                             مقابل الأساس

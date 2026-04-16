@@ -126,7 +126,7 @@ const EmployeeProfile = () => {
     if (loading && id !== 'new') return <div className="p-10 text-center">جاري التحميل...</div>;
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl text-right" dir="rtl">
+        <div className="app-page" dir="rtl">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-4">
@@ -170,7 +170,7 @@ const EmployeeProfile = () => {
                 </div>
 
                 {/* Content Area */}
-                <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <div className="lg:col-span-3 card p-6">
                     {activeTab === 'personal' && (
                         <div className="space-y-6">
                             <h3 className="text-lg font-bold text-gray-800 border-b pb-2">البيانات الأساسية</h3>
@@ -337,7 +337,7 @@ const EmployeeProfile = () => {
                             </div>
 
                             <div className="overflow-x-auto border rounded-xl shadow-sm">
-                                <table className="w-full text-right">
+                                <table className="dense-table w-full text-right">
                                     <thead className="bg-gray-50 border-b">
                                         <tr>
                                             <th className="px-6 py-3 text-sm font-semibold text-gray-600">الاسم</th>
@@ -460,3 +460,4 @@ const Select = ({ label, value, onChange, options }: any) => (
 );
 
 export default EmployeeProfile;
+

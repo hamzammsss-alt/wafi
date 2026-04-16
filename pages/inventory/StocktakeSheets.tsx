@@ -8,7 +8,7 @@ export const StocktakeSheets = () => {
                 <ClipboardList className="text-teal-600" /> أوراق الجرد (Stocktake Sheets)
             </h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 max-w-2xl">
+            <div className="card p-6 max-w-2xl">
                 <p className="text-gray-600 mb-6">
                     طباعة نماذج فارغة لتعبئة الجرد الفعلي يدوياً في المستودعات.
                 </p>

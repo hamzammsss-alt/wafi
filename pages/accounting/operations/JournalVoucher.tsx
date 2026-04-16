@@ -45,6 +45,8 @@ interface Account {
     currency_id: string;
 }
 
+type JournalLineField = 'accountCode' | 'description' | 'costCenterId' | 'debit' | 'credit';
+
 // --- Component ---
 export const JournalVoucher = () => {
     const navigate = useNavigate();
@@ -230,6 +232,56 @@ export const JournalVoucher = () => {
             id: uuidv4(), accountId: '', accountCode: '', accountName: '', description: header.description || '',
             costCenterId: header.costCenterId || '', debit: 0, credit: 0, fcAmount: 0, fcCurrency: 'ILS', fcRate: 1
         }]);
+    };
+
+    const focusLineField = (rowIndex: number, field: JournalLineField) => {
+        const element = document.getElementById(`jv-${field}-${rowIndex}`) as
+            | HTMLInputElement
+            | HTMLSelectElement
+            | null;
+        if (!element) return;
+        element.focus();
+        if (element instanceof HTMLInputElement && element.type !== 'date' && element.type !== 'time') {
+            element.select();
+        }
+    };
+
+    const moveToNextLineField = (rowIndex: number, field: JournalLineField) => {
+        if (field === 'accountCode') {
+            window.setTimeout(() => focusLineField(rowIndex, 'description'), 0);
+            return;
+        }
+        if (field === 'description') {
+            window.setTimeout(() => focusLineField(rowIndex, 'costCenterId'), 0);
+            return;
+        }
+        if (field === 'costCenterId') {
+            window.setTimeout(() => focusLineField(rowIndex, 'debit'), 0);
+            return;
+        }
+        if (field === 'debit') {
+            window.setTimeout(() => focusLineField(rowIndex, 'credit'), 0);
+            return;
+        }
+
+        const nextRowIndex = rowIndex + 1;
+        if (rowIndex === lines.length - 1) {
+            addNewLine();
+            window.setTimeout(() => focusLineField(nextRowIndex, 'accountCode'), 40);
+            return;
+        }
+        window.setTimeout(() => focusLineField(nextRowIndex, 'accountCode'), 0);
+    };
+
+    const handleLineEnter = (
+        event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
+        rowIndex: number,
+        field: JournalLineField
+    ) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        event.stopPropagation();
+        moveToNextLineField(rowIndex, field);
     };
 
     const removeLine = (id: string) => {
@@ -454,10 +506,13 @@ export const JournalVoucher = () => {
                                     <div className="col-span-2 relative">
                                         <div className="flex items-center">
                                             <input
+                                                id={`jv-accountCode-${index}`}
+                                                data-enter-nav="manual"
                                                 type="text"
                                                 value={line.accountCode}
                                                 onChange={(e) => updateLine(line.id, 'accountCode', e.target.value)}
                                                 onBlur={(e) => handleAccountCodeBlur(line.id, e.target.value)}
+                                                onKeyDown={(event) => handleLineEnter(event, index, 'accountCode')}
                                                 className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 font-mono text-sm h-10"
                                                 placeholder="رقم الحساب"
                                             />
@@ -481,9 +536,12 @@ export const JournalVoucher = () => {
                                     {/* Description */}
                                     <div className="col-span-3">
                                         <input
+                                            id={`jv-description-${index}`}
+                                            data-enter-nav="manual"
                                             type="text"
                                             value={line.description}
                                             onChange={(e) => updateLine(line.id, 'description', e.target.value)}
+                                            onKeyDown={(event) => handleLineEnter(event, index, 'description')}
                                             className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 transition-all text-sm h-10"
                                             placeholder="شرح الحركة..."
                                         />
@@ -492,8 +550,11 @@ export const JournalVoucher = () => {
                                     {/* Cost Center */}
                                     <div className="col-span-2">
                                         <select
+                                            id={`jv-costCenterId-${index}`}
+                                            data-enter-nav="manual"
                                             value={line.costCenterId}
                                             onChange={(e) => updateLine(line.id, 'costCenterId', e.target.value)}
+                                            onKeyDown={(event) => handleLineEnter(event, index, 'costCenterId')}
                                             className="w-full px-2 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 transition-all text-sm bg-white h-10"
                                         >
                                             <option value="">عام</option>
@@ -504,9 +565,12 @@ export const JournalVoucher = () => {
                                     {/* Debit */}
                                     <div className="col-span-1">
                                         <input
+                                            id={`jv-debit-${index}`}
+                                            data-enter-nav="manual"
                                             type="number"
                                             value={line.debit}
                                             onChange={(e) => updateLine(line.id, 'debit', Number(e.target.value))}
+                                            onKeyDown={(event) => handleLineEnter(event, index, 'debit')}
                                             className="w-full px-2 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-mono font-bold text-center h-10"
                                             min="0"
                                         />
@@ -515,9 +579,12 @@ export const JournalVoucher = () => {
                                     {/* Credit */}
                                     <div className="col-span-2 flex items-center gap-2">
                                         <input
+                                            id={`jv-credit-${index}`}
+                                            data-enter-nav="manual"
                                             type="number"
                                             value={line.credit}
                                             onChange={(e) => updateLine(line.id, 'credit', Number(e.target.value))}
+                                            onKeyDown={(event) => handleLineEnter(event, index, 'credit')}
                                             className="w-full px-2 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-mono font-bold text-center h-10"
                                             min="0"
                                         />
@@ -670,7 +737,7 @@ const PrintTemplate = ({ header, lines, total }: any) => {
 
                 {/* Lines Table */}
                 <div className="mb-8">
-                    <table className="w-full border-collapse">
+                    <table className="dense-table w-full">
                         <thead>
                             <tr className="bg-gray-900 text-white text-sm">
                                 <th className="py-3 px-4 text-right rounded-tr-lg w-1/4">رقم الحساب</th>

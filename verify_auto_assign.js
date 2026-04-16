@@ -1,99 +1,298 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const fs = require("fs");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
 
-// Connect DB
-const userHome = process.env.USERPROFILE || 'C:\\Users\\Ahmad Sultan';
-const dbPath = path.join(userHome, 'AppData', 'Roaming', 'wafi-erp', 'wafi.db');
-const db = new Database(dbPath, { fileMustExist: true });
+const openDatabase = (filePath) => {
+    try {
+        const BetterSqlite3 = require("better-sqlite3");
+        return { db: new BetterSqlite3(filePath), engine: "better-sqlite3" };
+    } catch (error) {
+        const message = error && error.message ? error.message : "";
+        const canFallback = error && (
+            error.code === "ERR_DLOPEN_FAILED" ||
+            error.code === "MODULE_NOT_FOUND" ||
+            /NODE_MODULE_VERSION|compiled against/i.test(message)
+        );
 
-// MOCK AccountService and SystemService logic since we can't import TS files in raw node directly easily without build
-// We only need the DB logic part or we can run a minimal ts-node if available, but raw node is safer.
-// So we will REPLICATE the logic of PartnerService here to test the CONCEPT/DB STATE works.
-
-// 1. Ensure 1131 exists
-let account1131 = db.prepare("SELECT * FROM gl_chart_of_accounts WHERE account_code = '1131'").get();
-if (!account1131) {
-    console.log("Account 1131 not found. Creating it as Header...");
-    const id = uuidv4();
-    db.prepare("INSERT INTO gl_chart_of_accounts (id, account_code, name_ar, account_type, account_level, is_transactional, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-        id, '1131', 'ذمم تجارية', 'ASSET', 3, 0, null
-    );
-    account1131 = { id };
-    console.log("Created 1131.");
-} else if (account1131.is_transactional === 1) {
-    console.log("WARNING: 1131 is transactional! Making it header for test.");
-    db.prepare("UPDATE gl_chart_of_accounts SET is_transactional = 0 WHERE id = ?").run(account1131.id);
-}
-
-// 2. Prepare Data (Mock Frontend Submission)
-const partnerData = {
-    id: uuidv4(),
-    name_ar: 'العميل الآلي التجريبي',
-    type: 'CUSTOMER',
-    linked_account_id: account1131.id, // User sends PARENT ID
-    code: 'AUTO-001'
+        if (canFallback) {
+            const { DatabaseSync } = require("node:sqlite");
+            return { db: new DatabaseSync(filePath), engine: "node:sqlite" };
+        }
+        throw error;
+    }
 };
 
-console.log("Simulating Partner Creation with Parent ID:", partnerData.linked_account_id);
-
-// 3. Simulate PartnerService Logic (The part we changed)
-let finalLinkedId = partnerData.linked_account_id;
-const linkedAcc = db.prepare('SELECT id, is_transactional, account_code FROM gl_chart_of_accounts WHERE id = ?').get(partnerData.linked_account_id);
-
-if (linkedAcc && linkedAcc.is_transactional === 0) {
-    console.log("DETECTED PARENT ACCOUNT. Auto-creating sub-account...");
-
-    // Logic from PartnerService
-    const parentId = linkedAcc.id;
-    const parentCode = linkedAcc.account_code;
-
-    // Find Max Suffix
-    const siblings = db.prepare("SELECT account_code FROM gl_chart_of_accounts WHERE parent_id = ?").all(parentId);
-    let maxSuffix = 0;
-    siblings.forEach(s => {
-        if (s.account_code.startsWith(parentCode)) {
-            const suffix = parseInt(s.account_code.slice(parentCode.length));
-            if (!isNaN(suffix) && suffix > maxSuffix) maxSuffix = suffix;
-        }
-    });
-
-    const nextCode = parentCode + (maxSuffix + 1).toString().padStart(4, '0');
-    console.log("New Account Code:", nextCode);
-
-    // Create Account
-    const newId = uuidv4();
-    db.prepare(`
-        INSERT INTO gl_chart_of_accounts (id, account_code, name_ar, name_en, parent_id, account_type, is_transactional, system_type, requires_cost_center)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-        newId, nextCode, partnerData.name_ar, null, parentId, 'ASSET', 1, 'CUSTOMER', 0
-    );
-
-    finalLinkedId = newId;
-    console.log("Created Sub-Account ID:", newId);
+const dbPath = path.resolve(process.argv[2] || path.join(__dirname, "wafi.db"));
+if (!fs.existsSync(dbPath)) {
+    console.error(`[ERROR] Database file not found: ${dbPath}`);
+    console.error("Create it first, or pass a custom path:");
+    console.error("  node verify_auto_assign.js path/to/wafi.db");
+    process.exit(1);
 }
 
-// 4. Save Partner
-db.prepare("INSERT INTO business_partners (id, code, name_ar, type, linked_account_id, is_active) VALUES (?, ?, ?, ?, ?, 1)").run(
-    partnerData.id, partnerData.code, partnerData.name_ar, partnerData.type, finalLinkedId
-);
+const { db, engine } = openDatabase(dbPath);
 
-console.log("Partner Saved.");
+const query = {
+    run: (sql, params = []) => db.prepare(sql).run(...params),
+    get: (sql, params = []) => db.prepare(sql).get(...params),
+    all: (sql, params = []) => db.prepare(sql).all(...params),
+};
 
-// 5. Verify
-const savedPartner = db.prepare("SELECT * FROM business_partners WHERE id = ?").get(partnerData.id);
-const savedAccount = db.prepare("SELECT * FROM gl_chart_of_accounts WHERE id = ?").get(savedPartner.linked_account_id);
+const getTableColumns = (tableName) => {
+    const columns = query.all(`PRAGMA table_info(${tableName})`);
+    return new Set(columns.map((column) => column.name));
+};
 
-console.log("--- VERIFICATION ---");
-console.log("Partner Linked Account ID:", savedPartner.linked_account_id);
-console.log("Is Original Parent?", savedPartner.linked_account_id === account1131.id ? "YES (FAIL)" : "NO (PASS)");
-console.log("Linked Account Code:", savedAccount.account_code);
-console.log("Linked Account Name:", savedAccount.name_ar);
-console.log("Linked Account Parent:", savedAccount.parent_id === account1131.id ? "CORRECT" : "WRONG");
+const insertWithKnownColumns = (tableName, row, validColumns) => {
+    const entries = Object.entries(row).filter(([key, value]) => validColumns.has(key) && value !== undefined);
+    const columns = entries.map(([key]) => key);
+    const placeholders = columns.map(() => "?").join(", ");
+    const values = entries.map(([, value]) => value);
 
-// Clean up
-db.prepare("DELETE FROM business_partners WHERE id = ?").run(partnerData.id);
-if (finalLinkedId !== account1131.id) {
-    db.prepare("DELETE FROM gl_chart_of_accounts WHERE id = ?").run(finalLinkedId);
+    if (columns.length === 0) {
+        throw new Error(`No compatible columns available for ${tableName}`);
+    }
+
+    query.run(
+        `INSERT INTO ${tableName} (${columns.join(", ")}) VALUES (${placeholders})`,
+        values
+    );
+};
+
+const requiredTables = ["gl_chart_of_accounts", "business_partners"];
+for (const tableName of requiredTables) {
+    const table = query.get(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+        [tableName]
+    );
+    if (!table) {
+        console.error(`[ERROR] Missing required table: ${tableName}`);
+        process.exit(1);
+    }
+}
+
+const coaColumns = getTableColumns("gl_chart_of_accounts");
+const partnerColumns = getTableColumns("business_partners");
+
+const insertedIds = {
+    partnerId: null,
+    childAccountId: null,
+    createdParentId: null,
+    mirroredAccountId: null,
+};
+const parentAccountState = {
+    id: null,
+    shouldRestoreTransactional: false,
+    originalTransactional: null,
+};
+
+const assert = (condition, message) => {
+    if (!condition) throw new Error(message);
+};
+
+try {
+    console.log(`[INFO] Using ${engine}`);
+
+    let parentAccount = query.get(
+        "SELECT id, account_code, is_transactional, account_type FROM gl_chart_of_accounts WHERE account_code = '1131'"
+    );
+
+    if (!parentAccount) {
+        const createdParentId = uuidv4();
+        insertedIds.createdParentId = createdParentId;
+
+        insertWithKnownColumns(
+            "gl_chart_of_accounts",
+            {
+                id: createdParentId,
+                account_code: "1131",
+                name_ar: "Auto Assign Parent",
+                name_en: "Auto Assign Parent",
+                account_type: "ASSET",
+                account_level: 4,
+                is_transactional: 0,
+                parent_id: null,
+                requires_cost_center: 0,
+                sync_status: 0,
+            },
+            coaColumns
+        );
+
+        parentAccount = query.get(
+            "SELECT id, account_code, is_transactional, account_type FROM gl_chart_of_accounts WHERE id = ?",
+            [createdParentId]
+        );
+    } else if (coaColumns.has("is_transactional")) {
+        parentAccountState.id = parentAccount.id;
+        parentAccountState.originalTransactional = parentAccount.is_transactional;
+
+        if (parentAccount.is_transactional === 1) {
+            query.run("UPDATE gl_chart_of_accounts SET is_transactional = 0 WHERE id = ?", [parentAccount.id]);
+            parentAccountState.shouldRestoreTransactional = true;
+            parentAccount = query.get(
+                "SELECT id, account_code, is_transactional, account_type FROM gl_chart_of_accounts WHERE id = ?",
+                [parentAccount.id]
+            );
+        }
+    }
+
+    assert(parentAccount, "Parent account 1131 could not be prepared.");
+
+    const partnerId = uuidv4();
+    insertedIds.partnerId = partnerId;
+
+    const partnerCode = `AUTO-${Date.now().toString(36).toUpperCase()}`;
+    const partnerName = "Auto Assign Verification Partner";
+
+    const siblings = query.all(
+        "SELECT account_code FROM gl_chart_of_accounts WHERE parent_id = ?",
+        [parentAccount.id]
+    );
+
+    let maxSuffix = 0;
+    for (const sibling of siblings) {
+        if (typeof sibling.account_code !== "string") continue;
+        if (!sibling.account_code.startsWith(parentAccount.account_code)) continue;
+
+        const suffixValue = Number.parseInt(
+            sibling.account_code.slice(parentAccount.account_code.length),
+            10
+        );
+        if (Number.isFinite(suffixValue) && suffixValue > maxSuffix) {
+            maxSuffix = suffixValue;
+        }
+    }
+
+    const childCode = `${parentAccount.account_code}${String(maxSuffix + 1).padStart(4, "0")}`;
+    const childAccountId = uuidv4();
+    insertedIds.childAccountId = childAccountId;
+
+    insertWithKnownColumns(
+        "gl_chart_of_accounts",
+        {
+            id: childAccountId,
+            account_code: childCode,
+            name_ar: partnerName,
+            name_en: partnerName,
+            parent_id: parentAccount.id,
+            account_type: parentAccount.account_type || "ASSET",
+            account_level: 5,
+            is_transactional: 1,
+            system_type: "CUSTOMER",
+            requires_cost_center: 0,
+            sync_status: 0,
+        },
+        coaColumns
+    );
+
+    const partnerForeignKeys = query.all("PRAGMA foreign_key_list(business_partners)");
+    const linkedAccountForeignKey = partnerForeignKeys.find((fk) => fk.from === "linked_account_id");
+    const linkedAccountTargetTable = linkedAccountForeignKey && linkedAccountForeignKey.table
+        ? String(linkedAccountForeignKey.table).toLowerCase()
+        : "";
+
+    if (linkedAccountTargetTable === "accounts") {
+        const accountColumns = getTableColumns("accounts");
+        const existingAccount = query.get("SELECT id FROM accounts WHERE id = ?", [childAccountId]);
+
+        if (!existingAccount) {
+            insertWithKnownColumns(
+                "accounts",
+                {
+                    id: childAccountId,
+                    code: childCode,
+                    name: partnerName,
+                    type: "Asset",
+                    balance: "0",
+                    currency: "ILS",
+                    parent_id: null,
+                    account_level: 5,
+                    is_transactional: 1,
+                    is_active: 1,
+                },
+                accountColumns
+            );
+            insertedIds.mirroredAccountId = childAccountId;
+        }
+    }
+
+    insertWithKnownColumns(
+        "business_partners",
+        {
+            id: partnerId,
+            code: partnerCode,
+            name_ar: partnerName,
+            name_en: partnerName,
+            type: "CUSTOMER",
+            linked_account_id: childAccountId,
+            is_active: 1,
+        },
+        partnerColumns
+    );
+
+    const savedPartner = query.get(
+        "SELECT id, code, linked_account_id FROM business_partners WHERE id = ?",
+        [partnerId]
+    );
+
+    assert(savedPartner, "Partner insert failed.");
+
+    const linkedAccount = query.get(
+        "SELECT id, account_code, parent_id, is_transactional FROM gl_chart_of_accounts WHERE id = ?",
+        [savedPartner.linked_account_id]
+    );
+
+    assert(savedPartner.linked_account_id !== parentAccount.id, "Partner linked to parent account instead of child account.");
+    assert(linkedAccount, "Linked child account was not found.");
+    assert(linkedAccount.parent_id === parentAccount.id, "Child account parent_id is incorrect.");
+
+    if (coaColumns.has("is_transactional")) {
+        assert(linkedAccount.is_transactional === 1, "Child account is not transactional.");
+    }
+
+    console.log("[PASS] Auto assignment verification completed.");
+    console.log(`       Partner code: ${partnerCode}`);
+    console.log(`       Parent account: ${parentAccount.account_code}`);
+    console.log(`       Child account: ${linkedAccount.account_code}`);
+} catch (error) {
+    console.error("[FAIL] Auto assignment verification failed.");
+    console.error(error && error.message ? error.message : error);
+    process.exitCode = 1;
+} finally {
+    try {
+        if (
+            parentAccountState.shouldRestoreTransactional &&
+            parentAccountState.id &&
+            coaColumns.has("is_transactional")
+        ) {
+            query.run("UPDATE gl_chart_of_accounts SET is_transactional = ? WHERE id = ?", [
+                parentAccountState.originalTransactional,
+                parentAccountState.id,
+            ]);
+        }
+
+        if (insertedIds.partnerId) {
+            query.run("DELETE FROM business_partners WHERE id = ?", [insertedIds.partnerId]);
+        }
+
+        if (insertedIds.childAccountId) {
+            query.run("DELETE FROM gl_chart_of_accounts WHERE id = ?", [insertedIds.childAccountId]);
+        }
+
+        if (insertedIds.mirroredAccountId) {
+            query.run("DELETE FROM accounts WHERE id = ?", [insertedIds.mirroredAccountId]);
+        }
+
+        if (insertedIds.createdParentId) {
+            query.run("DELETE FROM gl_chart_of_accounts WHERE id = ?", [insertedIds.createdParentId]);
+        }
+    } catch (cleanupError) {
+        console.error("[WARN] Cleanup encountered an issue:", cleanupError.message || cleanupError);
+    }
+
+    try {
+        db.close();
+    } catch {
+        // noop
+    }
 }

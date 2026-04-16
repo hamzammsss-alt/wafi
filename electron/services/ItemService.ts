@@ -14,6 +14,97 @@ export interface ExtendedItem extends Item {
 
 export class ItemService {
 
+    private static searchItemProfilesInternal(search: string, limit = 50, onlyActive = true) {
+        const s = String(search || '').trim();
+        const q = `%${s}%`;
+
+        try {
+            return db.prepare(`
+                SELECT
+                    i.id,
+                    i.code,
+                    i.barcode,
+                    COALESCE(i.name_ar, i.name_en, i.name, i.code, '') AS name,
+                    i.name_ar,
+                    i.name_en,
+                    i.type,
+                    i.base_unit_id,
+                    COALESCE(u.name_ar, u.name_en, u.code, '') AS base_unit_name,
+                    COALESCE(i.costing_method, 'WEIGHTED_AVG') AS costing_method,
+                    CAST(COALESCE(i.standard_cost, i.cost_price, 0) AS REAL) AS standard_cost,
+                    CAST(COALESCE(i.cost_price, 0) AS REAL) AS cost_price,
+                    CAST(COALESCE(i.sale_price, 0) AS REAL) AS sale_price,
+                    CAST(COALESCE(i.sale_price, 0) AS REAL) AS price,
+                    COALESCE(i.tax_included, 0) AS tax_included,
+                    COALESCE(i.tax_rate, 0) AS tax_rate,
+                    i.inventory_account_id,
+                    i.sales_account_id,
+                    i.cogs_account_id,
+                    COALESCE(ai.name_ar, ai.name, gai.name_ar, gai.name_en, '') AS inventory_account_name,
+                    COALESCE(asl.name_ar, asl.name, gas.name_ar, gas.name_en, '') AS sales_account_name,
+                    COALESCE(acg.name_ar, acg.name, gac.name_ar, gac.name_en, '') AS cogs_account_name
+                FROM items i
+                LEFT JOIN units u ON u.id = i.base_unit_id
+                LEFT JOIN accounts ai ON ai.id = i.inventory_account_id
+                LEFT JOIN accounts asl ON asl.id = i.sales_account_id
+                LEFT JOIN accounts acg ON acg.id = i.cogs_account_id
+                LEFT JOIN gl_chart_of_accounts gai ON gai.id = i.inventory_account_id
+                LEFT JOIN gl_chart_of_accounts gas ON gas.id = i.sales_account_id
+                LEFT JOIN gl_chart_of_accounts gac ON gac.id = i.cogs_account_id
+                WHERE (${onlyActive ? 'COALESCE(i.is_active, 1) = 1 AND' : ''} (
+                    COALESCE(i.name_ar, '') LIKE ? OR
+                    COALESCE(i.name_en, '') LIKE ? OR
+                    COALESCE(i.name, '') LIKE ? OR
+                    COALESCE(i.code, '') LIKE ? OR
+                    COALESCE(i.barcode, '') LIKE ?
+                ))
+                ORDER BY COALESCE(i.name_ar, i.name_en, i.name, i.code)
+                LIMIT ?
+            `).all(q, q, q, q, q, limit) as any[];
+        } catch (_error) {
+            // Fallback for partial schemas.
+            return db.prepare(`
+                SELECT
+                    id,
+                    code,
+                    barcode,
+                    COALESCE(name_ar, name_en, name, code, '') AS name,
+                    name_ar,
+                    name_en,
+                    type,
+                    base_unit_id,
+                    COALESCE(costing_method, 'WEIGHTED_AVG') AS costing_method,
+                    CAST(COALESCE(standard_cost, cost_price, 0) AS REAL) AS standard_cost,
+                    CAST(COALESCE(cost_price, 0) AS REAL) AS cost_price,
+                    CAST(COALESCE(sale_price, 0) AS REAL) AS sale_price,
+                    CAST(COALESCE(sale_price, 0) AS REAL) AS price,
+                    COALESCE(tax_included, 0) AS tax_included,
+                    COALESCE(tax_rate, 0) AS tax_rate,
+                    inventory_account_id,
+                    sales_account_id,
+                    cogs_account_id,
+                    '' AS base_unit_name,
+                    '' AS inventory_account_name,
+                    '' AS sales_account_name,
+                    '' AS cogs_account_name
+                FROM items
+                WHERE (${onlyActive ? 'COALESCE(is_active, 1) = 1 AND' : ''} (
+                    COALESCE(name_ar, '') LIKE ? OR
+                    COALESCE(name_en, '') LIKE ? OR
+                    COALESCE(name, '') LIKE ? OR
+                    COALESCE(code, '') LIKE ? OR
+                    COALESCE(barcode, '') LIKE ?
+                ))
+                ORDER BY COALESCE(name_ar, name_en, name, code)
+                LIMIT ?
+            `).all(q, q, q, q, q, limit) as any[];
+        }
+    }
+
+    static searchItemProfiles(search: string, limit = 50) {
+        return ItemService.searchItemProfilesInternal(search, limit, true);
+    }
+
     // --- Items ---
 
     static getItems(): ExtendedItem[] {
@@ -138,21 +229,183 @@ export class ItemService {
 
 
     static deleteItem(id: string) {
+        const txCount = (db.prepare('SELECT COUNT(*) as cnt FROM inventory_transactions WHERE item_id = ?').get(id) as any)?.cnt ?? 0;
+        if (txCount > 0) {
+            return { success: false, error: 'لا يمكن حذف الصنف لوجود حركات مخزنية مرتبطة به' };
+        }
         db.prepare('DELETE FROM items WHERE id = ?').run(id);
         return { success: true };
+    }
+
+    // --- Suggest / List (Optimized for Pickers) ---
+
+    static suggest(q: string, limit = 20) {
+        const s = (q || "").trim();
+        if (!s) return [];
+
+        const rows = ItemService.searchItemProfilesInternal(s, limit, true);
+        return rows.map((row: any) => ({ ...row, uom: row.base_unit_id }));
+    }
+
+    static list(q: string, limit = 200, offset = 0) {
+        const s = (q || "").trim();
+        if (!s) {
+            return db.prepare(`
+                SELECT id, code, name_ar as name, base_unit_id as uom,
+                       type, costing_method,
+                       inventory_account_id, sales_account_id, cogs_account_id,
+                       cost_price, sale_price, standard_cost
+                FROM items 
+                ORDER BY code ASC 
+                LIMIT ? OFFSET ?
+            `).all(limit, offset) as any[];
+        }
+
+        return db.prepare(`
+            SELECT id, code, name_ar as name, base_unit_id as uom,
+                   type, costing_method,
+                   inventory_account_id, sales_account_id, cogs_account_id,
+                   cost_price, sale_price, standard_cost
+            FROM items
+            WHERE code LIKE ? OR name_ar LIKE ? OR COALESCE(name_en, '') LIKE ? OR COALESCE(barcode, '') LIKE ?
+            ORDER BY code ASC
+            LIMIT ? OFFSET ?
+        `).all(`%${s}%`, `%${s}%`, `%${s}%`, `%${s}%`, limit, offset) as any[];
+    }
+
+    static quickCreate(item: { code: string; name: string; default_uom: string }) {
+        if (!item.code?.trim()) throw new Error("رقم الصنف مطلوب");
+        if (!item.name?.trim()) throw new Error("اسم الصنف مطلوب");
+        if (!item.default_uom?.trim()) throw new Error("الوحدة الافتراضية مطلوبة");
+
+        const exists = db.prepare(`SELECT id FROM items WHERE code = ?`).get(item.code.trim());
+        if (exists) throw new Error("رقم الصنف موجود مسبقاً");
+
+        const id = uuidv4();
+        db.prepare(`
+            INSERT INTO items (id, code, name_ar, base_unit_id, created_at) 
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `).run(id, item.code.trim(), item.name.trim(), item.default_uom.trim());
+
+        return id;
     }
 
     // --- Units ---
 
     static getUnits() {
-        return db.prepare('SELECT * FROM units ORDER BY is_active DESC, name_ar').all();
+        const cols = db.prepare("PRAGMA table_info('units')").all();
+        const names = new Set((cols || []).map((c: any) => String(c.name)));
+        const orderBy = names.has('name_ar') ? 'name_ar' : 'name';
+        const rows = db.prepare(`SELECT * FROM units ORDER BY ${orderBy}`).all() as any[];
+        return rows.map((u) => ({
+            ...u,
+            name_ar: u.name_ar || u.name || '',
+            name_en: u.name_en || '',
+            code: u.code || u.symbol || '',
+            is_active: u.is_active === undefined || u.is_active === null ? 1 : u.is_active,
+        }));
     }
 
     static createUnit(data: any) {
+        const cols = db.prepare("PRAGMA table_info('units')").all();
+        const names = new Set((cols || []).map((c: any) => String(c.name)));
         const id = uuidv4();
-        db.prepare('INSERT INTO units (id, name_ar, name_en, code, is_active) VALUES (?, ?, ?, ?, ?)').run(
-            id, data.name_ar, data.name_en, data.code, data.is_active ? 1 : 0
-        );
+
+        const insertCols: string[] = ['id'];
+        const row: any = { id };
+
+        if (names.has('name_ar')) {
+            insertCols.push('name_ar');
+            row.name_ar = data.name_ar || data.name || '';
+        }
+
+        if (names.has('name')) {
+            insertCols.push('name');
+            row.name = data.name_ar || data.name || '';
+        }
+
+        if (names.has('name_en')) {
+            insertCols.push('name_en');
+            row.name_en = data.name_en || '';
+        }
+
+        if (names.has('code')) {
+            insertCols.push('code');
+            row.code = data.code || '';
+        }
+
+        if (names.has('symbol')) {
+            insertCols.push('symbol');
+            row.symbol = data.symbol || data.code || '';
+        }
+
+        if (names.has('is_active')) {
+            insertCols.push('is_active');
+            row.is_active = data.is_active ? 1 : 0;
+        }
+
+        if (names.has('is_base')) {
+            insertCols.push('is_base');
+            row.is_base = data.is_base ? 1 : 0;
+        }
+
+        if (names.has('name_he')) {
+            insertCols.push('name_he');
+            row.name_he = data.name_he || '';
+        }
+
+        if (names.has('is_used')) {
+            insertCols.push('is_used');
+            row.is_used = data.is_used ? 1 : 0;
+        }
+
+        if (names.has('unit_type')) {
+            insertCols.push('unit_type');
+            row.unit_type = data.unit_type || 'كمية';
+        }
+
+        if (names.has('parent_unit_id')) {
+            insertCols.push('parent_unit_id');
+            row.parent_unit_id = data.parent_unit_id || null;
+        }
+
+        if (names.has('level_no')) {
+            insertCols.push('level_no');
+            row.level_no = Number(data.level_no || 1);
+        }
+
+        if (names.has('symbol_ar')) {
+            insertCols.push('symbol_ar');
+            row.symbol_ar = data.symbol_ar || data.code || '';
+        }
+
+        if (names.has('symbol_en')) {
+            insertCols.push('symbol_en');
+            row.symbol_en = data.symbol_en || data.symbol || data.code || '';
+        }
+
+        if (names.has('symbol_he')) {
+            insertCols.push('symbol_he');
+            row.symbol_he = data.symbol_he || '';
+        }
+
+        if (names.has('multiplier')) {
+            insertCols.push('multiplier');
+            row.multiplier = Number(data.multiplier || 1);
+        }
+
+        if (names.has('total_factor')) {
+            insertCols.push('total_factor');
+            row.total_factor = Number(data.total_factor || row.multiplier || 1);
+        }
+
+        if (names.has('updated_at')) {
+            insertCols.push('updated_at');
+            row.updated_at = new Date().toISOString();
+        }
+
+        const sql = `INSERT INTO units (${insertCols.join(', ')}) VALUES (${insertCols.map((c) => '@' + c).join(', ')})`;
+        db.prepare(sql).run(row);
         return id;
     }
 

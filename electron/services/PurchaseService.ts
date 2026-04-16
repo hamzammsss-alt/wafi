@@ -11,7 +11,7 @@ export interface PurchaseRequestHeader {
     requester_id?: string;
     date: string;
     needed_date: string;
-    status: 'DRAFT' | 'ORDERED' | 'COMPLETED' | 'CANCELLED';
+    status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'ORDERED' | 'COMPLETED' | 'CANCELLED';
     notes?: string;
     created_at?: string;
     warehouse_name?: string;
@@ -57,7 +57,87 @@ export interface RFQLine {
     unit_name?: string;
 }
 
+export interface PurchaseOrderHeader {
+    id: string;
+    order_no: string;
+    supplier_id: string;
+    branch_id: string;
+    warehouse_id?: string;
+    date: string;
+    delivery_date?: string;
+    currency_id: string;
+    exchange_rate: number;
+    subtotal: number;
+    tax_total: number;
+    grand_total: number;
+    status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+    notes?: string;
+    created_at?: string;
+    request_id?: string;
+}
+
+export interface PurchaseOrderLine {
+    id: string;
+    order_id: string;
+    item_id: string;
+    description: string;
+    quantity: number;
+    unit_id: string;
+    unit_price: number;
+    discount_amount: number;
+    tax_amount: number;
+    total_price: number;
+    received_qty: number;
+    invoiced_qty: number;
+}
+
 export class PurchaseService {
+
+    static ensureWorkflowColumns() {
+        try {
+            // Apply PR workflow columns
+            const prCols = db.prepare("PRAGMA table_info(purchase_requests)").all() as any[];
+            if (!prCols.some(c => c.name === 'posted_at')) {
+                db.prepare("ALTER TABLE purchase_requests ADD COLUMN posted_at DATETIME").run();
+                db.prepare("ALTER TABLE purchase_requests ADD COLUMN posted_by TEXT").run();
+                db.prepare("ALTER TABLE purchase_requests ADD COLUMN approved_at DATETIME").run();
+                db.prepare("ALTER TABLE purchase_requests ADD COLUMN approved_by TEXT").run();
+                db.prepare("ALTER TABLE purchase_requests ADD COLUMN rejected_at DATETIME").run();
+                db.prepare("ALTER TABLE purchase_requests ADD COLUMN rejected_by TEXT").run();
+                db.prepare("ALTER TABLE purchase_requests ADD COLUMN rejected_reason TEXT").run();
+            }
+
+            // Apply PO workflow columns
+            const poCols = db.prepare("PRAGMA table_info(purchase_orders)").all() as any[];
+            if (!poCols.some(c => c.name === 'posted_at')) {
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN posted_at DATETIME").run();
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN posted_by TEXT").run();
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN approved_at DATETIME").run();
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN approved_by TEXT").run();
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN rejected_at DATETIME").run();
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN rejected_by TEXT").run();
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN rejected_reason TEXT").run();
+            }
+            if (!poCols.some(c => c.name === 'warehouse_id')) {
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN warehouse_id TEXT").run();
+            }
+            if (!poCols.some(c => c.name === 'request_id')) {
+                db.prepare("ALTER TABLE purchase_orders ADD COLUMN request_id TEXT").run();
+            }
+
+            // Apply PO Lines expansions
+            const poLineCols = db.prepare("PRAGMA table_info(purchase_order_lines)").all() as any[];
+            if (!poLineCols.some(c => c.name === 'description')) {
+                db.prepare("ALTER TABLE purchase_order_lines ADD COLUMN description TEXT").run();
+                db.prepare("ALTER TABLE purchase_order_lines ADD COLUMN discount_amount REAL NOT NULL DEFAULT 0").run();
+                db.prepare("ALTER TABLE purchase_order_lines ADD COLUMN received_qty REAL NOT NULL DEFAULT 0").run();
+                db.prepare("ALTER TABLE purchase_order_lines ADD COLUMN invoiced_qty REAL NOT NULL DEFAULT 0").run();
+            }
+
+        } catch (e) {
+            console.error("Purchase Workflow Schema heal failed", e);
+        }
+    }
 
     static createInvoice(data: any) {
         const { header, lines } = data;
@@ -308,6 +388,14 @@ export class PurchaseService {
             orderNo = JournalService.getNextVoucherNo('PO');
         }
 
+        if (header.request_id) {
+            const pr = db.prepare("SELECT status FROM purchase_requests WHERE id = ?").get(header.request_id) as any;
+            if (!pr) throw new Error("طلب الشراء المرتبط غير موجود");
+            if (pr.status !== 'APPROVED') {
+                throw new Error("لا يمكن إنشاء طلبية شراء إلا بناءً على طلب شراء معتمد (APPROVED)");
+            }
+        }
+
         const transaction = db.transaction(() => {
             // Save Header
             db.prepare(`
@@ -358,11 +446,6 @@ export class PurchaseService {
                     total_price: line.total || 0,
                     tax_amount: line.tax_amount || 0
                 });
-            }
-
-            // --- LINK PR if exists ---
-            if (header.request_id) {
-                db.prepare("UPDATE purchase_requests SET status = 'ORDERED' WHERE id = ?").run(header.request_id);
             }
         });
 
@@ -489,6 +572,76 @@ export class PurchaseService {
 
         runTx();
         return { success: true, id, order_no: header.order_no };
+    }
+
+    static checkPermission(userId: string, targetPermission: string) {
+        const user = db.prepare('SELECT role_id FROM sys_users WHERE id = ?').get(userId) as any;
+        if (!user || !user.role_id) return false;
+
+        const perm = db.prepare(`
+            SELECT 1 FROM sys_role_permissions 
+            WHERE role_id = ? AND permission_key = ?
+        `).get(user.role_id, targetPermission);
+
+        return !!perm;
+    }
+
+    static postOrder(id: string, userId: string) {
+        const order = db.prepare('SELECT status FROM purchase_orders WHERE id = ?').get(id) as any;
+        if (!order) throw new Error("لم يتم العثور على الطلبية");
+        if (order.status !== 'DRAFT') throw new Error("يمكن ترحيل الطلبيات المسودة فقط");
+
+        const lines = db.prepare('SELECT COUNT(*) as count, SUM(quantity) as total_qty FROM purchase_order_lines WHERE order_id = ?').get(id) as any;
+        if (!lines || lines.count === 0) throw new Error("لا يمكن ترحيل طلبية فارغة. الرجاء إضافة أصناف.");
+        if (lines.total_qty <= 0) throw new Error("إجمالي الكميات يجب أن يكون أكبر من صفر.");
+
+        db.prepare(`
+            UPDATE purchase_orders 
+            SET status = 'PENDING_APPROVAL', posted_at = CURRENT_TIMESTAMP, posted_by = ? 
+            WHERE id = ?
+        `).run(userId, id);
+
+        return { success: true };
+    }
+
+    static approveOrder(id: string, userId: string) {
+        if (!this.checkPermission(userId, 'PURCHASE_PO_APPROVE')) {
+            throw new Error("عفواً، لا تملك صلاحية اعتماد طلبيات الشراء.");
+        }
+
+        const order = db.prepare('SELECT status, request_id FROM purchase_orders WHERE id = ?').get(id) as any;
+        if (!order) throw new Error("لم يتم العثور على الطلبية");
+        if (order.status !== 'PENDING_APPROVAL') throw new Error("الطلبية ليست بانتظار الاعتماد");
+
+        db.prepare(`
+            UPDATE purchase_orders 
+            SET status = 'APPROVED', approved_at = CURRENT_TIMESTAMP, approved_by = ? 
+            WHERE id = ?
+        `).run(userId, id);
+
+        if (order.request_id) {
+            db.prepare("UPDATE purchase_requests SET status = 'ORDERED' WHERE id = ?").run(order.request_id);
+        }
+
+        return { success: true };
+    }
+
+    static rejectOrder(id: string, userId: string, reason?: string) {
+        if (!this.checkPermission(userId, 'PURCHASE_PO_APPROVE')) {
+            throw new Error("عفواً، لا تملك صلاحية رفض طلبيات الشراء.");
+        }
+
+        const order = db.prepare('SELECT status FROM purchase_orders WHERE id = ?').get(id) as any;
+        if (!order) throw new Error("لم يتم العثور على الطلبية");
+        if (order.status !== 'PENDING_APPROVAL') throw new Error("الطلبية ليست بانتظار الاعتماد");
+
+        db.prepare(`
+            UPDATE purchase_orders 
+            SET status = 'REJECTED', rejected_at = CURRENT_TIMESTAMP, rejected_by = ?, rejected_reason = ? 
+            WHERE id = ?
+        `).run(userId, reason || null, id);
+
+        return { success: true };
     }
 
     static getInvoice(id: string) {
@@ -636,6 +789,60 @@ export class PurchaseService {
 
         runTx();
         return { success: true, id, request_no: header.request_no };
+    }
+
+    static postRequest(id: string, userId: string) {
+        const req = db.prepare('SELECT status FROM purchase_requests WHERE id = ?').get(id) as any;
+        if (!req) throw new Error("لم يتم العثور على طلب الشراء");
+        if (req.status !== 'DRAFT') throw new Error("يمكن ترحيل طلبات الشراء المسودة فقط");
+
+        const lines = db.prepare('SELECT COUNT(*) as count, SUM(quantity) as total_qty FROM purchase_request_lines WHERE request_id = ?').get(id) as any;
+        if (!lines || lines.count === 0) throw new Error("لا يمكن ترحيل طلب فارغ. الرجاء إضافة أصناف.");
+        if (lines.total_qty <= 0) throw new Error("إجمالي الكميات يجب أن يكون أكبر من صفر.");
+
+        db.prepare(`
+            UPDATE purchase_requests 
+            SET status = 'PENDING_APPROVAL', posted_at = CURRENT_TIMESTAMP, posted_by = ? 
+            WHERE id = ?
+        `).run(userId, id);
+
+        return { success: true, status: 'PENDING_APPROVAL' };
+    }
+
+    static approveRequest(id: string, userId: string) {
+        if (!this.checkPermission(userId, 'PURCHASE_PR_APPROVE')) {
+            throw new Error("عفواً، لا تملك صلاحية اعتماد طلبات الشراء المتفرقة.");
+        }
+
+        const req = db.prepare('SELECT status FROM purchase_requests WHERE id = ?').get(id) as any;
+        if (!req) throw new Error("لم يتم العثور على طلب الشراء");
+        if (req.status !== 'PENDING_APPROVAL') throw new Error("الطلب ليس بانتظار الاعتماد");
+
+        db.prepare(`
+            UPDATE purchase_requests 
+            SET status = 'APPROVED', approved_at = CURRENT_TIMESTAMP, approved_by = ? 
+            WHERE id = ?
+        `).run(userId, id);
+
+        return { success: true, status: 'APPROVED' };
+    }
+
+    static rejectRequest(id: string, userId: string, reason?: string) {
+        if (!this.checkPermission(userId, 'PURCHASE_PR_APPROVE')) {
+            throw new Error("عفواً، لا تملك صلاحية رفض طلبات الشراء المتفرقة.");
+        }
+
+        const req = db.prepare('SELECT status FROM purchase_requests WHERE id = ?').get(id) as any;
+        if (!req) throw new Error("لم يتم العثور على طلب الشراء");
+        if (req.status !== 'PENDING_APPROVAL') throw new Error("الطلب ليس بانتظار الاعتماد");
+
+        db.prepare(`
+            UPDATE purchase_requests 
+            SET status = 'REJECTED', rejected_at = CURRENT_TIMESTAMP, rejected_by = ?, rejected_reason = ? 
+            WHERE id = ?
+        `).run(userId, reason || null, id);
+
+        return { success: true, status: 'REJECTED' };
     }
 
     static deleteRequest(id: string) {

@@ -1,0 +1,12 @@
+export enum AccountCategory {
+    ASSET = 'ASSET',
+    LIABILITY = 'LIABILITY',
+    EQUITY = 'EQUITY',
+    REVENUE = 'REVENUE',
+    COST_OF_SALES = 'COST_OF_SALES',
+    EXPENSE = 'EXPENSE',
+    OTHER_INCOME = 'OTHER_INCOME',
+    OTHER_EXPENSE = 'OTHER_EXPENSE',
+    CONTROL = 'CONTROL',
+}
+

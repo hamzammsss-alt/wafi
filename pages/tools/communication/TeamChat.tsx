@@ -3,12 +3,12 @@ import { MessageCircle, Send } from 'lucide-react';
 
 export const TeamChat = () => {
     return (
-        <div className="p-6 bg-gray-50 h-full flex flex-col" dir="rtl">
+        <div className="app-page h-full flex flex-col" dir="rtl">
             <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                 <MessageCircle className="text-green-600" /> المحادثة الفورية
             </h1>
 
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex overflow-hidden">
+            <div className="flex-1 card flex overflow-hidden">
                 {/* Contact List */}
                 <div className="w-80 border-l flex flex-col bg-gray-50">
                     <div className="p-4 border-b font-bold text-gray-700">المستخدمين (5 متصل)</div>
@@ -62,3 +62,4 @@ export const TeamChat = () => {
         </div>
     );
 };
+

@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
 import { Save, Users, Plus, Trash2, DollarSign } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import * as XLSX from 'xlsx';
 
 export const PayrollVoucher = () => {
     const [month, setMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
     const [employees, setEmployees] = useState([
         { id: 1, name: 'أحمد سلطان', salary: 5000, deduction: 0, net: 5000, status: 'Unpaid' },
         { id: 2, name: 'محمد علي', salary: 4500, deduction: 200, net: 4300, status: 'Unpaid' },
+        { id: 3, name: 'فاطمة حسن', salary: 4200, deduction: 150, net: 4050, status: 'Unpaid' },
+        { id: 4, name: 'علي خليل', salary: 5500, deduction: 300, net: 5200, status: 'Paid' },
+        { id: 5, name: 'نور القمري', salary: 3800, deduction: 100, net: 3700, status: 'Unpaid' },
     ]);
 
     const handlePay = (id: number) => {
@@ -15,7 +20,8 @@ export const PayrollVoucher = () => {
     const totalPaid = employees.filter(e => e.status === 'Paid').reduce((sum, e) => sum + e.net, 0);
 
     return (
-        <div className="flex flex-col h-full bg-[#f8f9fa] p-4 gap-6" dir="rtl">
+        <div className="p-6 bg-[#f8fafc] h-full flex flex-col gap-4 overflow-y-auto" dir="rtl">
+            {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-indigo-600" /> صرف الرواتب</h1>
@@ -27,7 +33,7 @@ export const PayrollVoucher = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col">
                 <table className="w-full text-right">
                     <thead className="bg-gray-50 border-b text-sm font-bold text-gray-600">
                         <tr>
@@ -64,12 +70,7 @@ export const PayrollVoucher = () => {
                 </table>
             </div>
 
-            {totalPaid > 0 && (
-                <div className="bg-green-50 p-4 rounded-xl border border-green-200 flex justify-between items-center">
-                    <span className="font-bold text-green-800">إجمالي الرواتب المصروفة لهذا الشهر</span>
-                    <span className="text-2xl font-mono font-bold text-green-700">{totalPaid.toLocaleString()} ₪</span>
-                </div>
-            )}
+            {/* Additional functionality can be added here */}
         </div>
     );
 };

@@ -75,10 +75,10 @@ export const FormDesigner = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50/50 min-h-screen font-cairo flex gap-6" dir="rtl">
+        <div className="app-page flex gap-6" dir="rtl">
 
             {/* Sidebar Form Selector */}
-            <div className="w-64 bg-white rounded-xl shadow-sm border border-gray-200 p-4 shrink-0 h-fit">
+            <div className="w-64 card p-4 shrink-0 h-fit">
                 <h2 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                     <LayoutTemplate className="text-indigo-600" /> النماذج
                 </h2>
@@ -99,7 +99,7 @@ export const FormDesigner = () => {
             </div>
 
             {/* Editor Area */}
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
+            <div className="flex-1 card flex flex-col">
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                     <div>
                         <h1 className="text-xl font-bold text-gray-800">{schemas[selectedForm].title}</h1>

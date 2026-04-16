@@ -5,6 +5,7 @@ interface BankAccount {
     id: string;
     bank_name: string;
     branch_name?: string;
+    account_name?: string;
     account_number: string;
     currency_id: string;
     gl_account_id?: string;
@@ -77,7 +78,7 @@ export const BankAccountSelect: React.FC<BankAccountSelectProps> = ({
                     {selectedAccount ? (
                         <div className="flex flex-col items-start truncate">
                             <span className="text-sm font-bold text-gray-900 truncate">{selectedAccount.bank_name} - {selectedAccount.account_number}</span>
-                            <span className="textxs text-gray-500 font-mono">{selectedAccount.currency_id}</span>
+                            <span className="text-xs text-gray-500 font-mono">{selectedAccount.currency_id}</span>
                         </div>
                     ) : (
                         <span className="text-sm text-gray-400">{loading ? 'جاري التحميل...' : placeholder}</span>
@@ -113,7 +114,7 @@ export const BankAccountSelect: React.FC<BankAccountSelectProps> = ({
                             </div>
                         )) : (
                             <div className="p-4 text-center text-gray-400 text-sm">
-                                {currencyId ? `لا يوجد حسابات بعملة ${currencyId}` : 'لا توجد حسابات'}
+                                {currencyId ? `لا توجد حسابات بعملة ${currencyId}` : 'لا توجد حسابات'}
                             </div>
                         )}
                     </div>

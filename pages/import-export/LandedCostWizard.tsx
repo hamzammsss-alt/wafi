@@ -287,7 +287,7 @@ const LandedCostWizard = () => {
 
                         {/* Items Table */}
                         <div className="overflow-x-auto">
-                            <table className="w-full border-collapse">
+                            <table className="dense-table w-full">
                                 <thead>
                                     <tr className="bg-slate-100 border-b">
                                         <th className="p-2 text-right text-sm font-medium">الصنف</th>

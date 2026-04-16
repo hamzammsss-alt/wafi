@@ -9,7 +9,7 @@ export const PriceUpdate = () => {
             </h1>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="card p-6">
                     <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
                         <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">1</span>
                         تحديد الأصناف
@@ -30,7 +30,7 @@ export const PriceUpdate = () => {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="card p-6">
                     <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
                         <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">2</span>
                         طريقة التعديل

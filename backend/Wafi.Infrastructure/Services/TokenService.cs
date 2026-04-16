@@ -25,11 +25,24 @@ namespace Wafi.Infrastructure.Services
         {
             var claims = new List<Claim>
             {
-                new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(JwtRegisteredClaimNames.NameId, user.Username),
-                new Claim("role", user.Role),
-                new Claim("tenantId", user.TenantId.ToString())
+                new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new(ClaimTypes.Name, user.Username),
+                new(JwtRegisteredClaimNames.UniqueName, user.Username),
+                new(ClaimTypes.Role, string.IsNullOrWhiteSpace(user.Role) ? "User" : user.Role),
+                new("tenantId", user.TenantId.ToString())
             };
+
+            if (!string.IsNullOrWhiteSpace(user.Email))
+            {
+                claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
+                claims.Add(new Claim(ClaimTypes.Email, user.Email));
+            }
+
+            if (!string.IsNullOrWhiteSpace(user.FullName))
+            {
+                claims.Add(new Claim("fullName", user.FullName));
+            }
 
             var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha512Signature);
 

@@ -80,7 +80,7 @@ export const Attendance = () => {
 
             <div className="flex-1 overflow-auto p-6">
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <table className="w-full text-sm">
+                    <table className="dense-table w-full">
                         <thead className="bg-slate-100 text-slate-600 font-bold border-b">
                             <tr>
                                 <th className="p-4 text-right">الموظف</th>

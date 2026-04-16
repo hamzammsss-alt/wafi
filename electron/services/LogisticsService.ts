@@ -1,43 +1,49 @@
 
-import Database from 'better-sqlite3';
-import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-
-const appData = process.env.APPDATA || (process.platform === 'darwin' ? process.env.HOME + '/Library/Application Support' : '/var/local');
-const dbPath = path.join(appData, 'wafi-erp', 'wafi.db');
-const db = new Database(dbPath);
+import { db } from '../database';
 
 export class LogisticsService {
+    private static getDB() {
+        if (!db) {
+            throw new Error('Database is not initialized');
+        }
+        return db;
+    }
+
     // --- Drivers ---
     static getDrivers() {
-        return db.prepare("SELECT * FROM drivers ORDER BY name").all();
+        const conn = this.getDB();
+        return conn.prepare("SELECT * FROM drivers ORDER BY name").all();
     }
 
     static saveDriver(driver: any) {
+        const conn = this.getDB();
         if (driver.id) {
-            db.prepare(`
+            conn.prepare(`
                 UPDATE drivers SET name = @name, license_no = @license_no, license_expiry = @license_expiry, phone = @phone, notes = @notes, is_active = @is_active
                 WHERE id = @id
             `).run(driver);
-            return db.prepare("SELECT * FROM drivers WHERE id = ?").get(driver.id);
+            return conn.prepare("SELECT * FROM drivers WHERE id = ?").get(driver.id);
         } else {
             const id = uuidv4();
-            db.prepare(`
+            conn.prepare(`
                 INSERT INTO drivers (id, name, license_no, license_expiry, phone, notes, is_active)
                 VALUES (@id, @name, @license_no, @license_expiry, @phone, @notes, @is_active)
             `).run({ ...driver, id, is_active: driver.is_active ?? 1 });
-            return db.prepare("SELECT * FROM drivers WHERE id = ?").get(id);
+            return conn.prepare("SELECT * FROM drivers WHERE id = ?").get(id);
         }
     }
 
     static deleteDriver(id: string) {
-        db.prepare("DELETE FROM drivers WHERE id = ?").run(id);
+        const conn = this.getDB();
+        conn.prepare("DELETE FROM drivers WHERE id = ?").run(id);
         return { success: true };
     }
 
     // --- Vehicles ---
     static getVehicles() {
-        return db.prepare(`
+        const conn = this.getDB();
+        return conn.prepare(`
             SELECT v.*, d.name as driver_name 
             FROM vehicles v
             LEFT JOIN drivers d ON v.driver_id = d.id 
@@ -46,6 +52,7 @@ export class LogisticsService {
     }
 
     static saveVehicle(vehicle: any) {
+        const conn = this.getDB();
         // Sanitize undefined numeric/optional fields
         const safeVehicle = {
             ...vehicle,
@@ -60,7 +67,7 @@ export class LogisticsService {
         };
 
         if (vehicle.id) {
-            db.prepare(`
+            conn.prepare(`
                 UPDATE vehicles SET 
                     plate_no = @plate_no, 
                     vehicle_code = @vehicle_code,
@@ -76,10 +83,10 @@ export class LogisticsService {
                     is_active = @is_active
                 WHERE id = @id
             `).run(safeVehicle);
-            return db.prepare("SELECT * FROM vehicles WHERE id = ?").get(vehicle.id);
+            return conn.prepare("SELECT * FROM vehicles WHERE id = ?").get(vehicle.id);
         } else {
             const id = uuidv4();
-            db.prepare(`
+            conn.prepare(`
                 INSERT INTO vehicles (
                     id, plate_no, vehicle_code, model, brand, type, description, 
                     driver_id, color, insurance_expiry, license_expiry, notes, is_active
@@ -89,12 +96,13 @@ export class LogisticsService {
                     @driver_id, @color, @insurance_expiry, @license_expiry, @notes, @is_active
                 )
             `).run({ ...safeVehicle, id });
-            return db.prepare("SELECT * FROM vehicles WHERE id = ?").get(id);
+            return conn.prepare("SELECT * FROM vehicles WHERE id = ?").get(id);
         }
     }
 
     static deleteVehicle(id: string) {
-        db.prepare("DELETE FROM vehicles WHERE id = ?").run(id);
+        const conn = this.getDB();
+        conn.prepare("DELETE FROM vehicles WHERE id = ?").run(id);
         return { success: true };
     }
 }

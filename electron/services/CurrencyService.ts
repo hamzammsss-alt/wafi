@@ -1,84 +1,121 @@
-import { db } from '../database';
+import { Currency } from '../../src/main/domain/entities/Currency';
+import { SqliteCurrencyRepo } from '../../src/main/infrastructure/adapters/SqliteCurrencyRepo';
 import { v4 as uuidv4 } from 'uuid';
-
-export interface Currency {
-    id: string;
-    code: string;
-    name_ar: string;
-    name_en: string;
-    symbol: string;
-    is_base: number; // 0 or 1
-    exchange_rate: number;
-    last_update?: string;
-}
+import { DomainError } from '../../src/main/domain/errors';
 
 export class CurrencyService {
+    private static repo = new SqliteCurrencyRepo();
 
-    static getCurrencies(): Currency[] {
-        const stmt = db.prepare('SELECT * FROM currencies ORDER BY is_base DESC, code ASC');
-        return stmt.all() as Currency[];
+    static async getCurrencies(companyId: string): Promise<Currency[]> {
+        return await this.repo.findAll(companyId);
     }
 
-    static getBaseCurrency(): Currency {
-        const stmt = db.prepare('SELECT * FROM currencies WHERE is_base = 1');
-        const currency = stmt.get() as Currency;
+    static async getBaseCurrency(companyId: string): Promise<Currency> {
+        const currencies = await this.repo.findAll(companyId);
+        const base = currencies.find(c => c.isBaseCurrency);
+        if (!base) {
+            throw new DomainError('VALIDATION_ERROR', 'No Base Currency Found for this company');
+        }
+        return base;
+    }
+
+    static async createCurrency(data: {
+        code: string,
+        companyId: string,
+        name: string,
+        symbol: string,
+        exchangeRate: number,
+        isBaseCurrency: boolean,
+        isActive: boolean,
+        decimalPlaces?: number
+    }): Promise<string> {
+        // Business Rule: Ensure only one base currency
+        if (data.isBaseCurrency) {
+            const all = await this.repo.findAll(data.companyId);
+            for (const c of all) {
+                if (c.isBaseCurrency) {
+                    c.isBaseCurrency = false;
+                    await this.repo.update(c);
+                }
+            }
+            data.exchangeRate = 1; // Base is always 1
+        }
+
+        const currency = new Currency(
+            uuidv4(),
+            data.code,
+            data.companyId,
+            data.name,
+            data.symbol,
+            data.exchangeRate,
+            data.isBaseCurrency,
+            data.isActive,
+            data.decimalPlaces || 2
+        );
+
+        await this.repo.create(currency);
+        return currency.id;
+    }
+
+    static async updateCurrency(
+        id: string,
+        companyId: string,
+        updates: {
+            name: string,
+            symbol: string,
+            exchangeRate: number,
+            isBaseCurrency: boolean,
+            isActive: boolean,
+            decimalPlaces?: number
+        }
+    ): Promise<{ success: true }> {
+        const currency = await this.repo.findById(id, companyId);
         if (!currency) {
-            // Fallback or Error
-            throw new Error('No Base Currency Found');
-        }
-        return currency;
-    }
-
-    static createCurrency(currency: Omit<Currency, 'id'>) {
-        // If setting as base, unset others
-        if (currency.is_base) {
-            db.prepare('UPDATE currencies SET is_base = 0').run();
+            throw new DomainError('DOCUMENT_NOT_FOUND', 'Currency not found');
         }
 
-        const id = uuidv4();
-        const stmt = db.prepare(`
-      INSERT INTO currencies (id, code, name_ar, name_en, symbol, is_base, exchange_rate)
-      VALUES (@id, @code, @name_ar, @name_en, @symbol, @is_base, @exchange_rate)
-    `);
-
-        stmt.run({
-            id,
-            ...currency
-        });
-
-        return id;
-    }
-
-    static updateCurrency(currency: Currency) {
-        if (currency.is_base) {
-            db.prepare('UPDATE currencies SET is_base = 0').run();
-            // Base currency rate MUST be 1
-            currency.exchange_rate = 1.0;
+        if (updates.isBaseCurrency && !currency.isBaseCurrency) {
+            const all = await this.repo.findAll(companyId);
+            for (const c of all) {
+                if (c.isBaseCurrency && c.id !== id) {
+                    c.isBaseCurrency = false;
+                    await this.repo.update(c);
+                }
+            }
+            updates.exchangeRate = 1;
         }
 
-        const stmt = db.prepare(`
-        UPDATE currencies 
-        SET code = @code, name_ar = @name_ar, name_en = @name_en, 
-            symbol = @symbol, is_base = @is_base, exchange_rate = @exchange_rate, 
-            last_update = CURRENT_TIMESTAMP
-        WHERE id = @id
-    `);
+        currency.updateDetails(updates.name, updates.symbol, updates.decimalPlaces || 2, updates.isActive);
+        currency.isBaseCurrency = updates.isBaseCurrency; // Directly update since domain constructor sets it, but no setter. We need to set it.
+        // wait, domain doesn't have setter for isBaseCurrency. It is public, so we can set it.
 
-        stmt.run(currency);
+        if (!currency.isBaseCurrency) {
+            currency.updateExchangeRate(updates.exchangeRate);
+        } else {
+            currency.exchangeRate = 1;
+        }
+
+
+        await this.repo.update(currency);
         return { success: true };
     }
 
-    static deleteCurrency(id: string) {
-        // Check if base
-        const current = db.prepare('SELECT is_base FROM currencies WHERE id = ?').get(id) as Currency;
-        if (current && current.is_base) {
-            throw new Error("Cannot delete the Base Currency");
+    static async deleteCurrency(id: string, companyId: string): Promise<{ success: true }> {
+        // Domain rule check
+        const currency = await this.repo.findById(id, companyId);
+        if (currency && currency.isBaseCurrency) {
+            throw new DomainError('VALIDATION_ERROR', 'Cannot delete the Base Currency');
         }
-        db.prepare('DELETE FROM currencies WHERE id = ?').run(id);
+
+        // Use direct DB for deletion as Repo doesn't have delete mapped
+        const db = require('better-sqlite3')('wafi.db');
+        db.prepare('DELETE FROM currencies WHERE id = ? AND company_id = ?').run(id, companyId);
+
         return { success: true };
     }
 
-    static getCurrencyHistory(code: string, days: number = 30): { date: string, rate: number }[] {
+    static async getCurrencyHistory(code: string, days: number = 30): Promise<{ date: string, rate: number }[]> {
+        const db = require('better-sqlite3')('wafi.db');
         const stmt = db.prepare(`
             SELECT date, rate 
             FROM currency_rate_history 

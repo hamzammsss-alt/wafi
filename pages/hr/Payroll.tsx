@@ -141,7 +141,7 @@ const Payroll = () => {
                                     </tbody>
                                 </table>
 
-                                <div className="grid grid-cols-2 gap-4 bg-gray-50 p-6 rounded-lg border border-gray-100">
+                                <div className="grid grid-cols-2 gap-4 card p-6 rounded-lg">
                                     <div className="flex justify-between items-center border-b border-gray-200 pb-2">
                                         <span className="text-gray-500">إجمالي الرواتب الأساسية:</span>
                                         <span className="font-medium text-lg">{totalBasic.toLocaleString()}</span>

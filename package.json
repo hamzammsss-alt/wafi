@@ -13,6 +13,7 @@
       "dist/**/*",
       "dist-electron/**/*",
       "electron/database.ts",
+      "electron/database/**/*",
       "database/**/*"
     ],
     "win": {
@@ -28,13 +29,23 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on tcp:4600 && node scripts/compile-electron.js && node scripts/start-electron.js\"",
     "build": "vite build",
-    "rebuild": "npm rebuild better-sqlite3 --runtime=electron --target=39.2.7 --arch=x64 --dist-url=https://electronjs.org/headers",
-    "preview": "vite preview"
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "preview": "vite preview",
+    "seed:test-data": "node scripts/seed_test_data.js",
+    "cleanup:fk": "node scripts/cleanup_fk_violations.js",
+    "validate:schema": "node validate_schema.js",
+    "verify:auto-assign": "node verify_auto_assign.js",
+    "verify:account-resolution": "ts-node --transpile-only -P tsconfig.verif.json scripts/verify_account_resolution_engine.ts",
+    "test:ae-scenarios": "ts-node --transpile-only -P tsconfig.verif.json scripts/test_ae_voucher_scenarios.ts",
+    "test:ae-scenarios:electron": "node scripts/compile-electron.js && npx electron scripts/test_ae_voucher_scenarios_electron.cjs",
+    "verify:partners:js": "node verify_partners.js",
+    "verify:partners:ts": "ts-node --transpile-only -P tsconfig.verif.json verify_partners.ts"
   },
   "dependencies": {
     "@google/genai": "^1.34.0",
     "@tanstack/react-table": "^8.21.3",
     "@types/decimal.js": "^0.0.32",
+    "@types/react-window": "^1.8.8",
     "@types/uuid": "^10.0.0",
     "axios": "^1.13.2",
     "better-sqlite3": "^12.5.0",
@@ -42,14 +53,17 @@
     "classnames": "^2.5.1",
     "date-fns": "^4.1.0",
     "decimal.js": "^10.6.0",
+    "express": "^5.2.1",
     "framer-motion": "^12.26.2",
     "lucide-react": "^0.562.0",
     "mathjs": "^15.1.0",
     "node-schedule": "^2.1.1",
+    "nodemailer": "^6.10.1",
     "react": "^19.2.3",
     "react-barcode": "^1.6.1",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.11.0",
+    "react-window": "^1.8.11",
     "recharts": "^3.6.0",
     "uuid": "^13.0.0",
     "xlsx": "^0.18.5"

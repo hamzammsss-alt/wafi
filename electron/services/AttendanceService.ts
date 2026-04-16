@@ -85,6 +85,9 @@ export class AttendanceService {
     static processDayAttendance(date: string) { // The core logic
         // 1. Get all active employees
         const employees = db.prepare("SELECT * FROM hr_employees WHERE status = 'ACTIVE'").all();
+        const hasHolidayTable = !!db
+            .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='hr_public_holidays'")
+            .get();
 
         // 2. Get Default Shift (Fallback)
         const defaultShift = db.prepare("SELECT * FROM hr_shifts WHERE is_default = 1").get();
@@ -152,13 +155,30 @@ export class AttendanceService {
                         }
                     }
                 } else {
-                    // Check if Weekend
-                    const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
-                    const weekends = JSON.parse(shift.weekend_days || '[]');
-                    if (weekends.includes(dayName)) {
-                        status = 'REST_DAY';
+                    let isHoliday = false;
+                    if (hasHolidayTable) {
+                        const holiday = db.prepare(`
+                            SELECT id
+                            FROM hr_public_holidays
+                            WHERE
+                                (COALESCE(is_recurring, 0) = 1 AND strftime('%m-%d', date) = strftime('%m-%d', ?))
+                                OR
+                                (COALESCE(is_recurring, 0) = 0 AND date = ?)
+                            LIMIT 1
+                        `).get(date, date);
+                        isHoliday = !!holiday;
                     }
-                    // Check Holidays (TODO)
+
+                    if (isHoliday) {
+                        status = 'HOLIDAY';
+                    } else {
+                        // Check if Weekend
+                        const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+                        const weekends = JSON.parse(shift.weekend_days || '[]');
+                        if (weekends.includes(dayName)) {
+                            status = 'REST_DAY';
+                        }
+                    }
                 }
 
                 insertDaily.run({

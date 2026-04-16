@@ -14,6 +14,8 @@ import {
     AlertCircle,
     CheckCircle2
 } from 'lucide-react';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
 interface Category {
     id: string;
@@ -117,6 +119,15 @@ export const CategoriesPage = () => {
         setIsAdding(true);
     };
 
+    const openCreate = () => {
+        setEditingId(null);
+        setFormData({ name_ar: '', name_en: '', parent_id: '', description: '', code: '', is_active: true });
+        setError(null);
+        setIsAdding(true);
+    };
+
+    useCreateIntent(openCreate);
+
     const filteredCategories = categories.filter(c =>
         c.name_ar?.toLowerCase().includes(search.toLowerCase()) ||
         c.name_en?.toLowerCase().includes(search.toLowerCase()) ||
@@ -130,9 +141,31 @@ export const CategoriesPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
+        <div className="app-page" dir="rtl">
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <WorkspaceHeader
+                icon={<Layers size={22} />}
+                title="مجموعات الأصناف"
+                subtitle="تصنيف الأصناف في مجموعات وعائلات لتسهيل الإدارة والتقارير."
+                badges={[
+                    { label: `${categories.length} مجموعات`, tone: 'info' },
+                    { label: `${filteredCategories.length} مطابق`, tone: 'neutral' },
+                ]}
+                actions={(
+                    <button
+                        onClick={openCreate}
+                        className="rounded-xl bg-gradient-to-r from-teal-600 to-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-900/15 transition hover:brightness-105"
+                    >
+                        <span className="inline-flex items-center gap-2">
+                            <Plus size={16} />
+                            <span>إضافة مجموعة جديدة</span>
+                        </span>
+                    </button>
+                )}
+                className="mb-8"
+            />
+
+            <div className="hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                         <div className="p-2 bg-teal-100 rounded-lg text-teal-600">
@@ -144,11 +177,7 @@ export const CategoriesPage = () => {
                 </div>
 
                 <button
-                    onClick={() => {
-                        setEditingId(null);
-                        setFormData({ name_ar: '', name_en: '', parent_id: '', description: '', code: '', is_active: true });
-                        setIsAdding(true);
-                    }}
+                    onClick={openCreate}
                     className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
                 >
                     <Plus size={20} />
@@ -168,7 +197,7 @@ export const CategoriesPage = () => {
             )}
 
             {/* Search & Content */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="card overflow-hidden">
                 {/* Toolbar */}
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
                     <div className="relative w-full sm:w-96">
@@ -195,7 +224,7 @@ export const CategoriesPage = () => {
                 ) : (
                     /* Table */
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right">
+                        <table className="dense-table w-full text-right">
                             <thead className="bg-[#f8fafc] text-gray-600 font-semibold text-sm uppercase tracking-wider border-b">
                                 <tr>
                                     <th className="px-6 py-4">اسم المجموعة</th>
@@ -401,4 +430,5 @@ export const CategoriesPage = () => {
         </div>
     );
 };
+
 

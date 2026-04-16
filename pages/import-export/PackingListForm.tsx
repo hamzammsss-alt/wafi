@@ -274,7 +274,7 @@ const PackingListForm = () => {
                     </div>
                     <CardContent className="p-0 overflow-hidden">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <table className="dense-table w-full">
                                 <thead className="bg-slate-50 border-b">
                                     <tr>
                                         <th className="p-3 text-right">رقم الطرد</th>

@@ -86,7 +86,7 @@ const ManualAttendance = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl" dir="rtl">
+        <div className="app-page" dir="rtl">
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800">تسجيل الحضور اليدوي</h1>
@@ -113,8 +113,8 @@ const ManualAttendance = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                <table className="w-full text-right">
+            <div className="card overflow-hidden">
+                <table className="dense-table w-full text-right">
                     <thead className="bg-gray-50 border-b">
                         <tr>
                             <th className="px-6 py-4 font-semibold text-gray-700">الموظف</th>
@@ -182,3 +182,4 @@ const ManualAttendance = () => {
 };
 
 export default ManualAttendance;
+

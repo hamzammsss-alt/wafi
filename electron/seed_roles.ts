@@ -193,7 +193,199 @@ const seedRoles = (db: any) => {
     });
 
     transaction();
-    console.log("Roles seeded (Arabic) successfully.");
+
+    // ---- Permissions Engine defaults (EN identifiers) ----
+    try {
+        const hasRolePermissions = !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='role_permissions' LIMIT 1").get();
+        const hasUserAssignments = !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='user_role_assignments' LIMIT 1").get();
+        if (hasRolePermissions) {
+            const defaultCompanyId = 'COMP_01';
+            const defaultRoleDefs = [
+                {
+                    roleKey: 'role.admin',
+                    name: 'role.admin',
+                    description: 'System administrator with all capabilities',
+                    capabilities: ['ALL']
+                },
+                {
+                    roleKey: 'role.accountant',
+                    name: 'role.accountant',
+                    description: 'Accounting and reporting operations',
+                    capabilities: [
+                        'ti.gl.journal.post',
+                        'core.reporting.view',
+                        'core.reporting.export',
+                        'core.audit.view',
+                        'sales.invoice.read',
+                        'sales.invoice.post',
+                        'sales.invoice.print',
+                        'view.manage'
+                    ]
+                },
+                {
+                    roleKey: 'role.sales',
+                    name: 'role.sales',
+                    description: 'Sales quote to invoice workflow',
+                    capabilities: [
+                        'ti.sales.invoice.create',
+                        'ti.sales.invoice.post',
+                        'sales.invoice.create',
+                        'sales.invoice.read',
+                        'sales.invoice.update',
+                        'sales.invoice.post',
+                        'sales.invoice.print',
+                        'view.manage'
+                    ]
+                },
+                {
+                    roleKey: 'role.purchasing',
+                    name: 'role.purchasing',
+                    description: 'Purchase invoice workflow',
+                    capabilities: ['ti.purchase.invoice.create', 'ti.purchase.invoice.post', 'view.manage']
+                },
+                {
+                    roleKey: 'role.inventory',
+                    name: 'role.inventory',
+                    description: 'Inventory and item operations',
+                    capabilities: ['ti.master.item.manage', 'ti.reporting.operational.view', 'view.manage']
+                },
+                {
+                    roleKey: 'role.hr',
+                    name: 'role.hr',
+                    description: 'HR operations',
+                    capabilities: ['prtax.master.employee.manage', 'prtax.payroll.calculate', 'view.manage']
+                }
+            ];
+
+            const getRoleByKey = db.prepare("SELECT id FROM roles WHERE role_key = ? OR code = ? LIMIT 1");
+            const getRoleByName = db.prepare("SELECT id FROM roles WHERE name = ? LIMIT 1");
+            const insertDefaultRole = db.prepare(`
+                INSERT INTO roles (id, name, description, company_id, code, name_i18n_key, role_key, is_system, is_active, created_at, updated_at)
+                VALUES (@id, @name, @description, @companyId, @code, @nameI18nKey, @roleKey, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `);
+            const updateDefaultRole = db.prepare(`
+                UPDATE roles
+                SET description = @description,
+                    company_id = @companyId,
+                    code = @code,
+                    name_i18n_key = @nameI18nKey,
+                    role_key = @roleKey,
+                    is_system = 1,
+                    is_active = 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = @id
+            `);
+            const clearRolePermissions = db.prepare("DELETE FROM role_permissions WHERE role_id = ?");
+            const insertRolePermission = db.prepare(`
+                INSERT OR IGNORE INTO role_permissions (id, role_id, capability_key, effect, created_at)
+                VALUES (@id, @roleId, @capabilityKey, 'ALLOW', CURRENT_TIMESTAMP)
+            `);
+
+            const defaultTx = db.transaction(() => {
+                for (const role of defaultRoleDefs) {
+                    const existingByKey = getRoleByKey.get(role.roleKey, role.roleKey);
+                    const existingByName = getRoleByName.get(role.name);
+                    const roleId = existingByKey?.id || existingByName?.id || uuidv4();
+
+                    if (existingByKey?.id || existingByName?.id) {
+                        updateDefaultRole.run({
+                            id: roleId,
+                            description: role.description,
+                            companyId: defaultCompanyId,
+                            code: role.roleKey,
+                            nameI18nKey: `role.${role.roleKey}.name`,
+                            roleKey: role.roleKey,
+                        });
+                    } else {
+                        insertDefaultRole.run({
+                            id: roleId,
+                            name: role.name,
+                            description: role.description,
+                            companyId: defaultCompanyId,
+                            code: role.roleKey,
+                            nameI18nKey: `role.${role.roleKey}.name`,
+                            roleKey: role.roleKey,
+                        });
+                    }
+
+                    clearRolePermissions.run(roleId);
+                    for (const capabilityKey of role.capabilities) {
+                        insertRolePermission.run({
+                            id: uuidv4(),
+                            roleId,
+                            capabilityKey,
+                        });
+                    }
+                }
+            });
+
+            defaultTx();
+
+            if (hasUserAssignments) {
+                const adminRole = db.prepare("SELECT id FROM roles WHERE role_key = 'role.admin' OR code = 'role.admin' LIMIT 1").get() as any;
+                const firstUser = db.prepare(`
+                    SELECT id, branch_id
+                    FROM users
+                    WHERE is_active = 1
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                `).get() as any;
+
+                if (adminRole?.id && firstUser?.id) {
+                    const existingCompanyAssignments = db.prepare(`
+                        SELECT id
+                        FROM user_role_assignments
+                        WHERE company_id = @companyId
+                          AND user_id = @userId
+                          AND role_id = @roleId
+                          AND branch_id IS NULL
+                        ORDER BY updated_at DESC, created_at DESC
+                    `).all({
+                        companyId: defaultCompanyId,
+                        userId: firstUser.id,
+                        roleId: adminRole.id,
+                    }) as Array<{ id: string }>;
+
+                    if (existingCompanyAssignments.length > 0) {
+                        const primaryAssignment = existingCompanyAssignments[0];
+                        db.prepare(`
+                            UPDATE user_role_assignments
+                            SET scope_level = 'COMPANY',
+                                is_active = 1,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = @id
+                        `).run({ id: primaryAssignment.id });
+
+                        if (existingCompanyAssignments.length > 1) {
+                            const duplicateIds = existingCompanyAssignments.slice(1).map((x) => x.id);
+                            const placeholders = duplicateIds.map(() => '?').join(', ');
+                            db.prepare(`
+                                DELETE FROM user_role_assignments
+                                WHERE id IN (${placeholders})
+                            `).run(...duplicateIds);
+                        }
+                    } else {
+                        db.prepare(`
+                            INSERT INTO user_role_assignments (
+                                id, company_id, branch_id, user_id, role_id, scope_level, is_active, created_at, updated_at
+                            ) VALUES (
+                                @id, @companyId, NULL, @userId, @roleId, 'COMPANY', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                            )
+                        `).run({
+                            id: uuidv4(),
+                            companyId: defaultCompanyId,
+                            userId: firstUser.id,
+                            roleId: adminRole.id,
+                        });
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('[seed_roles] Permissions engine defaults skipped:', (error as any)?.message || error);
+    }
+
+    console.log("Roles seeded (Arabic + permissions engine defaults) successfully.");
 };
 
 module.exports = { seedRoles };

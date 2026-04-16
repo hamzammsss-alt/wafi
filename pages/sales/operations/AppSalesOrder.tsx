@@ -3,7 +3,7 @@ import { ShoppingCart, Save, Printer, Plus, Trash2, Calendar, User, Truck } from
 
 export const AppSalesOrder = () => {
     return (
-        <div className="p-6 bg-gray-50 h-full flex flex-col gap-6" dir="rtl">
+        <div className="app-page h-full flex flex-col gap-4" dir="rtl">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                     <ShoppingCart className="text-blue-600" /> طلبية مبيعات جديدة
@@ -15,7 +15,7 @@ export const AppSalesOrder = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="card p-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="col-span-1 md:col-span-2">
                         <label className="block text-sm font-bold text-gray-700 mb-2">العميل</label>
@@ -43,7 +43,7 @@ export const AppSalesOrder = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 flex flex-col overflow-hidden">
+            <div className="card flex-1 flex flex-col overflow-hidden">
                 <div className="p-12 text-center text-gray-400 font-bold">
                     شبكة الأصناف (مطابقة لشاشة عرض الأسعار)
                 </div>
@@ -52,3 +52,4 @@ export const AppSalesOrder = () => {
         </div>
     );
 };
+

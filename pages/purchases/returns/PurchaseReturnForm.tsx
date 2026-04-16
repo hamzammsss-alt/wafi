@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, ArrowLeft, Printer } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { findItemByCode } from '../../../utils/itemLookup';
+import { ItemCodeInput } from '../../../components/items/ItemCodeInput';
+import { useTabs } from '../../../src/contexts/TabsContext';
+
+const normalizeText = (value: unknown): string => String(value ?? '').trim();
+const toUniqueTextList = (values: unknown[]): string[] =>
+    Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
 
 export const PurchaseReturnForm: React.FC = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { openTab } = useTabs();
     const isNew = !id || id === 'new';
 
     // Master Data
@@ -25,43 +33,83 @@ export const PurchaseReturnForm: React.FC = () => {
 
     const [lines, setLines] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [noteOptions, setNoteOptions] = useState<string[]>([]);
 
     useEffect(() => {
-        loadMasterData();
-        if (!isNew) {
-            loadReturn(id);
-        }
+        let isMounted = true;
+
+        const initialize = async () => {
+            const master = await loadMasterData();
+            if (!isMounted) return;
+
+            if (!isNew && id) {
+                await loadReturn(id, master.items);
+            }
+        };
+
+        initialize();
+
+        return () => {
+            isMounted = false;
+        };
     }, [id]);
 
     const loadMasterData = async () => {
         try {
-            const [suppliersData, warehousesData, itemsData, unitsData] = await Promise.all([
+            const [suppliersData, warehousesData, itemsData, unitsData, returnsData] = await Promise.all([
                 window.electronAPI.partner.getPartners('SUPPLIER'),
                 window.electronAPI.getWarehouses(),
                 window.electronAPI.inventory.getItems(),
-                window.electronAPI.inventory.getUnits()
+                window.electronAPI.inventory.getUnits(),
+                window.electronAPI.purchase.getReturns()
             ]);
             setSuppliers(suppliersData || []);
             setWarehouses(warehousesData || []);
             setItems(itemsData || []);
             setUnits(unitsData || []);
+            setNoteOptions(toUniqueTextList((returnsData || []).map((row: any) => row?.notes)));
 
             // Set default warehouse
             if (warehousesData && warehousesData.length > 0) {
                 setHeader((prev: any) => ({ ...prev, warehouse_id: warehousesData[0].id }));
             }
+            return {
+                suppliers: suppliersData || [],
+                warehouses: warehousesData || [],
+                items: itemsData || [],
+                units: unitsData || []
+            };
         } catch (error) {
             console.error("Failed to load master data", error);
+            setNoteOptions([]);
+            return {
+                suppliers: [],
+                warehouses: [],
+                items: [],
+                units: []
+            };
         }
     };
 
-    const loadReturn = async (returnId: string) => {
+    const openPortalTab = (path: string, title: string) => {
+        openTab({
+            id: path,
+            path,
+            title,
+            isClosable: true
+        });
+    };
+
+    const loadReturn = async (returnId: string, loadedItems: any[] = items) => {
         try {
             setLoading(true);
             const data = await window.electronAPI.purchase.getReturn(returnId);
             if (data) {
                 setHeader(data.header);
-                setLines(data.lines);
+                setLines((data.lines || []).map((l: any) => ({
+                    ...l,
+                    item_code: l.item_code || loadedItems.find((i: any) => i.id === l.item_id)?.code || ''
+                })));
             }
         } catch (error) {
             console.error("Failed to load return", error);
@@ -75,6 +123,7 @@ export const PurchaseReturnForm: React.FC = () => {
         setLines([...lines, {
             id: Date.now().toString(), // Temp ID
             item_id: '',
+            item_code: '',
             quantity: 1,
             unit_id: '',
             unit_price: 0,
@@ -85,14 +134,30 @@ export const PurchaseReturnForm: React.FC = () => {
 
     const updateLine = (index: number, field: string, value: any) => {
         const newLines = [...lines];
-        const line = newLines[index];
-        line[field] = value;
+        const line = { ...newLines[index], [field]: value };
+
+        if (field === 'item_code') {
+            const itemByCode = findItemByCode(items, String(value));
+            if (itemByCode) {
+                line.item_id = itemByCode.id;
+                line.item_code = itemByCode.code || '';
+                line.unit_price = itemByCode.cost_price || 0;
+                line.unit_id = itemByCode.base_unit_id;
+            } else {
+                line.item_id = '';
+                line.unit_id = '';
+            }
+        }
 
         if (field === 'item_id') {
             const item = items.find(i => i.id === value);
             if (item) {
+                line.item_code = item.code || '';
                 line.unit_price = item.cost_price || 0;
                 line.unit_id = item.base_unit_id;
+            } else {
+                line.item_code = '';
+                line.unit_id = '';
             }
         }
 
@@ -101,6 +166,7 @@ export const PurchaseReturnForm: React.FC = () => {
         const price = Number(line.unit_price) || 0;
         line.total = qty * price;
 
+        newLines[index] = line;
         setLines(newLines);
     };
 
@@ -225,6 +291,22 @@ export const PurchaseReturnForm: React.FC = () => {
                             </div>
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700">المورد</label>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => openPortalTab('/master/partners', 'بوابة الشركاء')}
+                                        className="px-2.5 py-1 text-xs border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                        بوابة الموردين
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => openPortalTab('/master/supplier-card', 'إضافة مورد')}
+                                        className="px-2.5 py-1 text-xs border border-blue-200 bg-blue-50 rounded-md text-blue-700 hover:bg-blue-100 transition-colors"
+                                    >
+                                        إضافة مورد
+                                    </button>
+                                </div>
                                 <select
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
                                     value={header.supplier_id}
@@ -253,6 +335,7 @@ export const PurchaseReturnForm: React.FC = () => {
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 outline-none"
                                     value={header.notes}
                                     onChange={(e) => setHeader({ ...header, notes: e.target.value })}
+                                    list="purchase-return-notes-list"
                                     disabled={!isNew && header.status === 'POSTED'}
                                 />
                             </div>
@@ -263,19 +346,43 @@ export const PurchaseReturnForm: React.FC = () => {
                 <div className="md:col-span-3 bg-white rounded-lg shadow border border-gray-200">
                     <div className="p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg flex justify-between items-center">
                         <h3 className="font-semibold text-gray-900">الأصناف المرجعة</h3>
-                        {isNew && (
+                        <div className="flex items-center gap-2">
                             <button
-                                onClick={addLine}
-                                className="flex items-center gap-1 text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors font-medium border border-blue-200"
+                                type="button"
+                                onClick={() => openPortalTab('/items', 'بطاقات الأصناف')}
+                                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-white transition-colors"
                             >
-                                <Plus className="h-4 w-4" /> إضافة صنف
+                                قائمة الأصناف
                             </button>
-                        )}
+                            <button
+                                type="button"
+                                onClick={() => openPortalTab('/items', 'إضافة صنف جديد')}
+                                className="px-3 py-1.5 border border-blue-200 bg-blue-50 rounded-md text-sm text-blue-700 hover:bg-blue-100 transition-colors"
+                            >
+                                إضافة صنف جديد
+                            </button>
+                            <button
+                                type="button"
+                                onClick={loadMasterData}
+                                className="px-3 py-1.5 border border-emerald-200 bg-emerald-50 rounded-md text-sm text-emerald-700 hover:bg-emerald-100 transition-colors"
+                            >
+                                تحديث التعريفات
+                            </button>
+                            {isNew && (
+                                <button
+                                    onClick={addLine}
+                                    className="flex items-center gap-1 text-sm bg-blue-50 text-blue-600 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors font-medium border border-blue-200"
+                                >
+                                    <Plus className="h-4 w-4" /> إضافة صنف
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <div className="p-0 overflow-x-auto">
                         <table className="w-full text-right text-sm">
                             <thead className="bg-gray-50 text-gray-700 font-medium border-b border-gray-200">
                                 <tr>
+                                    <th className="px-4 py-3 w-[16%]">الكود</th>
                                     <th className="px-4 py-3 w-[30%]">الصنف</th>
                                     <th className="px-4 py-3 w-[15%]">الوحدة</th>
                                     <th className="px-4 py-3 w-[15%]">الكمية</th>
@@ -288,6 +395,19 @@ export const PurchaseReturnForm: React.FC = () => {
                                 {lines.map((line, index) => (
                                     <tr key={line.id || index} className="group hover:bg-gray-50">
                                         <td className="p-2">
+                                            <ItemCodeInput
+                                                items={items}
+                                                value={line.item_code || ''}
+                                                onChange={(nextCode) => updateLine(index, 'item_code', nextCode)}
+                                                disabled={!isNew}
+                                                placeholder="Item code"
+                                                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white font-mono"
+                                                autoSelectUnique={false}
+                                                showOnEmpty={true}
+                                                maxResults={20}
+                                            />
+                                        </td>
+                                        <td className="p-2">
                                             <select
                                                 className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                                                 value={line.item_id}
@@ -295,7 +415,7 @@ export const PurchaseReturnForm: React.FC = () => {
                                                 disabled={!isNew}
                                             >
                                                 <option value="">اختر..</option>
-                                                {items.map(i => <option key={i.id} value={i.id}>{i.name_ar}</option>)}
+                                                {items.map(i => <option key={i.id} value={i.id}>{i.code} - {i.name_ar}</option>)}
                                             </select>
                                         </td>
                                         <td className="p-2">
@@ -372,6 +492,11 @@ export const PurchaseReturnForm: React.FC = () => {
                     </div>
                 </div>
             </div>
+            <datalist id="purchase-return-notes-list">
+                {noteOptions.map((note) => (
+                    <option key={note} value={note} />
+                ))}
+            </datalist>
         </div>
     );
 };

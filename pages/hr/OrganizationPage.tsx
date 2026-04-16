@@ -5,7 +5,7 @@ const OrganizationPage = () => {
     const [activeTab, setActiveTab] = useState<'departments' | 'jobs'>('departments');
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl font-sans" dir="rtl">
+        <div className="app-page" dir="rtl">
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800">الهيكل التنظيمي</h1>
@@ -29,7 +29,7 @@ const OrganizationPage = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 min-h-[600px]">
+            <div className="card p-6 min-h-[600px]">
                 {activeTab === 'departments' ? <DepartmentsTab /> : <JobTitlesTab />}
             </div>
         </div>
@@ -328,3 +328,4 @@ const JobTitlesTab = () => {
 }
 
 export default OrganizationPage;
+

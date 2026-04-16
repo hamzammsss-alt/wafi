@@ -4,17 +4,346 @@ import { Item, Unit, ItemUnit } from '../../types';
 
 import { JournalService } from './JournalService';
 
+interface DefaultUnitSeed {
+    name_ar: string;
+    name_en: string;
+    code: string;
+    symbol: string;
+}
+
+const DEFAULT_UNITS: DefaultUnitSeed[] = [
+    { name_ar: 'قطعة', name_en: 'Piece', code: 'PCS', symbol: 'pc' },
+    { name_ar: 'غرام', name_en: 'Gram', code: 'GRAM', symbol: 'g' },
+    { name_ar: 'كيلو غرام', name_en: 'Kilogram', code: 'KG', symbol: 'kg' },
+    { name_ar: 'طن', name_en: 'Ton', code: 'TON', symbol: 'ton' },
+    { name_ar: 'مليمتر مربع', name_en: 'Square Millimeter', code: 'MM2', symbol: 'mm2' },
+    { name_ar: 'سنتيمتر مربع', name_en: 'Square Centimeter', code: 'CM2', symbol: 'cm2' },
+    { name_ar: 'متر مربع', name_en: 'Square Meter', code: 'M2', symbol: 'm2' },
+    { name_ar: 'مليمتر مكعب', name_en: 'Cubic Millimeter', code: 'MM3', symbol: 'mm3' },
+    { name_ar: 'سنتيمتر مكعب', name_en: 'Cubic Centimeter', code: 'CM3', symbol: 'cm3' },
+    { name_ar: 'متر مكعب', name_en: 'Cubic Meter', code: 'M3', symbol: 'm3' },
+    { name_ar: 'ليتر', name_en: 'Liter', code: 'LTR', symbol: 'l' },
+    { name_ar: 'ثانية', name_en: 'Second', code: 'SEC', symbol: 'sec' },
+    { name_ar: 'دقيقة', name_en: 'Minute', code: 'MIN', symbol: 'min' },
+    { name_ar: 'ساعة', name_en: 'Hour', code: 'HOUR', symbol: 'hr' },
+    { name_ar: 'يوم', name_en: 'Day', code: 'DAY', symbol: 'day' },
+    { name_ar: 'مليمتر', name_en: 'Millimeter', code: 'MM', symbol: 'mm' },
+    { name_ar: 'سنتيمتر', name_en: 'Centimeter', code: 'CM', symbol: 'cm' },
+    { name_ar: 'متر', name_en: 'Meter', code: 'M', symbol: 'm' },
+    { name_ar: 'كيلومتر', name_en: 'Kilometer', code: 'KM', symbol: 'km' },
+    { name_ar: 'كيلو واط', name_en: 'Kilowatt', code: 'KW', symbol: 'kw' }
+];
+
+const LEGACY_DEFAULT_UNIT_AR_NAMES = new Set([
+    'وحدة',
+    'صندوق',
+    'كرتون',
+    'عبوة',
+    'باكيت',
+    'دستة',
+    'زوج',
+    'طقم',
+    'رول',
+    'بالة',
+    'طبالي',
+    'كيس',
+    'شوال',
+    'علبة',
+    'زجاجة',
+    'مرطبان',
+    'ملليلتر',
+    'جالون',
+    'كيلوجرام',
+    'قدم',
+    'بوصة',
+    'ياردة',
+    'قدم مربع',
+    'قدم مكعب',
+    'أسبوع',
+    'شهر',
+    'ربع سنة',
+    'سنة',
+    'لوط',
+    'خدمة'
+]);
+
 export class InventoryService {
+
+    private static getUnitsColumnSet(): Set<string> {
+        const cols = db.prepare("PRAGMA table_info('units')").all();
+        return new Set((cols || []).map((c: any) => String(c.name)));
+    }
+
+    private static ensureStockDocumentSchema() {
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS stock_documents (
+                id TEXT PRIMARY KEY,
+                code TEXT UNIQUE NOT NULL,
+                type TEXT CHECK(type IN ('ENTRY', 'ISSUE', 'DISPATCH')) NOT NULL,
+                date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                warehouse_id TEXT,
+                status TEXT DEFAULT 'DRAFT',
+                notes TEXT,
+                created_by TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
+            );
+        `);
+
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS stock_document_lines (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                quantity REAL NOT NULL DEFAULT 0,
+                cost REAL DEFAULT 0,
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (document_id) REFERENCES stock_documents(id) ON DELETE CASCADE,
+                FOREIGN KEY (item_id) REFERENCES items(id)
+            );
+        `);
+
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_documents_code ON stock_documents(code)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_documents_date ON stock_documents(date)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_documents_warehouse ON stock_documents(warehouse_id)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_document_lines_document ON stock_document_lines(document_id)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_stock_document_lines_item ON stock_document_lines(item_id)`);
+    }
+
+    private static normalizeStockDocumentType(type: any): { requestedType: string; normalizedType: string } {
+        const requestedType = String(type || '').toUpperCase();
+        const normalizedType = requestedType === 'DISPATCH' ? 'ISSUE' : (requestedType || 'ENTRY');
+        return { requestedType, normalizedType };
+    }
+
+    private static postStockDocumentImpact(params: {
+        docId: string;
+        code: string;
+        requestedType: string;
+        normalizedType: string;
+        warehouse_id: string;
+        date?: string;
+        notes?: string;
+        items: any[];
+        created_by?: string;
+    }) {
+        const {
+            docId,
+            code,
+            requestedType,
+            normalizedType,
+            warehouse_id,
+            date,
+            notes,
+            items,
+            created_by
+        } = params;
+
+        let totalValue = 0;
+        items.forEach((i: any) => (totalValue += Math.abs(i.quantity) * Number(i.cost || 0)));
+
+        const inventoryAccId = this.getInventoryAccount();
+        const adjustmentAccId = this.getAdjustmentAccount();
+
+        if (inventoryAccId && adjustmentAccId && totalValue > 0) {
+            const journalLines = [];
+            if (normalizedType === 'ENTRY') {
+                journalLines.push({ account_id: inventoryAccId, debit: totalValue, credit: 0, line_description: `Stock Entry ${code}` });
+                journalLines.push({ account_id: adjustmentAccId, debit: 0, credit: totalValue, line_description: `Stock Entry ${code}` });
+            } else {
+                journalLines.push({ account_id: adjustmentAccId, debit: totalValue, credit: 0, line_description: `Stock Issue ${code}` });
+                journalLines.push({ account_id: inventoryAccId, debit: 0, credit: totalValue, line_description: `Stock Issue ${code}` });
+            }
+
+            JournalService.createJournalEntry(
+                {
+                    voucher_type: normalizedType === 'ENTRY' ? 'Stock Entry' : 'Stock Issue',
+                    date: date || new Date().toISOString(),
+                    reference_no: code,
+                    description: notes || `${requestedType} Transaction`,
+                    status: 'POSTED',
+                    branch_id: null,
+                    currency_id: this.getBaseCurrencyId(),
+                    exchange_rate: 1
+                },
+                journalLines
+            );
+        }
+
+        const stmt = db.prepare(`
+            INSERT INTO inventory_transactions (
+                id, date, transaction_date, type, ref_no, ref_document_type, ref_document_id,
+                warehouse_id, item_id, quantity, cost_price, unit_cost, total_cost, description, notes, created_by
+            ) VALUES (
+                @id, @date, @transaction_date, @type, @ref_no, 'STOCK_DOCUMENT', @ref_doc_id,
+                @warehouse_id, @item_id, @quantity, @cost_price, @unit_cost, @total_cost, @description, @notes, @created_by
+            )
+        `);
+
+        const checkBalance = db.prepare('SELECT * FROM stock_balances WHERE item_id = ? AND warehouse_id = ?');
+        const insertBalance = db.prepare(
+            'INSERT INTO stock_balances (item_id, warehouse_id, quantity, avg_cost, last_updated) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)'
+        );
+        const updateBalance = db.prepare(
+            'UPDATE stock_balances SET quantity = ?, avg_cost = ?, last_updated = CURRENT_TIMESTAMP WHERE item_id = ? AND warehouse_id = ?'
+        );
+
+        for (const item of items) {
+            const qty = normalizedType === 'ENTRY' ? Math.abs(item.quantity) : -Math.abs(item.quantity);
+            const cost = Number(item.cost || 0);
+            const txDate = date || new Date().toISOString();
+            const txNote = notes || `${requestedType} ${code}`;
+
+            stmt.run({
+                id: uuidv4(),
+                date: txDate,
+                transaction_date: txDate,
+                type: normalizedType,
+                ref_no: docId,
+                ref_doc_id: docId,
+                warehouse_id,
+                item_id: item.item_id,
+                quantity: qty,
+                cost_price: cost,
+                unit_cost: cost,
+                total_cost: cost * Math.abs(qty),
+                description: txNote,
+                notes: txNote,
+                created_by: created_by || 'Admin'
+            });
+
+            const current = checkBalance.get(item.item_id, warehouse_id);
+            if (current) {
+                const newQty = Number(current.quantity || 0) + qty;
+                let newCost = Number(current.avg_cost || 0);
+
+                if (normalizedType === 'ENTRY' && qty > 0) {
+                    const totalInventoryValue = Number(current.quantity || 0) * Number(current.avg_cost || 0) + qty * cost;
+                    newCost = newQty !== 0 ? totalInventoryValue / newQty : newCost;
+                }
+
+                updateBalance.run(newQty, newCost, item.item_id, warehouse_id);
+            } else {
+                insertBalance.run(item.item_id, warehouse_id, qty, cost);
+            }
+        }
+    }
 
     // --- Units ---
     static getUnits(): Unit[] {
-        const units = db.prepare('SELECT * FROM units ORDER BY name_ar').all();
-        // Fallback for name_ar if not present in basic units table (migration safe)
-        return units.map((u: any) => ({
+        const columns = this.getUnitsColumnSet();
+        const orderBy = columns.has('name_ar') ? 'name_ar' : 'name';
+        let units = db.prepare(`SELECT * FROM units ORDER BY ${orderBy}`).all();
+
+        if (!units || units.length === 0) {
+            this.seedDefaultUnits();
+            units = db.prepare(`SELECT * FROM units ORDER BY ${orderBy}`).all();
+        }
+
+        const normalized = units.map((u: any) => ({
             ...u,
             name_ar: u.name_ar || u.name,
-            is_base: !!u.is_base
+            code: u.code || u.symbol || '',
+            is_base: !!u.is_base,
+            is_active: u.is_active === undefined || u.is_active === null ? 1 : u.is_active
         }));
+
+        // Keep current behavior for active user units, but hide old auto-seeded legacy units
+        // when they are not used by any item as base/additional unit.
+        const usedUnitIds = new Set<string>();
+        try {
+            const usedBase = db.prepare('SELECT DISTINCT base_unit_id as unit_id FROM items WHERE base_unit_id IS NOT NULL AND base_unit_id <> ""').all() as Array<{ unit_id: string }>;
+            for (const row of usedBase) {
+                if (row?.unit_id) usedUnitIds.add(String(row.unit_id));
+            }
+        } catch { /* no-op */ }
+
+        try {
+            const usedAdditional = db.prepare('SELECT DISTINCT unit_id FROM item_units WHERE unit_id IS NOT NULL AND unit_id <> ""').all() as Array<{ unit_id: string }>;
+            for (const row of usedAdditional) {
+                if (row?.unit_id) usedUnitIds.add(String(row.unit_id));
+            }
+        } catch { /* no-op */ }
+
+        return normalized.filter((u: any) => {
+            if (usedUnitIds.has(String(u.id || ''))) return true;
+            return !LEGACY_DEFAULT_UNIT_AR_NAMES.has(String(u.name_ar || '').trim());
+        });
+    }
+
+    static seedDefaultUnits() {
+        const columns = this.getUnitsColumnSet();
+        const hasNameAr = columns.has('name_ar');
+        const hasName = columns.has('name');
+        const hasNameEn = columns.has('name_en');
+        const hasCode = columns.has('code');
+        const hasSymbol = columns.has('symbol');
+        const hasIsActive = columns.has('is_active');
+        const hasIsBase = columns.has('is_base');
+
+        if (!hasNameAr && !hasName) {
+            throw new Error("units table does not support name/name_ar columns");
+        }
+
+        const insertColumns: string[] = ['id'];
+        if (hasNameAr) insertColumns.push('name_ar');
+        if (hasName) insertColumns.push('name');
+        if (hasNameEn) insertColumns.push('name_en');
+        if (hasCode) insertColumns.push('code');
+        if (hasSymbol) insertColumns.push('symbol');
+        if (hasIsActive) insertColumns.push('is_active');
+        if (hasIsBase) insertColumns.push('is_base');
+
+        const insertStmt = db.prepare(`
+            INSERT INTO units (${insertColumns.join(', ')})
+            VALUES (${insertColumns.map(c => '@' + c).join(', ')})
+        `);
+
+        const existsByCodeStmt = hasCode
+            ? db.prepare('SELECT id FROM units WHERE UPPER(code) = UPPER(?) LIMIT 1')
+            : null;
+        const existsByNameArStmt = hasNameAr
+            ? db.prepare('SELECT id FROM units WHERE LOWER(name_ar) = LOWER(?) LIMIT 1')
+            : null;
+        const existsByNameStmt = hasName
+            ? db.prepare('SELECT id FROM units WHERE LOWER(name) = LOWER(?) LIMIT 1')
+            : null;
+
+        let inserted = 0;
+        let skipped = 0;
+
+        const runSeed = db.transaction(() => {
+            for (const unit of DEFAULT_UNITS) {
+                const alreadyExists =
+                    (existsByCodeStmt && existsByCodeStmt.get(unit.code)) ||
+                    (existsByNameArStmt && existsByNameArStmt.get(unit.name_ar)) ||
+                    (existsByNameStmt && existsByNameStmt.get(unit.name_ar));
+
+                if (alreadyExists) {
+                    skipped++;
+                    continue;
+                }
+
+                const row: any = { id: uuidv4() };
+
+                if (hasNameAr) row.name_ar = unit.name_ar;
+                if (hasName) row.name = unit.name_ar;
+                if (hasNameEn) row.name_en = unit.name_en;
+                if (hasCode) row.code = unit.code;
+                if (hasSymbol) row.symbol = unit.symbol;
+                if (hasIsActive) row.is_active = 1;
+                if (hasIsBase) row.is_base = unit.code === 'PCS' ? 1 : 0;
+
+                insertStmt.run(row);
+                inserted++;
+            }
+        });
+
+        runSeed();
+        return { inserted, skipped, total: DEFAULT_UNITS.length };
     }
 
     static createUnit(unit: Partial<Unit>): Unit {
@@ -184,20 +513,50 @@ export class InventoryService {
 
     // --- Items (Complex 7-Tabs) ---
     static getItems(): Item[] {
-        // Fetch extended info
-        const items = db.prepare(`
-            SELECT i.*, u.name_ar as base_unit_name, b.name_ar as brand_name
-            FROM items i
-            LEFT JOIN units u ON i.base_unit_id = u.id
-            LEFT JOIN brands b ON i.brand_id = b.id
-            ORDER BY i.code
-        `).all();
+        let items: any[] = [];
+
+        try {
+            items = db.prepare(`
+                SELECT i.*, 
+                       u.name_ar as base_unit_name, 
+                       b.name_ar as brand_name,
+                       c.name_ar as category_name,
+                       COALESCE(ai.name_ar, ai.name, gai.name_ar, gai.name_en) as inventory_account_name,
+                       COALESCE(asl.name_ar, asl.name, gas.name_ar, gas.name_en) as sales_account_name,
+                       COALESCE(acg.name_ar, acg.name, gac.name_ar, gac.name_en) as cogs_account_name
+                FROM items i
+                LEFT JOIN units u ON i.base_unit_id = u.id
+                LEFT JOIN brands b ON i.brand_id = b.id
+                LEFT JOIN item_categories c ON i.category_id = c.id
+                LEFT JOIN accounts ai ON i.inventory_account_id = ai.id
+                LEFT JOIN accounts asl ON i.sales_account_id = asl.id
+                LEFT JOIN accounts acg ON i.cogs_account_id = acg.id
+                LEFT JOIN gl_chart_of_accounts gai ON i.inventory_account_id = gai.id
+                LEFT JOIN gl_chart_of_accounts gas ON i.sales_account_id = gas.id
+                LEFT JOIN gl_chart_of_accounts gac ON i.cogs_account_id = gac.id
+                ORDER BY i.code
+            `).all();
+        } catch (error) {
+            // Older/partially migrated databases may miss brands/units columns or tables.
+            // Keep item lookup working by falling back to the core items projection.
+            console.warn('[InventoryService] getItems extended query failed; using fallback query.', error);
+            items = db.prepare(`
+                SELECT *
+                FROM items
+                ORDER BY code
+            `).all();
+        }
+
+        const toNumber = (value: any): number => {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : 0;
+        };
 
         return items.map((i: any) => ({
             ...i,
-            cost_price: Number(i.cost_price),
-            sale_price: Number(i.sale_price),
-            min_price: Number(i.min_price),
+            cost_price: toNumber(i.cost_price),
+            sale_price: toNumber(i.sale_price),
+            min_price: toNumber(i.min_price),
             is_active: !!i.is_active,
             tax_included: !!i.tax_included,
             has_expiry: !!i.has_expiry,
@@ -288,74 +647,87 @@ export class InventoryService {
 
 
 
+    private static getTableColumnSet(tableName: string): Set<string> {
+        const cols = db.prepare(`PRAGMA table_info('${tableName}')`).all();
+        return new Set((cols || []).map((c: any) => String(c.name)));
+    }
+
+    private static resolveBaseUnitId(baseUnitId?: string | null): string | null {
+        if (baseUnitId) return baseUnitId;
+
+        const existingUnit = db.prepare('SELECT id FROM units ORDER BY name_ar LIMIT 1').get() as { id?: string } | undefined;
+        if (existingUnit?.id) return existingUnit.id;
+
+        try {
+            InventoryService.seedDefaultUnits();
+        } catch (error) {
+            console.warn('[InventoryService] seedDefaultUnits failed while resolving base unit.', error);
+        }
+
+        const seededUnit = db.prepare('SELECT id FROM units ORDER BY name_ar LIMIT 1').get() as { id?: string } | undefined;
+        return seededUnit?.id || null;
+    }
+
     static createItem(item: any): any {
+        const resolvedBaseUnitId = InventoryService.resolveBaseUnitId(item.base_unit_id);
+
+        if (!resolvedBaseUnitId) {
+            throw new Error('تعذر تحديد الوحدة الأساسية. الرجاء إضافة وحدة قياس أولاً.');
+        }
+
         const newItem = {
             id: uuidv4(),
-            code: item.code,
-            name_ar: item.name_ar,
+            code: String(item.code || '').trim(),
+            name_ar: String(item.name_ar || '').trim(),
             name_en: item.name_en || '',
             trade_name: item.trade_name || '',
             name_he: item.name_he || '',
-
             category_id: item.category_id || null,
             brand_id: item.brand_id || null,
             type: item.type || 'Goods',
-
-            base_unit_id: item.base_unit_id || null,
-
+            base_unit_id: resolvedBaseUnitId,
             cost_price: String(item.cost_price || 0),
             standard_cost: String(item.standard_cost || 0),
             costing_method: item.costing_method || 'WEIGHTED_AVG',
             sale_price: String(item.sale_price || 0),
             min_price: String(item.min_price || 0),
             floor_price: String(item.floor_price || 0),
-
-            min_stock: item.min_stock || 0,
+            min_stock_level: item.min_stock ?? item.min_stock_level ?? 0,
             max_stock: item.max_stock || 0,
             reorder_point: item.reorder_point || 0,
-
             is_active: item.is_active ? 1 : 0,
             tax_included: item.tax_included ? 1 : 0,
             tax_type: item.tax_type || 'VAT_16',
-
             description: item.description || '',
             image_url: item.image_url || '',
-
-            // Flags
             has_expiry: item.has_expiry ? 1 : 0,
             has_serial: item.has_serial ? 1 : 0,
             shelf_life_days: item.shelf_life_days || 0,
-
             production_line: item.production_line || '',
             default_supplier_id: item.default_supplier_id || null,
             warranty_info: item.warranty_info || '',
             grade: item.grade || ''
         };
 
-        const createTx = db.transaction(() => {
-            db.prepare(`
-                INSERT INTO items (
-                    id, code, name_ar, name_en, trade_name, name_he,
-                    category_id, brand_id, type, base_unit_id,
-                    cost_price, standard_cost, costing_method, sale_price, min_price, floor_price,
-                    min_stock_level, max_stock, reorder_point,
-                    is_active, tax_included, tax_type,
-                    description, image_url,
-                    has_expiry, has_serial, shelf_life_days,
-                    production_line, default_supplier_id, warranty_info, grade
-                ) VALUES (
-                    @id, @code, @name_ar, @name_en, @trade_name, @name_he,
-                    @category_id, @brand_id, @type, @base_unit_id,
-                    @cost_price, @standard_cost, @costing_method, @sale_price, @min_price, @floor_price,
-                    @min_stock, @max_stock, @reorder_point,
-                    @is_active, @tax_included, @tax_type,
-                    @description, @image_url,
-                    @has_expiry, @has_serial, @shelf_life_days,
-                    @production_line, @default_supplier_id, @warranty_info, @grade
-                )
-            `).run(newItem);
+        if (!newItem.code) throw new Error('رمز الصنف مطلوب.');
+        if (!newItem.name_ar) throw new Error('اسم الصنف بالعربية مطلوب.');
 
-            // Additional Units
+        const createTx = db.transaction(() => {
+            const itemColumns = InventoryService.getTableColumnSet('items');
+            const insertableEntries = Object.entries(newItem).filter(([key]) => itemColumns.has(key));
+            if (insertableEntries.length === 0) {
+                throw new Error('تعذر الحفظ: أعمدة جدول الأصناف غير متوافقة.');
+            }
+
+            const insertKeys = insertableEntries.map(([key]) => key);
+            const placeholders = insertKeys.map((key) => `@${key}`).join(', ');
+            const payload = Object.fromEntries(insertableEntries);
+
+            db.prepare(`
+                INSERT INTO items (${insertKeys.join(', ')})
+                VALUES (${placeholders})
+            `).run(payload);
+
             if (item.additional_units && item.additional_units.length > 0) {
                 const insertUnit = db.prepare(`
                     INSERT INTO item_units (id, item_id, unit_id, factor, barcode, sale_price)
@@ -373,11 +745,10 @@ export class InventoryService {
                 }
             }
 
-            // Prices per List
             if (item.prices && item.prices.length > 0) {
                 const insertPrice = db.prepare(`
                    INSERT INTO item_prices (id, price_list_id, item_id, unit_id, price)
-                   VALUES (@id, @price_list_id, @item_id, @unit_id, @price) 
+                   VALUES (@id, @price_list_id, @item_id, @unit_id, @price)
                 `);
                 for (const p of item.prices) {
                     insertPrice.run({
@@ -389,7 +760,7 @@ export class InventoryService {
                     });
                 }
             }
-            // Kit Items (Components)
+
             if (item.kit_items && item.kit_items.length > 0) {
                 const insertKit = db.prepare(`
                     INSERT INTO item_kits (parent_item_id, child_item_id, quantity)
@@ -404,18 +775,24 @@ export class InventoryService {
                 }
             }
 
-            // Alternatives
             if (item.alternatives && item.alternatives.length > 0) {
                 InventoryService.saveItemAlternatives(newItem.id, item.alternatives);
             }
 
-            // Attributes
             if (item.attributes) {
                 InventoryService.saveItemAttributes(newItem.id, item.attributes);
             }
         });
 
-        createTx();
+        try {
+            createTx();
+        } catch (error: any) {
+            if (String(error?.message || '').includes('UNIQUE constraint failed: items.code')) {
+                throw new Error(`رمز الصنف مستخدم مسبقًا: ${newItem.code}`);
+            }
+            throw error;
+        }
+
         return { ...newItem, id: newItem.id };
     }
 
@@ -459,20 +836,13 @@ export class InventoryService {
 
     static updateItem(item: any) {
         const updateTx = db.transaction(() => {
-            // 1. Update Main Table
-            db.prepare(`
-                UPDATE items SET 
-                    code = @code, name_ar = @name_ar, name_en = @name_en, trade_name = @trade_name, name_he = @name_he,
-                    category_id = @category_id, brand_id = @brand_id, type = @type, base_unit_id = @base_unit_id,
-                    cost_price = @cost_price, standard_cost = @standard_cost, costing_method = @costing_method, sale_price = @sale_price, min_price = @min_price, floor_price = @floor_price,
-                    min_stock_level = @min_stock, max_stock = @max_stock, reorder_point = @reorder_point,
-                    is_active = @is_active, tax_included = @tax_included, tax_type = @tax_type,
-                    description = @description, image_url = @image_url,
-                    has_expiry = @has_expiry, has_serial = @has_serial, shelf_life_days = @shelf_life_days,
-                    production_line = @production_line, default_supplier_id = @default_supplier_id, warranty_info = @warranty_info, grade = @grade
-                WHERE id = @id
-            `).run({
-                id: item.id,
+            const id = item.id;
+            if (!id) throw new Error('معرف الصنف مطلوب للتعديل.');
+
+            const resolvedBaseUnitId = InventoryService.resolveBaseUnitId(item.base_unit_id);
+
+            const updatePayload: Record<string, any> = {
+                id,
                 code: item.code,
                 name_ar: item.name_ar,
                 name_en: item.name_en || '',
@@ -481,14 +851,14 @@ export class InventoryService {
                 category_id: item.category_id || null,
                 brand_id: item.brand_id || null,
                 type: item.type || 'Goods',
-                base_unit_id: item.base_unit_id || null,
+                base_unit_id: resolvedBaseUnitId,
                 cost_price: String(item.cost_price || 0),
                 standard_cost: String(item.standard_cost || 0),
                 costing_method: item.costing_method || 'WEIGHTED_AVG',
                 sale_price: String(item.sale_price || 0),
                 min_price: String(item.min_price || 0),
                 floor_price: String(item.floor_price || 0),
-                min_stock: item.min_stock || 0,
+                min_stock_level: item.min_stock ?? item.min_stock_level ?? 0,
                 max_stock: item.max_stock || 0,
                 reorder_point: item.reorder_point || 0,
                 is_active: item.is_active ? 1 : 0,
@@ -503,16 +873,24 @@ export class InventoryService {
                 default_supplier_id: item.default_supplier_id || null,
                 warranty_info: item.warranty_info || '',
                 grade: item.grade || ''
-            });
+            };
 
-            // 2. Clear Child Tables
-            const id = item.id;
+            const itemColumns = InventoryService.getTableColumnSet('items');
+            const setEntries = Object.entries(updatePayload).filter(([key]) => key !== 'id' && itemColumns.has(key));
+            if (setEntries.length === 0) {
+                throw new Error('تعذر التعديل: أعمدة جدول الأصناف غير متوافقة.');
+            }
+
+            const setSql = setEntries.map(([key]) => `${key} = @${key}`).join(', ');
+            const finalPayload = Object.fromEntries([['id', id], ...setEntries]);
+
+            db.prepare(`UPDATE items SET ${setSql} WHERE id = @id`).run(finalPayload);
+
             db.prepare('DELETE FROM item_units WHERE item_id = ?').run(id);
             db.prepare('DELETE FROM item_prices WHERE item_id = ?').run(id);
             db.prepare('DELETE FROM item_kits WHERE parent_item_id = ?').run(id);
             db.prepare('DELETE FROM item_alternatives WHERE item_id = ?').run(id);
 
-            // 3. Re-Insert Units
             if (item.additional_units && item.additional_units.length > 0) {
                 const insertUnit = db.prepare(`
                     INSERT INTO item_units (id, item_id, unit_id, factor, barcode, sale_price)
@@ -530,11 +908,10 @@ export class InventoryService {
                 }
             }
 
-            // 4. Re-Insert Prices
             if (item.prices && item.prices.length > 0) {
                 const insertPrice = db.prepare(`
                    INSERT INTO item_prices (id, price_list_id, item_id, unit_id, price)
-                   VALUES (@id, @price_list_id, @item_id, @unit_id, @price) 
+                   VALUES (@id, @price_list_id, @item_id, @unit_id, @price)
                 `);
                 for (const p of item.prices) {
                     insertPrice.run({
@@ -547,7 +924,6 @@ export class InventoryService {
                 }
             }
 
-            // 5. Re-Insert Kits
             if (item.kit_items && item.kit_items.length > 0) {
                 const insertKit = db.prepare(`
                     INSERT INTO item_kits (parent_item_id, child_item_id, quantity)
@@ -562,18 +938,24 @@ export class InventoryService {
                 }
             }
 
-            // 6. Re-Insert Attributes
             if (item.attributes) {
                 InventoryService.saveItemAttributes(id, item.attributes);
             }
 
-            // 7. Re-Insert Alternatives
             if (item.alternatives && item.alternatives.length > 0) {
                 InventoryService.saveItemAlternatives(id, item.alternatives);
             }
         });
 
-        updateTx();
+        try {
+            updateTx();
+        } catch (error: any) {
+            if (String(error?.message || '').includes('UNIQUE constraint failed: items.code')) {
+                throw new Error(`رمز الصنف مستخدم مسبقًا: ${item.code || ''}`);
+            }
+            throw error;
+        }
+
         return { success: true };
     }
 
@@ -679,8 +1061,10 @@ export class InventoryService {
 
     // --- Stock Documents (Entry/Issue) ---
     static createStockDocument(doc: any) {
+        this.ensureStockDocumentSchema();
         // doc: { type, warehouse_id, date, notes, items: [], status? }
         const { type, warehouse_id, date, notes, items, created_by } = doc;
+        const { requestedType, normalizedType } = this.normalizeStockDocumentType(type);
         const status = doc.status || 'POSTED'; // Default to POSTED if not specified
 
         // Validate Period
@@ -689,7 +1073,9 @@ export class InventoryService {
         // Generate Code
         let code = doc.code;
         if (!code) {
-            const codePrefix = type === 'ENTRY' ? 'SE' : 'SI';
+            const codePrefix = normalizedType === 'ENTRY'
+                ? 'SE'
+                : (requestedType === 'DISPATCH' ? 'DSP' : 'SI');
             const timestamp = Date.now().toString().slice(-6);
             code = `${codePrefix}-${timestamp}`;
         }
@@ -708,7 +1094,7 @@ export class InventoryService {
             `).run({
                 id: docId,
                 code,
-                type,
+                type: normalizedType,
                 date: date || new Date().toISOString(),
                 warehouse_id,
                 status,
@@ -734,81 +1120,17 @@ export class InventoryService {
 
             // 3. Post (Impact) ONLY if POSTED
             if (status === 'POSTED') {
-                // A. Journal Entry
-                const inventoryAccId = this.getInventoryAccount();
-                const adjustmentAccId = this.getAdjustmentAccount();
-
-                if (inventoryAccId && adjustmentAccId && totalValue > 0) {
-                    const journalLines = [];
-                    if (type === 'ENTRY') {
-                        journalLines.push({ account_id: inventoryAccId, debit: totalValue, credit: 0, line_description: `Stock Entry ${code}` });
-                        journalLines.push({ account_id: adjustmentAccId, debit: 0, credit: totalValue, line_description: `Stock Entry ${code}` });
-                    } else {
-                        journalLines.push({ account_id: adjustmentAccId, debit: totalValue, credit: 0, line_description: `Stock Issue ${code}` });
-                        journalLines.push({ account_id: inventoryAccId, debit: 0, credit: totalValue, line_description: `Stock Issue ${code}` });
-                    }
-
-                    JournalService.createJournalEntry({
-                        voucher_type: type === 'ENTRY' ? 'Stock Entry' : 'Stock Issue',
-                        date: date || new Date().toISOString(),
-                        reference_no: code,
-                        description: notes || `${type} Transaction`,
-                        status: 'POSTED',
-                        branch_id: null,
-                        currency_id: this.getBaseCurrencyId(),
-                        exchange_rate: 1
-                    }, journalLines);
-                }
-
-                // B. Stock Transactions & Balance Update
-                const stmt = db.prepare(`
-                    INSERT INTO inventory_transactions (
-                        id, transaction_date, type, ref_document_type, ref_document_id,
-                        warehouse_id, item_id, quantity, unit_cost, total_cost, description, created_by
-                    ) VALUES (
-                        @id, @date, @type, 'STOCK_DOCUMENT', @ref_doc_id,
-                        @warehouse_id, @item_id, @quantity, @unit_cost, @total_cost, @description, @created_by
-                    )
-                `);
-
-                const checkBalance = db.prepare('SELECT * FROM stock_balances WHERE item_id = ? AND warehouse_id = ?');
-                const insertBalance = db.prepare('INSERT INTO stock_balances (item_id, warehouse_id, quantity, avg_cost, last_updated) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)');
-                const updateBalance = db.prepare('UPDATE stock_balances SET quantity = ?, avg_cost = ?, last_updated = CURRENT_TIMESTAMP WHERE item_id = ? AND warehouse_id = ?');
-
-                for (const item of items) {
-                    const qty = type === 'ENTRY' ? Math.abs(item.quantity) : -Math.abs(item.quantity);
-                    const cost = Number(item.cost || 0);
-
-                    stmt.run({
-                        id: uuidv4(),
-                        date: date || new Date().toISOString(),
-                        type: type,
-                        ref_doc_id: docId,
-                        warehouse_id: warehouse_id,
-                        item_id: item.item_id,
-                        quantity: qty,
-                        unit_cost: cost,
-                        total_cost: cost * Math.abs(qty),
-                        description: notes || `${type} ${code}`,
-                        created_by: created_by || 'Admin'
-                    });
-
-                    // Update Balance
-                    const current = checkBalance.get(item.item_id, warehouse_id);
-                    if (current) {
-                        let newQty = current.quantity + qty;
-                        let newCost = Number(current.avg_cost);
-
-                        if (type === 'ENTRY' && qty > 0) {
-                            const totalValue = (current.quantity * Number(current.avg_cost)) + (qty * cost);
-                            // Avoid div by zero
-                            newCost = newQty !== 0 ? totalValue / newQty : newCost;
-                        }
-                        updateBalance.run(newQty, newCost, item.item_id, warehouse_id);
-                    } else {
-                        insertBalance.run(item.item_id, warehouse_id, qty, cost);
-                    }
-                }
+                this.postStockDocumentImpact({
+                    docId,
+                    code,
+                    requestedType,
+                    normalizedType,
+                    warehouse_id,
+                    date,
+                    notes,
+                    items,
+                    created_by
+                });
             }
         });
 
@@ -816,7 +1138,90 @@ export class InventoryService {
         return { success: true, id: docId, code };
     }
 
+    static updateStockDocument(doc: any) {
+        this.ensureStockDocumentSchema();
+        const { id, type, warehouse_id, date, notes, items, created_by } = doc || {};
+        if (!id) throw new Error('Missing stock document id');
+
+        const existing = db.prepare('SELECT * FROM stock_documents WHERE id = ?').get(id) as any;
+        if (!existing) throw new Error('Stock document not found');
+
+        const existingStatus = String(existing.status || '').toUpperCase();
+        if (existingStatus === 'POSTED') {
+            throw new Error('لا يمكن تعديل سند إرسال مرحّل. استخدم التحويل إلى فاتورة أو إنشاء سند استلام لعكس الإرسالية.');
+        }
+
+        const { requestedType, normalizedType } = this.normalizeStockDocumentType(type || existing.type);
+        const status = String(doc.status || existing.status || 'DRAFT').toUpperCase();
+        const effectiveDate = date || existing.date || new Date().toISOString();
+        const effectiveWarehouse = warehouse_id || existing.warehouse_id;
+        const code = String(existing.code || existing.ref_no || '').trim();
+        const safeItems = Array.isArray(items) ? items : [];
+
+        if (!effectiveWarehouse) throw new Error('Missing warehouse');
+        if (safeItems.length === 0) throw new Error('Missing document lines');
+        if (effectiveDate) this.validateTransactionDate(effectiveDate);
+
+        const runTx = db.transaction(() => {
+            db.prepare(`
+                UPDATE stock_documents
+                SET type = @type,
+                    date = @date,
+                    warehouse_id = @warehouse_id,
+                    status = @status,
+                    notes = @notes,
+                    created_by = COALESCE(@created_by, created_by),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = @id
+            `).run({
+                id,
+                type: normalizedType,
+                date: effectiveDate,
+                warehouse_id: effectiveWarehouse,
+                status,
+                notes: notes ?? existing.notes ?? '',
+                created_by: created_by || existing.created_by || 'Admin'
+            });
+
+            db.prepare('DELETE FROM stock_document_lines WHERE document_id = ?').run(id);
+            const insertLine = db.prepare(`
+                INSERT INTO stock_document_lines (id, document_id, item_id, quantity, cost, notes)
+                VALUES (@id, @document_id, @item_id, @quantity, @cost, @notes)
+            `);
+            for (const item of safeItems) {
+                insertLine.run({
+                    id: uuidv4(),
+                    document_id: id,
+                    item_id: item.item_id,
+                    quantity: item.quantity,
+                    cost: item.cost || 0,
+                    notes: item.notes || ''
+                });
+            }
+
+            if (status === 'POSTED') {
+                this.postStockDocumentImpact({
+                    docId: id,
+                    code,
+                    requestedType,
+                    normalizedType,
+                    warehouse_id: effectiveWarehouse,
+                    date: effectiveDate,
+                    notes: notes ?? existing.notes ?? '',
+                    items: safeItems,
+                    created_by: created_by || existing.created_by || 'Admin'
+                });
+            } else {
+                db.prepare('DELETE FROM inventory_transactions WHERE ref_document_type = ? AND ref_document_id = ?').run('STOCK_DOCUMENT', id);
+            }
+        });
+
+        runTx();
+        return { success: true, id, code, status };
+    }
+
     static getGoodsReceipts() {
+        this.ensureStockDocumentSchema();
         return db.prepare(`
             SELECT sd.*, w.name_ar as warehouse_name
             FROM stock_documents sd
@@ -827,13 +1232,43 @@ export class InventoryService {
     }
 
     static getDispatches() {
+        this.ensureStockDocumentSchema();
         return db.prepare(`
             SELECT sd.*, w.name_ar as warehouse_name
             FROM stock_documents sd
             LEFT JOIN warehouses w ON sd.warehouse_id = w.id
             WHERE sd.type = 'DISPATCH'
+               OR (sd.type = 'ISSUE' AND sd.code LIKE 'DSP-%')
             ORDER BY sd.date DESC
         `).all();
+    }
+
+    static getStockDocument(id: string) {
+        this.ensureStockDocumentSchema();
+        const header = db.prepare(`
+            SELECT sd.*, w.name_ar as warehouse_name
+            FROM stock_documents sd
+            LEFT JOIN warehouses w ON sd.warehouse_id = w.id
+            WHERE sd.id = ?
+        `).get(id);
+
+        if (!header) return null;
+
+        const lines = db.prepare(`
+            SELECT
+                l.*,
+                i.code as item_code,
+                i.name_ar as item_name,
+                i.base_unit_id as unit_id,
+                u.name_ar as unit_name
+            FROM stock_document_lines l
+            LEFT JOIN items i ON l.item_id = i.id
+            LEFT JOIN units u ON i.base_unit_id = u.id
+            WHERE l.document_id = ?
+            ORDER BY l.rowid ASC
+        `).all(id);
+
+        return { header, lines };
     }
 
     // --- Helpers ---
@@ -862,6 +1297,7 @@ export class InventoryService {
     // Advanced Transaction: Supports Batches/Serials
     static addStockTransaction(trx: any) {
         const { date, type, ref_no, warehouse_id, item_id, quantity, cost, description, created_by, batch_id, serial_id } = trx;
+        const txDate = date || new Date().toISOString();
 
         // Validate Period
         if (date) this.validateTransactionDate(date);
@@ -870,25 +1306,29 @@ export class InventoryService {
             // 1. Log Transaction
             db.prepare(`
                 INSERT INTO inventory_transactions (
-                    id, transaction_date, type, ref_document_id, item_id, warehouse_id, 
-                    quantity, unit_cost, total_cost, description, created_by,
+                    id, date, transaction_date, type, ref_no, ref_document_id, item_id, warehouse_id, 
+                    quantity, cost_price, unit_cost, total_cost, description, notes, created_by,
                     batch_id, serial_id
                 ) VALUES (
-                    @id, @date, @type, @ref_no, @item_id, @warehouse_id, 
-                    @quantity, @cost, @total_cost, @description, @created_by,
+                    @id, @date, @transaction_date, @type, @ref_no, @ref_document_id, @item_id, @warehouse_id, 
+                    @quantity, @cost_price, @unit_cost, @total_cost, @description, @notes, @created_by,
                     @batch_id, @serial_id
                 )
             `).run({
                 id: uuidv4(),
-                date: date || new Date().toISOString(),
+                date: txDate,
+                transaction_date: txDate,
                 type,
                 ref_no,
+                ref_document_id: ref_no,
                 item_id,
                 warehouse_id,
                 quantity,
-                cost: String(cost),
+                cost_price: String(cost),
+                unit_cost: String(cost),
                 total_cost: String(cost * Math.abs(quantity)),
                 description,
+                notes: description || null,
                 created_by: created_by || 'System',
                 batch_id: batch_id || null,
                 serial_id: serial_id || null
@@ -909,14 +1349,14 @@ export class InventoryService {
 
                 db.prepare(`
                     UPDATE stock_balances 
-                    SET quantity = @qty, avg_cost = @cost 
+                    SET quantity = @qty, avg_cost = @cost, last_updated = CURRENT_TIMESTAMP
                     WHERE item_id = @itemId AND warehouse_id = @whId
                 `).run({ qty: newQty, cost: String(newCost), itemId: item_id, whId: warehouse_id });
 
             } else {
                 db.prepare(`
-                    INSERT INTO stock_balances (item_id, warehouse_id, quantity, avg_cost)
-                    VALUES (@itemId, @whId, @qty, @cost)
+                    INSERT INTO stock_balances (item_id, warehouse_id, quantity, avg_cost, last_updated)
+                    VALUES (@itemId, @whId, @qty, @cost, CURRENT_TIMESTAMP)
                 `).run({ itemId: item_id, whId: warehouse_id, qty: quantity, cost: String(cost) });
             }
 
@@ -937,45 +1377,191 @@ export class InventoryService {
         return { success: true };
     }
 
-    // --- Transfers (Direct & Transit) ---
+    // --- Transfers ---
+    private static getStockTransferColumnSet(): Set<string> {
+        const cols = db.prepare("PRAGMA table_info('stock_transfers')").all();
+        return new Set((cols || []).map((c: any) => String(c.name)));
+    }
+
+    private static ensureStockTransferSchema() {
+        const cols = this.getStockTransferColumnSet();
+        if (!cols.has('request_type')) {
+            try {
+                db.exec(`ALTER TABLE stock_transfers ADD COLUMN request_type TEXT DEFAULT 'TRANSFER'`);
+            } catch {
+                // Ignore when column already exists in concurrent migrations.
+            }
+        }
+    }
+
+    static getTransferRequests(filters?: any) {
+        this.ensureStockTransferSchema();
+
+        const transferCols = this.getStockTransferColumnSet();
+        const hasRequestType = transferCols.has('request_type');
+
+        const requestedStatus = String(filters?.status || 'ALL').trim().toUpperCase();
+        const requestedType = String(filters?.request_type || filters?.type || 'ALL').trim().toUpperCase();
+        const queryText = String(filters?.query || '').trim().toLowerCase();
+
+        const clauses: string[] = ['1=1'];
+        const params: any[] = [];
+
+        if (requestedStatus && requestedStatus !== 'ALL') {
+            clauses.push("UPPER(COALESCE(t.status, '')) = ?");
+            params.push(requestedStatus);
+        }
+
+        if (hasRequestType && requestedType && requestedType !== 'ALL') {
+            clauses.push("UPPER(COALESCE(t.request_type, 'TRANSFER')) = ?");
+            params.push(requestedType);
+        }
+
+        if (queryText) {
+            clauses.push(`
+                (
+                    LOWER(COALESCE(t.code, '')) LIKE ?
+                    OR LOWER(COALESCE(t.notes, '')) LIKE ?
+                    OR LOWER(COALESCE(fw.name_ar, fw.name, fw.code, '')) LIKE ?
+                    OR LOWER(COALESCE(tw.name_ar, tw.name, tw.code, '')) LIKE ?
+                )
+            `);
+            const likeQuery = `%${queryText}%`;
+            params.push(likeQuery, likeQuery, likeQuery, likeQuery);
+        }
+
+        const requestTypeSelect = hasRequestType
+            ? "COALESCE(t.request_type, 'TRANSFER')"
+            : "'TRANSFER'";
+
+        return db.prepare(`
+            SELECT
+                t.*,
+                ${requestTypeSelect} AS request_type,
+                COALESCE(fw.name_ar, fw.name, fw.code, t.from_warehouse_id) AS from_warehouse_name,
+                COALESCE(tw.name_ar, tw.name, tw.code, t.to_warehouse_id) AS to_warehouse_name,
+                COUNT(sti.id) AS lines_count,
+                COALESCE(SUM(sti.quantity), 0) AS total_quantity,
+                COALESCE(SUM(sti.received_quantity), 0) AS received_quantity,
+                COALESCE(SUM(CASE WHEN COALESCE(sti.quantity, 0) > COALESCE(sti.received_quantity, 0) THEN 1 ELSE 0 END), 0) AS pending_lines
+            FROM stock_transfers t
+            LEFT JOIN warehouses fw ON fw.id = t.from_warehouse_id
+            LEFT JOIN warehouses tw ON tw.id = t.to_warehouse_id
+            LEFT JOIN stock_transfer_items sti ON sti.transfer_id = t.id
+            WHERE ${clauses.join(' AND ')}
+            GROUP BY t.id
+            ORDER BY datetime(t.date) DESC, t.code DESC
+        `).all(...params);
+    }
+
+    static getTransferRequest(id: string) {
+        this.ensureStockTransferSchema();
+
+        const transferCols = this.getStockTransferColumnSet();
+        const hasRequestType = transferCols.has('request_type');
+        const requestTypeSelect = hasRequestType
+            ? "COALESCE(t.request_type, 'TRANSFER')"
+            : "'TRANSFER'";
+
+        const header = db.prepare(`
+            SELECT
+                t.*,
+                ${requestTypeSelect} AS request_type,
+                COALESCE(fw.name_ar, fw.name, fw.code, t.from_warehouse_id) AS from_warehouse_name,
+                COALESCE(tw.name_ar, tw.name, tw.code, t.to_warehouse_id) AS to_warehouse_name
+            FROM stock_transfers t
+            LEFT JOIN warehouses fw ON fw.id = t.from_warehouse_id
+            LEFT JOIN warehouses tw ON tw.id = t.to_warehouse_id
+            WHERE t.id = ?
+        `).get(id);
+
+        if (!header) return null;
+
+        const lines = db.prepare(`
+            SELECT
+                sti.*,
+                COALESCE(i.code, '') AS item_code,
+                COALESCE(i.name_ar, i.name, i.name_en, '') AS item_name,
+                COALESCE(u.name_ar, u.name, u.name_en, '') AS unit_name,
+                (COALESCE(sti.quantity, 0) - COALESCE(sti.received_quantity, 0)) AS pending_quantity
+            FROM stock_transfer_items sti
+            LEFT JOIN items i ON i.id = sti.item_id
+            LEFT JOIN units u ON u.id = sti.unit_id
+            WHERE sti.transfer_id = ?
+            ORDER BY sti.rowid
+        `).all(id);
+
+        return { header, lines };
+    }
+
     static createTransferRequest(transfer: any) {
-        // transfer: { type: 'DIRECT'|'TRANSIT', from_warehouse_id, to_warehouse_id, items: [...], date, notes }
+        this.ensureStockTransferSchema();
+
         const { type, from_warehouse_id, to_warehouse_id, items, date, notes, created_by } = transfer;
+        const requestedType = String(type || 'TRANSIT').toUpperCase();
+        const isDirect = requestedType === 'DIRECT';
+        const isInternalOrder = requestedType === 'INTERNAL_ORDER';
         const transferId = uuidv4();
         const code = `TR-${Date.now().toString().slice(-6)}`;
 
-        const runTransfer = db.transaction(() => {
-            // 1. Create Stock Transfer Header
-            db.prepare(`
-                INSERT INTO stock_transfers (id, code, date, from_warehouse_id, to_warehouse_id, status, notes, created_by)
-                VALUES (@id, @code, @date, @from_warehouse_id, @to_warehouse_id, @status, @notes, @created_by)
-            `).run({
-                id: transferId,
-                code,
-                date: date || new Date().toISOString(),
-                from_warehouse_id,
-                to_warehouse_id,
-                status: type === 'DIRECT' ? 'COMPLETED' : 'IN_TRANSIT',
-                notes,
-                created_by: created_by || 'Admin'
-            });
+        const transferCols = this.getStockTransferColumnSet();
+        const hasRequestType = transferCols.has('request_type');
+        const requestType = isInternalOrder
+            ? 'INTERNAL_ORDER'
+            : (isDirect ? 'DIRECT' : 'TRANSIT');
 
-            // 2. Insert Items & Move Stock
-            items.forEach((item: any) => {
-                // Insert Transfer Item Line
+        const initialStatus = isDirect
+            ? 'COMPLETED'
+            : (isInternalOrder ? 'PENDING' : 'IN_TRANSIT');
+
+        const runTransfer = db.transaction(() => {
+            if (hasRequestType) {
                 db.prepare(`
-                    INSERT INTO stock_transfer_items (id, transfer_id, item_id, quantity, received_quantity)
-                    VALUES (@id, @transferId, @itemId, @qty, @receivedQty)
+                    INSERT INTO stock_transfers (id, code, date, from_warehouse_id, to_warehouse_id, status, notes, created_by, request_type)
+                    VALUES (@id, @code, @date, @from_warehouse_id, @to_warehouse_id, @status, @notes, @created_by, @request_type)
+                `).run({
+                    id: transferId,
+                    code,
+                    date: date || new Date().toISOString(),
+                    from_warehouse_id,
+                    to_warehouse_id,
+                    status: initialStatus,
+                    notes,
+                    created_by: created_by || 'Admin',
+                    request_type: requestType
+                });
+            } else {
+                db.prepare(`
+                    INSERT INTO stock_transfers (id, code, date, from_warehouse_id, to_warehouse_id, status, notes, created_by)
+                    VALUES (@id, @code, @date, @from_warehouse_id, @to_warehouse_id, @status, @notes, @created_by)
+                `).run({
+                    id: transferId,
+                    code,
+                    date: date || new Date().toISOString(),
+                    from_warehouse_id,
+                    to_warehouse_id,
+                    status: initialStatus,
+                    notes,
+                    created_by: created_by || 'Admin'
+                });
+            }
+
+            (items || []).forEach((item: any) => {
+                db.prepare(`
+                    INSERT INTO stock_transfer_items (id, transfer_id, item_id, unit_id, quantity, received_quantity)
+                    VALUES (@id, @transferId, @itemId, @unitId, @qty, @receivedQty)
                 `).run({
                     id: uuidv4(),
                     transferId: transferId,
                     itemId: item.item_id,
+                    unitId: item.unit_id || null,
                     qty: item.quantity,
-                    receivedQty: type === 'DIRECT' ? item.quantity : 0
+                    receivedQty: isDirect ? item.quantity : 0
                 });
 
-                // OUT from Source (Average Cost from Source)
-                // Need to get current cost from source
+                // Internal orders are request-only and should not affect stock balances yet.
+                if (isInternalOrder) return;
+
                 const sourceStock = this.getStock(item.item_id, from_warehouse_id);
                 // @ts-ignore
                 const unitCost = Number(sourceStock.avg_cost || 0);
@@ -992,8 +1578,7 @@ export class InventoryService {
                     created_by: created_by || 'Admin'
                 });
 
-                // IF DIRECT: IN to Dest immediately
-                if (type === 'DIRECT') {
+                if (isDirect) {
                     this.addStockTransaction({
                         date: date || new Date().toISOString(),
                         type: 'TRANSFER_IN',
@@ -1001,7 +1586,7 @@ export class InventoryService {
                         warehouse_id: to_warehouse_id,
                         item_id: item.item_id,
                         quantity: item.quantity,
-                        cost: unitCost, // Transfers carry cost
+                        cost: unitCost,
                         description: `Transfer IN from ${from_warehouse_id} (${code})`,
                         created_by: created_by || 'Admin'
                     });
@@ -1010,7 +1595,7 @@ export class InventoryService {
         });
 
         runTransfer();
-        return { success: true, id: transferId, code };
+        return { success: true, id: transferId, code, status: initialStatus, request_type: requestType };
     }
 
     // Receive Transit Transfer
@@ -1022,24 +1607,16 @@ export class InventoryService {
             const transfer = db.prepare('SELECT * FROM stock_transfers WHERE id = ?').get(transfer_id);
             if (!transfer || transfer.status !== 'IN_TRANSIT') throw new Error("Transfer not found or not in transit");
 
-            let allReceived = true;
-
-            items.forEach((recItem: any) => {
-                // Get Original Transfer Line
+            (items || []).forEach((recItem: any) => {
                 const line = db.prepare('SELECT * FROM stock_transfer_items WHERE transfer_id = ? AND item_id = ?').get(transfer_id, recItem.item_id);
                 if (!line) return;
 
-                // Update Received Qty
                 db.prepare('UPDATE stock_transfer_items SET received_quantity = received_quantity + ? WHERE id = ?')
                     .run(recItem.received_quantity, line.id);
 
-                // Determine Cost (Using cost at time of transfer? Or fetch from transaction logic? 
-                // Ideally transfer logic should store unit_cost in transfer_items. For now, try to fetch from OUT transaction or just use current.)
-                // Simple hack: get cost from OUT transaction linked to this transfer
-                const outTx = db.prepare('SELECT unit_cost FROM inventory_transactions WHERE ref_document_id = ? AND item_id = ? AND type = "TRANSFER_OUT"').get(transfer_id, recItem.item_id);
+                const outTx = db.prepare("SELECT unit_cost FROM inventory_transactions WHERE ref_document_id = ? AND item_id = ? AND type = 'TRANSFER_OUT'").get(transfer_id, recItem.item_id);
                 const cost = outTx ? Number(outTx.unit_cost) : 0;
 
-                // IN to Dest
                 this.addStockTransaction({
                     date: received_date || new Date().toISOString(),
                     type: 'TRANSFER_IN',
@@ -1053,11 +1630,9 @@ export class InventoryService {
                 });
             });
 
-            // Check if fully received
             const remaining = db.prepare('SELECT count(*) as count FROM stock_transfer_items WHERE transfer_id = ? AND quantity > received_quantity').get(transfer_id);
-
             if (remaining.count === 0) {
-                db.prepare('UPDATE stock_transfers SET status = "COMPLETED" WHERE id = ?').run(transfer_id);
+                db.prepare("UPDATE stock_transfers SET status = 'COMPLETED' WHERE id = ?").run(transfer_id);
             }
         });
 

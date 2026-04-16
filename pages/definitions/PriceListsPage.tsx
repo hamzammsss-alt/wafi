@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Tag, Plus, Search, Edit, Trash2, X, Save, ArrowLeft, Package, DollarSign } from 'lucide-react';
+import { WorkspaceHeader } from '../../src/components/workspace/WorkspaceHeader';
+import { useCreateIntent } from '../../src/hooks/useCreateIntent';
 
 export const PriceListsPage: React.FC = () => {
     const [priceLists, setPriceLists] = useState<any[]>([]);
@@ -94,15 +96,42 @@ export const PriceListsPage: React.FC = () => {
         loadListItems(selectedListId!);
     };
 
+    const openCreate = () => {
+        setCurrentList({ name_ar: '', currency_id: 'ILS', is_active: 1 });
+        setIsModalOpen(true);
+    };
+
+    useCreateIntent(openCreate);
+
     const filteredLists = priceLists.filter(p => p.name_ar.includes(searchTerm));
 
     if (selectedListId) {
         // Items View
         const list = priceLists.find(p => p.id === selectedListId);
         return (
-            <div className="p-6 bg-gray-50 h-full" dir="rtl">
+            <div className="app-page h-full" dir="rtl">
                 <div className="max-w-6xl mx-auto">
-                    <div className="flex items-center gap-4 mb-6">
+                    <WorkspaceHeader
+                        icon={<Tag size={24} />}
+                        title={list?.name_ar || 'قائمة أسعار'}
+                        subtitle="إدارة أصناف القائمة السعرية"
+                        badges={[
+                            { label: `الأصناف ${listItems.length}`, tone: 'warning' },
+                            { label: `الوحدات ${units.length}`, tone: 'info' },
+                        ]}
+                        actions={
+                            <>
+                                <button onClick={() => setSelectedListId(null)} className="p-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100">
+                                    <ArrowLeft size={20} />
+                                </button>
+                                <button onClick={() => setShowItemModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-2">
+                                    <Plus size={18} /> إضافة صنف
+                                </button>
+                            </>
+                        }
+                        className="mb-6"
+                    />
+                    <div className="hidden items-center gap-4 mb-6">
                         <button onClick={() => setSelectedListId(null)} className="p-2 hover:bg-gray-200 rounded-lg">
                             <ArrowLeft size={24} />
                         </button>
@@ -117,9 +146,9 @@ export const PriceListsPage: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <table className="w-full text-right">
-                            <thead className="bg-gray-50 text-gray-600 font-medium border-b">
+                    <div className="card overflow-hidden">
+                        <table className="dense-table w-full text-right">
+                            <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-200">
                                 <tr>
                                     <th className="p-4">رقم الصنف</th>
                                     <th className="p-4">اسم الصنف</th>
@@ -129,7 +158,7 @@ export const PriceListsPage: React.FC = () => {
                                     <th className="p-4">إجراءات</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y">
+                            <tbody className="divide-y divide-slate-100">
                                 {listItems.map(item => (
                                     <tr key={item.id} className="hover:bg-gray-50">
                                         <td className="p-4">{item.item_code}</td>
@@ -212,9 +241,36 @@ export const PriceListsPage: React.FC = () => {
     }
 
     return (
-        <div className="h-full bg-gray-50 p-6" dir="rtl">
+        <div className="app-page h-full" dir="rtl">
             <div className="max-w-6xl mx-auto">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6 flex justify-between items-center">
+                <WorkspaceHeader
+                    icon={<Tag size={24} />}
+                    title="قوائم الأسعار"
+                    subtitle="إدارة القوائم السعرية للعملاء"
+                    badges={[
+                        { label: `الإجمالي ${priceLists.length}`, tone: 'warning' },
+                        { label: `المعروض ${filteredLists.length}`, tone: 'info' },
+                    ]}
+                    actions={
+                        <>
+                            <div className="relative group">
+                                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="بحث عن قائمة..."
+                                    className="input w-full md:w-64 pr-10 pl-4 py-2.5 rounded-xl"
+                                />
+                            </div>
+                            <button onClick={openCreate} className="btn btn-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-200 hover:brightness-105 transition">
+                                <Plus size={18} /> قائمة جديدة
+                            </button>
+                        </>
+                    }
+                    className="mb-6"
+                />
+                <div className="hidden card p-6 mb-6 justify-between items-center">
                     <div className="flex items-center gap-4">
                         <div className="bg-purple-100 p-3 rounded-xl">
                             <Tag className="text-purple-600" size={24} />
@@ -224,14 +280,14 @@ export const PriceListsPage: React.FC = () => {
                             <p className="text-sm text-gray-500">إدارة القوائم السعرية للعملاء</p>
                         </div>
                     </div>
-                    <button onClick={() => { setCurrentList({ name_ar: '', currency_id: 'ILS', is_active: 1 }); setIsModalOpen(true); }} className="bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition">
+                    <button onClick={() => { setCurrentList({ name_ar: '', currency_id: 'ILS', is_active: 1 }); setIsModalOpen(true); }} className="btn btn-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-200 hover:brightness-105 transition">
                         <Plus size={18} /> قائمة جديدة
                     </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredLists.map(list => (
-                        <div key={list.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition cursor-pointer" onClick={() => setSelectedListId(list.id)}>
+                        <div key={list.id} className="card p-6 hover:shadow-md transition cursor-pointer" onClick={() => setSelectedListId(list.id)}>
                             <div className="flex justify-between items-start mb-4">
                                 <h3 className="text-lg font-bold text-gray-800">{list.name_ar}</h3>
                                 <div className="flex gap-2">
@@ -300,3 +356,4 @@ export const PriceListsPage: React.FC = () => {
         </div>
     );
 };
+

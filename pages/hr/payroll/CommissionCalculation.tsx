@@ -102,7 +102,7 @@ const CommissionCalculation = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl text-right" dir="rtl">
+        <div className="app-page" dir="rtl">
             <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-green-100 rounded-lg text-green-600"><DollarSign size={24} /></div>
@@ -139,7 +139,7 @@ const CommissionCalculation = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="card overflow-hidden">
                 <table className="w-full text-sm text-right">
                     <thead className="bg-gray-50 text-gray-600 font-medium">
                         <tr>
@@ -193,3 +193,4 @@ const CommissionCalculation = () => {
 };
 
 export default CommissionCalculation;
+

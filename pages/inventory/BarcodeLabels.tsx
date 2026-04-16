@@ -10,7 +10,7 @@ export const BarcodeLabels = () => {
                 <Barcode className="text-purple-600" /> طباعة ملصقات الباركود
             </h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col gap-6">
+            <div className="card p-6 flex flex-col gap-6">
                 {/* Search & Selection */}
                 <div className="flex gap-4">
                     <div className="flex-1 relative">
@@ -24,7 +24,7 @@ export const BarcodeLabels = () => {
 
                 {/* Print Queue */}
                 <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-right">
+                    <table className="dense-table w-full text-right">
                         <thead className="bg-gray-50 font-bold text-gray-700 border-b">
                             <tr>
                                 <th className="p-3">رمز الصنف</th>
@@ -52,3 +52,4 @@ export const BarcodeLabels = () => {
         </div>
     );
 };
+

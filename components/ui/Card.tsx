@@ -6,19 +6,19 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const Card = ({ children, className = '', ...props }: CardProps) => (
-    <div className={`bg-white rounded-xl border border-gray-200 shadow-sm ${className}`} {...props}>
+    <div className={`rounded-2xl border border-slate-200 bg-white/90 shadow-sm ${className}`} {...props}>
         {children}
     </div>
 );
 
 export const CardHeader = ({ children, className = '', ...props }: CardProps) => (
-    <div className={`px-6 py-4 border-b border-gray-100 ${className}`} {...props}>
+    <div className={`border-b border-slate-100 px-6 py-4 ${className}`} {...props}>
         {children}
     </div>
 );
 
 export const CardTitle = ({ children, className = '', ...props }: CardProps) => (
-    <h3 className={`text-lg font-semibold text-gray-800 ${className}`} {...props}>
+    <h3 className={`text-lg font-extrabold text-slate-800 ${className}`} {...props}>
         {children}
     </h3>
 );

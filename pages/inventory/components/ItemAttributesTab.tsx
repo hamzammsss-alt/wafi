@@ -80,7 +80,7 @@ const ItemAttributesTab: React.FC<Props> = ({ data, onChange }) => {
     const handleCreateAttribute = async () => {
         if (!newAttrName.trim()) return;
         try {
-            const newAttr = await window.electronAPI.inventory.createAttribute({
+            const newAttr = await window.electronAPI.inventory.saveAttribute({
                 name_ar: newAttrName,
                 name_en: newAttrName
             });
@@ -96,7 +96,10 @@ const ItemAttributesTab: React.FC<Props> = ({ data, onChange }) => {
     const handleCreateValue = async () => {
         if (!newValueName.trim() || !creatingValueFor) return;
         try {
-            const newVal = await window.electronAPI.inventory.createAttributeValue(creatingValueFor, newValueName);
+            const newVal = await window.electronAPI.inventory.saveAttributeValue({
+                attribute_id: creatingValueFor,
+                value: newValueName,
+            });
             const existing = attributeValues[creatingValueFor] || [];
             setAttributeValues({ ...attributeValues, [creatingValueFor]: [...existing, newVal] });
 

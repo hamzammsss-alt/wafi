@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Wafi.API.Extensions;
+using Wafi.API.Security;
 using Wafi.Core.DTOs;
 using Wafi.Core.Entities;
+using Wafi.Core.Security;
 using Wafi.Infrastructure.Data;
 using System.Text.Json;
 
@@ -9,6 +13,7 @@ namespace Wafi.API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class SyncController : ControllerBase
     {
         private readonly ApplicationDbContext _context;
@@ -19,14 +24,42 @@ namespace Wafi.API.Controllers
         }
 
         [HttpPost("push")]
+        [HasPermission(AppPermissions.Sync.Push)]
         public async Task<IActionResult> PushChanges([FromBody] PushChangesRequest request)
         {
+            var tenantId = User.GetTenantId();
+            if (tenantId is null)
+            {
+                return Forbid();
+            }
+
+            if (request.DeviceId == Guid.Empty)
+            {
+                return BadRequest(new { error = "DeviceId is required" });
+            }
+
+            if (request.Changes == null || request.Changes.Count == 0)
+            {
+                return BadRequest(new { error = "At least one change is required" });
+            }
+
             // Transactional Save
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 foreach (var change in request.Changes)
                 {
+                    var normalizedOperation = NormalizeOperation(change.Operation);
+                    if (normalizedOperation == null)
+                    {
+                        return BadRequest(new { error = $"Unsupported sync operation: {change.Operation}" });
+                    }
+
+                    if (string.IsNullOrWhiteSpace(change.EntityType))
+                    {
+                        return BadRequest(new { error = "EntityType is required for each change" });
+                    }
+
                     // 1. Log the change in server's SyncLog so other clients can pull it
                     // In a real implementation, we would apply the change to the specific table (e.g. InvItem)
                     // and let a Trigger/Interceptor create the SyncLog. 
@@ -35,13 +68,15 @@ namespace Wafi.API.Controllers
                     var syncEntry = new SyncLog
                     {
                         Id = Guid.NewGuid(),
-                        TenantId = Guid.Empty, // Should get from Auth
+                        TenantId = tenantId.Value,
                         EntityId = change.Id,
-                        EntityType = change.EntityType,
-                        Operation = change.Operation,
-                        JsonData = change.Data.GetRawText(),
+                        EntityType = change.EntityType.Trim(),
+                        Operation = normalizedOperation,
+                        JsonData = change.Data.ValueKind == JsonValueKind.Undefined ? "{}" : change.Data.GetRawText(),
                         DeviceId = request.DeviceId,
-                        Timestamp = DateTime.UtcNow
+                        Timestamp = change.Timestamp == default
+                            ? DateTime.UtcNow
+                            : change.Timestamp.ToUniversalTime()
                     };
                     
                     _context.SyncLogs.Add(syncEntry);
@@ -53,7 +88,13 @@ namespace Wafi.API.Controllers
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                return Ok(new { success = true, processed = request.Changes.Count });
+                return Ok(new
+                {
+                    success = true,
+                    processed = request.Changes.Count,
+                    tenantId = tenantId.Value,
+                    pushedBy = User.GetUsername()
+                });
             }
             catch (Exception ex)
             {
@@ -63,11 +104,27 @@ namespace Wafi.API.Controllers
         }
 
         [HttpPost("pull")]
+        [HasPermission(AppPermissions.Sync.Pull)]
         public async Task<IActionResult> PullUpdates([FromBody] PullUpdatesRequest request)
         {
+            var tenantId = User.GetTenantId();
+            if (tenantId is null)
+            {
+                return Forbid();
+            }
+
+            if (request.TenantId != Guid.Empty && request.TenantId != tenantId.Value)
+            {
+                return Forbid();
+            }
+
+            var lastSyncUtc = request.LastSyncTimestamp == default
+                ? DateTime.MinValue
+                : request.LastSyncTimestamp.ToUniversalTime();
+
             // Get all changes that happened AFTER the client's last sync
             var changes = await _context.SyncLogs
-                .Where(x => x.Timestamp > request.LastSyncTimestamp)
+                .Where(x => x.TenantId == tenantId.Value && x.Timestamp > lastSyncUtc)
                 .OrderBy(x => x.Timestamp)
                 .ToListAsync();
 
@@ -85,6 +142,18 @@ namespace Wafi.API.Controllers
             };
 
             return Ok(response);
+        }
+
+        private static string? NormalizeOperation(string? operation)
+        {
+            var normalized = operation?.Trim().ToUpperInvariant();
+            return normalized switch
+            {
+                "INSERT" => "INSERT",
+                "UPDATE" => "UPDATE",
+                "DELETE" => "DELETE",
+                _ => null
+            };
         }
     }
 }

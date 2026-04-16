@@ -40,6 +40,7 @@ export interface Account {
   account_level?: number;
   is_transactional: number; // 0 or 1
   currency_id?: string;
+  currency_code?: string;
   requires_cost_center?: number;
   system_type?: 'BANK' | 'CASH' | 'CUSTOMER' | 'SUPPLIER' | 'EMPLOYEE' | 'NONE';
   children?: Account[];
@@ -95,9 +96,20 @@ export interface Unit {
   id: string; // UUID
   name_ar: string;
   name_en?: string;
+  name_he?: string;
   code?: string;
   is_active?: number;
+  is_used?: number;
+  unit_type?: string;
+  parent_unit_id?: string;
+  level_no?: number;
   symbol?: string; // e.g. kg, m, pcs
+  symbol_ar?: string;
+  symbol_en?: string;
+  symbol_he?: string;
+  multiplier?: number;
+  total_factor?: number;
+  updated_at?: string;
   is_base?: number;
 }
 
@@ -192,6 +204,7 @@ export interface Item {
   standard_cost?: number;
   costing_method?: 'WEIGHTED_AVG' | 'FIFO' | 'STANDARD';
   sale_price: number; // Base Price
+  wholesale_price?: number;
   min_price?: number;
   floor_price?: number;
   prices?: ItemPrice[]; // For Price Lists
@@ -227,6 +240,12 @@ export interface Item {
   current_stock?: number;
   base_unit_name?: string;
   brand_name?: string;
+  category_name?: string;
+  default_supplier_name?: string;
+  default_warehouse_name?: string;
+  inventory_account_name?: string;
+  sales_account_name?: string;
+  cogs_account_name?: string;
 
   // Relations
   alternatives?: ItemAlternative[];
@@ -254,12 +273,22 @@ export interface BusinessPartner {
   code: string;
   name_ar: string;
   name_en?: string;
+  name_he?: string;
   type: 'CUSTOMER' | 'SUPPLIER' | 'BOTH' | 'EMPLOYEE';
   phone?: string;
   mobile?: string;
   email?: string;
   address?: string;
+  address_en?: string;
+  address_he?: string;
   city?: string;
+  street_ar?: string;
+  street_en?: string;
+  street_he?: string;
+  country_code?: string;
+  timezone?: string;
+  po_box?: string;
+  gps_location?: string;
   tax_number?: string;
 
   linked_account_id?: string;
@@ -272,6 +301,80 @@ export interface BusinessPartner {
   sales_rep_id?: string;
   website?: string;
   price_list_id?: string;
+  parent_partner_id?: string;
+  partner_language?: string;
+  registration_date?: string;
+  birth_date?: string;
+  nationality?: string;
+  is_company?: number | boolean;
+  print_prices_on_docs?: number | boolean;
+  print_balance_on_docs?: number | boolean;
+  membership_id?: string;
+  sector_id?: string;
+  customer_type_id?: string | number;
+  vendor_type_id?: string | number;
+  notes?: string;
+  contact_methods_json?: string | any[];
+  bank_accounts_json?: string | any[];
+
+  customer_enabled?: number | boolean;
+  customer_name_ar?: string;
+  customer_name_en?: string;
+  customer_name_he?: string;
+  customer_code?: string;
+  customer_currency_id?: string;
+  customer_account_id?: string;
+  customer_discount_percent?: number;
+  customer_previous_balance?: number;
+  customer_tax_mode?: string;
+  customer_end_deal_date?: string;
+  customer_item_rules_json?: string | any[];
+
+  credit_policy_id?: string;
+  max_credit_limit?: number;
+  max_checks_limit?: number;
+  personal_check_limit?: number;
+  facilitation_days?: number;
+  facilitation_from_month_end?: number | boolean;
+  allow_over_limit?: number | boolean;
+  overdue_unpaid_days?: number;
+  validation_type?: string;
+  include_collection_checks?: number | boolean;
+  include_sales_orders_posting?: number | boolean;
+  allowed_check_due_days?: number;
+
+  supplier_enabled?: number | boolean;
+  supplier_name_ar?: string;
+  supplier_name_en?: string;
+  supplier_name_he?: string;
+  supplier_price_list_id?: string;
+  supplier_currency_id?: string;
+  supplier_account_id?: string;
+  supplier_tax_mode?: string;
+  supplier_items_only?: number | boolean;
+  supplier_item_rules_json?: string | any[];
+  supplier_source_discount_percent?: number;
+  supplier_source_discount_until?: string;
+
+  employee_enabled?: number | boolean;
+  employee_title_ar?: string;
+  employee_title_en?: string;
+  employee_title_he?: string;
+  employee_gender?: string;
+  employee_doc_type?: string;
+  employee_id_number?: string;
+  employee_is_resident?: number | boolean;
+  employee_social_status?: string;
+  employee_account_id?: string;
+  employee_currency_id?: string;
+  employee_children_count?: number;
+  employee_students_count?: number;
+  employee_dependents_count?: number;
+  employee_education?: string;
+  employee_group?: string;
+  employee_number?: string;
+  employee_hire_date?: string;
+  employee_end_date?: string;
 
   // HR Specific (Unified Model)
   basic_salary?: number;
@@ -732,6 +835,92 @@ declare global {
       getAccountTree: () => Promise<any[]>;
       getAccountById: (id: string) => Promise<Account>;
       getTransactionalAccounts: () => Promise<Account[]>;
+      accountingFoundation: {
+        listAccounts: (includeInactive?: boolean) => Promise<any[]>;
+        getAccountTree: (includeInactive?: boolean) => Promise<any[]>;
+        getPostableAccounts: () => Promise<any[]>;
+        saveAccount: (payload: any) => Promise<any>;
+        deleteAccount: (accountId: string) => Promise<any>;
+        activateAccount: (accountId: string) => Promise<any>;
+        deactivateAccount: (accountId: string) => Promise<any>;
+        listFinancialDefinitions: (includeInactive?: boolean) => Promise<any[]>;
+        saveFinancialDefinition: (payload: any) => Promise<any>;
+        deleteFinancialDefinition: (definitionId: string) => Promise<any>;
+        resolveAccounts: (payload: any) => Promise<any>;
+        debugResolveAccounts: (payload: any) => Promise<any>;
+      };
+      accounting: {
+        accounts: {
+          seedDefaultChart: (payload: {
+            companyId: string;
+            strategy?: 'skip' | 'fail';
+          }) => Promise<{
+            companyId: string;
+            strategy: 'skip' | 'fail';
+            inserted: number;
+            skipped: number;
+            total: number;
+          }>;
+          listTree: (query?: {
+            includeInactive?: boolean;
+            search?: string;
+            category?: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'COST_OF_SALES' | 'EXPENSE' | 'OTHER_INCOME' | 'OTHER_EXPENSE' | 'CONTROL' | 'ALL';
+            posting?: 'ALL' | 'POSTING' | 'HEADER';
+          }) => Promise<any[]>;
+          listFlat: (query?: {
+            includeInactive?: boolean;
+            search?: string;
+            category?: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'COST_OF_SALES' | 'EXPENSE' | 'OTHER_INCOME' | 'OTHER_EXPENSE' | 'CONTROL' | 'ALL';
+            posting?: 'ALL' | 'POSTING' | 'HEADER';
+          }) => Promise<any[]>;
+          create: (payload: {
+            companyId: string;
+            code: string;
+            name: string;
+            category: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'COST_OF_SALES' | 'EXPENSE' | 'OTHER_INCOME' | 'OTHER_EXPENSE' | 'CONTROL';
+            subtype: string;
+            parentCode?: string | null;
+            isPosting: boolean;
+            normalBalance: 'DEBIT' | 'CREDIT';
+            systemTag?: string | null;
+            allowManualEntry: boolean;
+            isActive: boolean;
+            notes?: string | null;
+          }) => Promise<any>;
+          update: (payload: {
+            id: string;
+            companyId: string;
+            code: string;
+            name: string;
+            category: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'COST_OF_SALES' | 'EXPENSE' | 'OTHER_INCOME' | 'OTHER_EXPENSE' | 'CONTROL';
+            subtype: string;
+            parentCode?: string | null;
+            isPosting: boolean;
+            normalBalance: 'DEBIT' | 'CREDIT';
+            systemTag?: string | null;
+            allowManualEntry: boolean;
+            isActive: boolean;
+            notes?: string | null;
+          }) => Promise<any>;
+          findByCode: (code: string) => Promise<any | null>;
+        };
+        financialDefinitions: {
+          listByOwner: (payload: {
+            companyId: string;
+            ownerType: 'COMPANY' | 'BRANCH' | 'ITEM' | 'ITEM_GROUP' | 'WAREHOUSE' | 'PARTNER' | 'TAX_PROFILE' | 'DOCUMENT_TYPE_DEFAULT';
+            ownerId: string;
+            includeInactive?: boolean;
+          }) => Promise<any[]>;
+          upsert: (payload: any) => Promise<any>;
+          bulkSaveForOwner: (payload: any) => Promise<any>;
+          deactivate: (payload: { companyId: string; id: string }) => Promise<{ success: boolean }>;
+        };
+        accountResolution: {
+          resolve: (payload: any) => Promise<any>;
+          previewSalesInvoice: (payload: any) => Promise<any>;
+          previewPurchaseInvoice: (payload: any) => Promise<any>;
+        };
+      };
       reseedAccounts: () => Promise<{ success: boolean }>;
       getDashboardKPIs: () => Promise<any>;
       getNextVoucherNo: (type: string) => Promise<string>;
@@ -847,6 +1036,7 @@ declare global {
         getUnits: () => Promise<Unit[]>;
         createUnit: (unit: Partial<Unit>) => Promise<any>;
         deleteUnit: (id: string) => Promise<any>;
+        seedDefaultUnits: () => Promise<{ inserted: number; skipped: number; total: number }>;
 
         getBrands: () => Promise<Brand[]>;
         createBrand: (brand: Partial<Brand>) => Promise<any>;
@@ -877,6 +1067,8 @@ declare global {
 
 
         transferRequest: (data: any) => Promise<any>; // Added
+        getTransferRequests: (filters?: any) => Promise<any[]>;
+        getTransferRequest: (id: string) => Promise<any>;
 
         getBins: (warehouseId: string) => Promise<Bin[]>;
         createBin: (bin: any) => Promise<any>;
@@ -885,6 +1077,8 @@ declare global {
         createStockDocument: (doc: any) => Promise<any>; // Added
         receiveTransfer: (data: any) => Promise<any>; // Added
         getGoodsReceipts: () => Promise<any[]>;
+        getDispatches: () => Promise<any[]>;
+        getStockDocument: (id: string) => Promise<any>;
         getKit: (itemId: string) => Promise<any[]>;
         createAssembly: (data: any) => Promise<any>;
       };
@@ -907,6 +1101,20 @@ declare global {
         getVendorTypes: () => Promise<VendorType[]>;
         saveVendorType: (data: any) => Promise<{ success: boolean }>;
         deleteVendorType: (id: string | number) => Promise<{ success: boolean }>;
+
+        getContactTypes: () => Promise<any[]>;
+
+        getMemberships: () => Promise<any[]>;
+        saveMembership: (data: any) => Promise<{ success: boolean }>;
+        deleteMembership: (id: string) => Promise<{ success: boolean }>;
+
+        getSectors: () => Promise<any[]>;
+        saveSector: (data: any) => Promise<{ success: boolean }>;
+        deleteSector: (id: string) => Promise<{ success: boolean }>;
+
+        getCreditPolicies: () => Promise<any[]>;
+        saveCreditPolicy: (data: any) => Promise<{ success: boolean }>;
+        deleteCreditPolicy: (id: string) => Promise<{ success: boolean }>;
 
         getRegions: () => Promise<Region[]>;
         saveRegion: (data: any) => Promise<{ success: boolean }>;
@@ -972,6 +1180,128 @@ declare global {
         getReport: (id: string, period?: number) => Promise<any[]>;
       };
 
+      budgets: {
+        list: () => Promise<any[]>;
+        get: (id: string) => Promise<any>;
+        create: (data: any) => Promise<any>;
+        updateStatus: (id: string, status: string, userId: string) => Promise<any>;
+        getVsActual: (id: string, period?: number) => Promise<any>;
+      };
+
+      fixedAssets: {
+        list: () => Promise<any[]>;
+        get: (id: string) => Promise<any>;
+        create: (data: any) => Promise<any>;
+        update: (id: string, data: any) => Promise<any>;
+        delete: (id: string) => Promise<any>;
+        calcDepreciation: (id: string) => Promise<{ yearly: string; monthly: string }>;
+        postDepreciation: (id: string, amount: number, date: string) => Promise<any>;
+        getSchedule: (id: string) => Promise<any[]>;
+      };
+
+      bom: {
+        create: (payload: any) => Promise<any>;
+        update: (payload: any) => Promise<any>;
+        getById: (id: string) => Promise<any>;
+        getDefaultForItem: (itemId: string, asOfDate?: string | null) => Promise<any>;
+        setDefault: (id: string) => Promise<any>;
+        confirm: (id: string) => Promise<any>;
+        cancel: (id: string) => Promise<any>;
+      };
+
+      routing: {
+        create: (payload: any) => Promise<any>;
+        update: (payload: any) => Promise<any>;
+        getById: (id: string) => Promise<any>;
+        getDefaultForItem: (itemId: string) => Promise<any>;
+        setDefault: (id: string) => Promise<any>;
+        confirm: (id: string) => Promise<any>;
+        cancel: (id: string) => Promise<any>;
+      };
+
+      productionOrder: {
+        create: (payload: any) => Promise<any>;
+        createFromBom: (payload: any) => Promise<any>;
+        update: (payload: any) => Promise<any>;
+        getById: (id: string) => Promise<any>;
+        release: (id: string) => Promise<any>;
+        cancel: (id: string) => Promise<any>;
+        getStatusSummary: (id: string) => Promise<any>;
+        getCostSummary: (id: string) => Promise<any>;
+      };
+
+      productionIssue: {
+        create: (payload: any) => Promise<any>;
+        getById: (id: string) => Promise<any>;
+        post: (payload: { issueId: string; allowOverIssue?: boolean | null }) => Promise<any>;
+        cancel: (payload: { issueId: string; reverseDate: string; reason?: string | null }) => Promise<any>;
+      };
+
+      productionReceipt: {
+        create: (payload: any) => Promise<any>;
+        getById: (id: string) => Promise<any>;
+        post: (payload: { receiptId: string; allowOverReceipt?: boolean | null }) => Promise<any>;
+        cancel: (payload: { receiptId: string; reverseDate: string; reason?: string | null }) => Promise<any>;
+      };
+
+      customer: {
+        create: (payload: any) => Promise<any>;
+        update: (payload: any) => Promise<any>;
+        getById: (id: string) => Promise<any>;
+        list: (payload?: any) => Promise<any>;
+        setActive: (payload: { id: string; isActive: boolean }) => Promise<any>;
+        getContacts: (customerId: string) => Promise<any>;
+        saveContact: (payload: any) => Promise<any>;
+        getAddresses: (customerId: string) => Promise<any>;
+        saveAddress: (payload: any) => Promise<any>;
+        getCreditProfile: (customerId: string) => Promise<any>;
+        saveCreditProfile: (payload: any) => Promise<any>;
+        evaluateCredit: (payload: any) => Promise<any>;
+        placeHold: (payload: any) => Promise<any>;
+        releaseHold: (payload: any) => Promise<any>;
+        getExposure: (payload: any) => Promise<any>;
+        getStatement: (payload: any) => Promise<any>;
+        getAging: (payload: any) => Promise<any>;
+        getTimeline: (payload: any) => Promise<any>;
+      };
+
+      customerFollowUp: {
+        create: (payload: any) => Promise<any>;
+        update: (payload: any) => Promise<any>;
+        getByCustomer: (customerId: string, includeClosed?: boolean) => Promise<any>;
+        markDone: (payload: any) => Promise<any>;
+        cancel: (payload: any) => Promise<any>;
+      };
+
+      vendor: {
+        create: (payload: any) => Promise<any>;
+        update: (payload: any) => Promise<any>;
+        getById: (id: string) => Promise<any>;
+        list: (payload?: any) => Promise<any>;
+        setActive: (payload: { id: string; isActive: boolean }) => Promise<any>;
+        getContacts: (vendorId: string) => Promise<any>;
+        saveContact: (payload: any) => Promise<any>;
+        getAddresses: (vendorId: string) => Promise<any>;
+        saveAddress: (payload: any) => Promise<any>;
+        getPaymentProfile: (vendorId: string) => Promise<any>;
+        savePaymentProfile: (payload: any) => Promise<any>;
+        evaluatePaymentControl: (payload: any) => Promise<any>;
+        placeHold: (payload: any) => Promise<any>;
+        releaseHold: (payload: any) => Promise<any>;
+        getExposure: (payload: any) => Promise<any>;
+        getStatement: (payload: any) => Promise<any>;
+        getAging: (payload: any) => Promise<any>;
+        getTimeline: (payload: any) => Promise<any>;
+      };
+
+      vendorFollowUp: {
+        create: (payload: any) => Promise<any>;
+        update: (payload: any) => Promise<any>;
+        getByVendor: (vendorId: string, includeClosed?: boolean) => Promise<any>;
+        markDone: (payload: any) => Promise<any>;
+        cancel: (payload: any) => Promise<any>;
+      };
+
       getWarehouses: () => Promise<any[]>;
 
       saveSalesInvoice: (invoice: any) => Promise<any>; // Legacy/Flat backup
@@ -984,6 +1314,9 @@ declare global {
         getOrder: (id: string) => Promise<any>;
         updateOrder: (data: any) => Promise<any>;
         deleteOrder: (id: string) => Promise<any>; // Added
+        postOrder: (id: string, userId?: string) => Promise<any>;
+        approveOrder: (id: string, userId: string) => Promise<any>;
+        rejectOrder: (id: string, userId: string, reason?: string) => Promise<any>;
         getInvoice: (id: string) => Promise<any>;
         getInvoices: () => Promise<any[]>;
 
@@ -992,6 +1325,9 @@ declare global {
         getRequest: (id: string) => Promise<any>;
         updateRequest: (data: any) => Promise<any>; // Added
         deleteRequest: (id: string) => Promise<any>;
+        postRequest: (id: string, userId?: string) => Promise<any>;
+        approveRequest: (id: string, userId: string) => Promise<any>;
+        rejectRequest: (id: string, userId: string, reason?: string) => Promise<any>;
 
         createReturn: (data: any) => Promise<any>;
         getReturns: () => Promise<any[]>;
@@ -1072,6 +1408,20 @@ declare global {
         getEntry: (id: string) => Promise<any>;
         getEntries: (filters: any) => Promise<any[]>;
       };
+
+      ae: {
+        listSubAccounts: (accountId?: string) => Promise<any[]>;
+        createSubAccount: (data: { account_id: string; name: string; code?: string | null }) => Promise<any>;
+        listReferences: (refType?: string) => Promise<any[]>;
+        createReference: (data: { ref_type: string; ref_name: string; ref_code?: string | null }) => Promise<any>;
+        saveDraftVoucher: (payload: any) => Promise<any>;
+        postVoucher: (payload: any) => Promise<any>;
+        postDraftVoucher: (voucherId: string) => Promise<any>;
+        getVoucher: (id: string) => Promise<any>;
+        getVouchers: (filters?: any) => Promise<any[]>;
+        getTrialBalance: (params?: { fromDate?: string; toDate?: string }) => Promise<any[]>;
+      };
+
       // Vouchers & Banking
       saveReceiptVoucher: (voucher: any) => Promise<any>;
       savePaymentVoucher: (voucher: any) => Promise<any>;

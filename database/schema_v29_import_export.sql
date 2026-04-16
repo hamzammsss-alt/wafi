@@ -1,3 +1,4 @@
+-- SQLite 3.x Schema
 -- ================================================================
 -- V29 IMPORT & EXPORT MODULE
 -- Separate module for managing LCs, Shipments, and Landed Cost
@@ -124,9 +125,8 @@ CREATE TABLE IF NOT EXISTS export_shipments (
 
 -- 6. CLEARANCE DATA (For Local Purchase Invoices - Moqasa)
 -- Adding fields to existing purchase_invoices table
--- Note: Check if columns exist before adding in production
-ALTER TABLE purchase_invoices ADD COLUMN is_clearing_invoice INTEGER DEFAULT 0;
-ALTER TABLE purchase_invoices ADD COLUMN clearing_dealer_number TEXT; -- رقم المشتغل
-ALTER TABLE purchase_invoices ADD COLUMN clearing_hebrew_name TEXT; -- الاسم بالعبرية
-ALTER TABLE purchase_invoices ADD COLUMN clearing_original_date DATE; -- تاريخ الفاتورة الأصلي
+-- NOTE:
+-- These columns already exist in schema_v5_purchasing.sql.
+-- Keep v29 focused on import/export tables to avoid duplicate-column failures
+-- when validating the full schema chain from v1..v41.
 

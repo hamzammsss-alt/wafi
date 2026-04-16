@@ -5,10 +5,10 @@ export const TrialBalance = () => {
     const [tab, setTab] = useState('General'); // General, Levels, Periods
 
     return (
-        <div className="p-6 bg-gray-50 h-full flex flex-col gap-6" dir="rtl">
+        <div className="app-page h-full flex flex-col gap-4" dir="rtl">
             <h1 className="text-2xl font-bold text-gray-800">ميزان المراجعة {tab === 'General' ? '(عام)' : tab === 'Levels' ? '(بالمستويات)' : '(فترات)'}</h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div className="card p-4">
                 <div className="flex flex-wrap gap-4 items-end">
                     <div className="flex-1 min-w-[200px]">
                         <label className="block text-sm font-bold text-gray-700 mb-1">من تاريخ</label>
@@ -36,7 +36,7 @@ export const TrialBalance = () => {
                 ))}
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex-1">
+            <div className="card overflow-hidden flex-1">
                 <table className="w-full text-right text-sm">
                     <thead className="bg-gray-100 font-bold text-gray-700">
                         <tr>
@@ -84,3 +84,4 @@ export const TrialBalance = () => {
         </div>
     );
 };
+

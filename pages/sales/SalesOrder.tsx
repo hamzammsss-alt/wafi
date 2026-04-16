@@ -3,9 +3,9 @@ import { FileText, Calendar, DollarSign } from 'lucide-react';
 
 export const SalesOrder: React.FC = () => {
     return (
-        <div className="h-full bg-gray-50 p-6" dir="rtl">
+        <div className="app-page h-full" dir="rtl">
             <div className="max-w-6xl mx-auto">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="card p-6 mb-6">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                             <FileText size={24} className="text-green-600" />
@@ -17,7 +17,7 @@ export const SalesOrder: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="card p-6">
                     <div className="grid grid-cols-2 gap-4 mb-6">
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
@@ -55,3 +55,4 @@ export const SalesOrder: React.FC = () => {
         </div>
     );
 };
+

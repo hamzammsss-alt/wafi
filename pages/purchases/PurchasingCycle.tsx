@@ -1,5 +1,6 @@
 import React from 'react';
 import { GenericDocument } from '../../components/GenericDocument';
+import { ReceiptPage } from '../inventory/ReceiptPage';
 
 // This file consolidates the purchasing cycle documents for cleaner import/export
 
@@ -25,7 +26,9 @@ export const PurchaseOrders = () => (
     />
 );
 
-export const GoodsReceipt = () => (
+export const GoodsReceipt = () => <ReceiptPage />;
+
+/*
     <GenericDocument
         title="سند استلام بضاعة (GRN)"
         documentName="سند الاستلام"
@@ -36,6 +39,7 @@ export const GoodsReceipt = () => (
     />
 );
 
+*/
 export const PurchaseReturn = () => (
     <GenericDocument
         title="مرتجع مشتريات (Purchase Return)"

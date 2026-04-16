@@ -95,7 +95,7 @@ const EmployeeProfile = () => {
     console.log('🟢 EmployeeProfile Rendering...', { id, isNew, loading, personal, depts: depts.length, jobs: jobs.length });
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl font-sans" dir="rtl">
+        <div className="app-page" dir="rtl">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
@@ -123,7 +123,7 @@ const EmployeeProfile = () => {
                 </div>
 
                 {/* Content */}
-                <div className="col-span-12 md:col-span-9 bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[500px]">
+                <div className="col-span-12 md:col-span-9 card p-6 min-h-[500px]">
                     {activeTab === 'personal' && <PersonalTab data={personal} onChange={setPersonal} />}
                     {activeTab === 'contract' && <ContractTab data={contract} onChange={setContract} depts={depts} jobs={jobs} />}
                     {activeTab === 'salary' && <SalaryTab data={contract} onChange={setContract} />}

@@ -11,7 +11,9 @@ import {
     AlertCircle,
     Loader2
 } from 'lucide-react';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { Brand } from '../../../types';
+import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
 export const BrandsPage = () => {
     const [brands, setBrands] = useState<Brand[]>([]);
@@ -76,6 +78,13 @@ export const BrandsPage = () => {
         setError(null);
     };
 
+    const openCreate = () => {
+        handleClose();
+        setIsAdding(true);
+    };
+
+    useCreateIntent(openCreate);
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -128,9 +137,31 @@ export const BrandsPage = () => {
     );
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
+        <div className="app-page" dir="rtl">
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <WorkspaceHeader
+                icon={<Tag size={22} />}
+                title="إدارة الماركات"
+                subtitle="تجهيز العلامات التجارية وربطها بالأصناف داخل نفس تجربة العمل الموحدة."
+                badges={[
+                    { label: `${brands.length} ماركات`, tone: 'info' },
+                    { label: `${filteredBrands.length} مطابق`, tone: 'neutral' },
+                ]}
+                actions={(
+                    <button
+                        onClick={openCreate}
+                        className="rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-purple-900/15 transition hover:brightness-105"
+                    >
+                        <span className="inline-flex items-center gap-2">
+                            <Plus size={16} />
+                            <span>إضافة ماركة جديدة</span>
+                        </span>
+                    </button>
+                )}
+                className="mb-8"
+            />
+
+            <div className="hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                         <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
@@ -142,7 +173,7 @@ export const BrandsPage = () => {
                 </div>
 
                 <button
-                    onClick={() => setIsAdding(true)}
+                    onClick={openCreate}
                     className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
                 >
                     <Plus size={20} />
@@ -162,7 +193,7 @@ export const BrandsPage = () => {
             )}
 
             {/* Search & Content */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="card overflow-hidden">
                 {/* Toolbar */}
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
                     <div className="relative w-full sm:w-96">
@@ -189,7 +220,7 @@ export const BrandsPage = () => {
                 ) : (
                     /* Table */
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right">
+                        <table className="dense-table w-full text-right">
                             <thead className="bg-[#f8fafc] text-gray-600 font-semibold text-sm uppercase tracking-wider border-b">
                                 <tr>
                                     <th className="px-6 py-4">اسم الماركة (عربي)</th>
@@ -373,3 +404,4 @@ export const BrandsPage = () => {
         </div>
     );
 };
+

@@ -49,7 +49,7 @@ export const ClosePeriod = () => {
                 </p>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 max-w-xl">
+            <div className="card p-6 max-w-xl">
                 <div className="mb-4">
                     <label className="block text-sm font-bold text-gray-700 mb-2">آخر تاريخ إغلاق</label>
                     <div className="p-3 bg-gray-100 rounded text-gray-500 font-mono">

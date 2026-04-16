@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Wafi.Core.Entities;
 
 namespace Wafi.Infrastructure.Data
@@ -42,6 +44,13 @@ namespace Wafi.Infrastructure.Data
         {
             base.OnModelCreating(modelBuilder);
 
+            var stringListComparer = new ValueComparer<List<string>>(
+                (left, right) =>
+                    (left ?? new List<string>()).SequenceEqual(right ?? new List<string>()),
+                list => (list ?? new List<string>())
+                    .Aggregate(0, (hash, value) => HashCode.Combine(hash, value?.GetHashCode() ?? 0)),
+                list => list == null ? new List<string>() : list.ToList());
+
             // Global Query Filter for Soft Delete
             modelBuilder.Entity<Tenant>().HasQueryFilter(e => !e.IsDeleted);
             modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
@@ -70,6 +79,16 @@ namespace Wafi.Infrastructure.Data
                 .HasOne(r => r.Tenant)
                 .WithMany()
                 .HasForeignKey(r => r.TenantId);
+
+            modelBuilder.Entity<Role>()
+                .Property(r => r.Permissions)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    value => JsonSerializer.Serialize(value ?? new List<string>(), (JsonSerializerOptions?)null),
+                    value => string.IsNullOrWhiteSpace(value)
+                        ? new List<string>()
+                        : JsonSerializer.Deserialize<List<string>>(value, (JsonSerializerOptions?)null) ?? new List<string>())
+                .Metadata.SetValueComparer(stringListComparer);
 
             // GL Configurations
             modelBuilder.Entity<GlChartOfAccounts>()

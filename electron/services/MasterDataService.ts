@@ -11,6 +11,33 @@ export class MasterDataService {
     }
 
     static saveBank(data: any) {
+        const normalizedName = String(data?.name_ar || '').trim().replace(/\s+/g, ' ').toUpperCase();
+        if (!normalizedName) {
+            throw new Error('اسم البنك مطلوب');
+        }
+
+        const normalizedBranch = String(data?.branch_code || '').trim().toUpperCase();
+        if (!data.id) {
+            const duplicate = db.prepare(`
+                SELECT id
+                FROM banks
+                WHERE UPPER(TRIM(COALESCE(name_ar, ''))) = ?
+                  AND UPPER(TRIM(COALESCE(branch_code, ''))) = ?
+                LIMIT 1
+            `).get(normalizedName, normalizedBranch);
+            if (duplicate) throw new Error('اسم البنك/الفرع موجود مسبقاً');
+        } else {
+            const duplicate = db.prepare(`
+                SELECT id
+                FROM banks
+                WHERE UPPER(TRIM(COALESCE(name_ar, ''))) = ?
+                  AND UPPER(TRIM(COALESCE(branch_code, ''))) = ?
+                  AND id != ?
+                LIMIT 1
+            `).get(normalizedName, normalizedBranch, data.id);
+            if (duplicate) throw new Error('اسم البنك/الفرع موجود مسبقاً');
+        }
+
         if (!data.id) {
             const id = uuidv4();
             db.prepare(`
@@ -132,10 +159,87 @@ export class MasterDataService {
     // 2. BANK ACCOUNTS
     // ================================================================
     static getBankAccounts() {
+        // Self-heal legacy links: if bank_accounts points to gl_chart_of_accounts IDs,
+        // ensure corresponding rows exist in legacy "accounts" and remap by code when needed.
+        try {
+            db.prepare(`
+                INSERT OR IGNORE INTO accounts (
+                    id, code, name, type, balance, parent_id, account_level, is_transactional, currency, is_active
+                )
+                SELECT
+                    g.id,
+                    g.account_code,
+                    COALESCE(g.name_ar, g.name_en, g.account_code),
+                    CASE UPPER(COALESCE(g.account_type, 'ASSET'))
+                        WHEN 'LIABILITY' THEN 'Liability'
+                        WHEN 'EQUITY' THEN 'Equity'
+                        WHEN 'REVENUE' THEN 'Revenue'
+                        WHEN 'EXPENSE' THEN 'Expense'
+                        ELSE 'Asset'
+                    END,
+                    '0',
+                    NULL,
+                    LENGTH(g.account_code),
+                    COALESCE(g.is_transactional, 1),
+                    COALESCE(cur.code, 'ILS'),
+                    1
+                FROM gl_chart_of_accounts g
+                LEFT JOIN currencies cur ON cur.id = g.currency_id
+                WHERE
+                    (g.id IN (
+                        SELECT gl_account_id FROM bank_accounts WHERE gl_account_id IS NOT NULL
+                        UNION
+                        SELECT commission_account_id FROM bank_accounts WHERE commission_account_id IS NOT NULL
+                    ))
+                    AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a.id = g.id)
+                    AND NOT EXISTS (SELECT 1 FROM accounts ax WHERE ax.code = g.account_code)
+            `).run();
+
+            db.prepare(`
+                UPDATE bank_accounts
+                SET gl_account_id = (
+                    SELECT a.id
+                    FROM gl_chart_of_accounts g
+                    JOIN accounts a ON a.code = g.account_code
+                    WHERE g.id = bank_accounts.gl_account_id
+                    LIMIT 1
+                )
+                WHERE gl_account_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM accounts x WHERE x.id = bank_accounts.gl_account_id)
+            `).run();
+
+            db.prepare(`
+                UPDATE bank_accounts
+                SET commission_account_id = (
+                    SELECT a.id
+                    FROM gl_chart_of_accounts g
+                    JOIN accounts a ON a.code = g.account_code
+                    WHERE g.id = bank_accounts.commission_account_id
+                    LIMIT 1
+                )
+                WHERE commission_account_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM accounts x WHERE x.id = bank_accounts.commission_account_id)
+            `).run();
+        } catch (e) {
+            console.error("MasterDataService.getBankAccounts self-heal failed:", e);
+        }
+
         return db.prepare(`
-            SELECT ba.*, COALESCE(b.name_ar, ba.bank_name) as bank_name 
+            SELECT
+                ba.*,
+                ba.currency_id AS currency_uuid,
+                COALESCE(cur.code, ba.currency, ba.currency_id) AS currency_id,
+                COALESCE(b.name_ar, b.name_en, ba.bank_name) AS bank_name,
+                COALESCE(acc.name, gl.name_ar, gl.name_en) AS gl_account_name,
+                COALESCE(acc.code, gl.account_code) AS gl_account_code,
+                COALESCE(comm_acc.name, comm_gl.name_ar, comm_gl.name_en) AS commission_account_name
             FROM bank_accounts ba
             LEFT JOIN banks b ON ba.bank_id = b.id
+            LEFT JOIN currencies cur ON ba.currency_id = cur.id
+            LEFT JOIN accounts acc ON ba.gl_account_id = acc.id
+            LEFT JOIN gl_chart_of_accounts gl ON ba.gl_account_id = gl.id
+            LEFT JOIN accounts comm_acc ON ba.commission_account_id = comm_acc.id
+            LEFT JOIN gl_chart_of_accounts comm_gl ON ba.commission_account_id = comm_gl.id
             ORDER BY ba.created_at
         `).all();
     }
@@ -170,72 +274,505 @@ export class MasterDataService {
             } catch (e) { /* ignore */ }
 
             const id = data.id || uuidv4();
-            const currencyCode = data.currency_id || 'ILS';
-            let currencyUUID = null;
 
-            // Lookup Currency UUID for FK (because DB enforces NOT NULL constraint on currency_id)
-            try {
-                const cRow = db.prepare("SELECT id FROM currencies WHERE code = ?").get(currencyCode);
-                if (cRow) {
-                    currencyUUID = cRow.id;
-                } else {
-                    const defaultRow = db.prepare("SELECT id FROM currencies LIMIT 1").get();
-                    if (defaultRow) currencyUUID = defaultRow.id;
+            const normalizeType = (raw: string | null | undefined) => {
+                const value = (raw || 'ASSET').toUpperCase();
+                if (value === 'ASSET') return 'Asset';
+                if (value === 'LIABILITY') return 'Liability';
+                if (value === 'EQUITY') return 'Equity';
+                if (value === 'REVENUE') return 'Revenue';
+                if (value === 'EXPENSE') return 'Expense';
+                return 'Asset';
+            };
+
+            const resolveCurrency = (value: any) => {
+                const incoming = (value || 'ILS').toString().trim();
+                const byCode = db.prepare("SELECT id, code FROM currencies WHERE code = ?").get(incoming);
+                if (byCode) return { code: byCode.code, id: byCode.id };
+
+                const byId = db.prepare("SELECT id, code FROM currencies WHERE id = ?").get(incoming);
+                if (byId) return { code: byId.code, id: byId.id };
+
+                const fallback = db.prepare("SELECT id, code FROM currencies ORDER BY code LIMIT 1").get();
+                if (fallback) return { code: fallback.code, id: fallback.id };
+
+                return { code: incoming || 'ILS', id: null };
+            };
+
+            const currencyInfo = resolveCurrency(data.currency_id || data.currency);
+            const currencyCode = currencyInfo.code;
+            const currencyUUID = currencyInfo.id;
+            const companyId = 'COMP_01';
+
+            const defaultCategoryByType = (rawType: string | null | undefined) => {
+                const t = (rawType || 'ASSET').toUpperCase();
+                if (t === 'LIABILITY') return 'CURRENT_LIABILITY';
+                if (t === 'EQUITY') return 'EQUITY';
+                if (t === 'REVENUE') return 'OPERATING_REVENUE';
+                if (t === 'EXPENSE') return 'OPERATING_EXPENSE';
+                return 'CURRENT_ASSET';
+            };
+
+            const upsertLegacyAccountRow = (payload: {
+                id: string;
+                code: string;
+                name: string;
+                type: string;
+                parentLegacyId: string | null;
+                level: number;
+                isTransactional: number;
+                currency: string;
+                subtype: string;
+            }) => {
+                const accountType = (payload.type || 'ASSET').toUpperCase();
+                const postingAllowed = payload.isTransactional ? 1 : 0;
+                const isGroup = postingAllowed ? 0 : 1;
+                const category = defaultCategoryByType(accountType);
+
+                db.prepare(`
+                    INSERT INTO accounts (
+                        id, company_id, branch_id, code, account_code, name, type,
+                        account_category, account_subtype,
+                        balance, parent_id, account_level,
+                        posting_allowed, is_transactional, is_group,
+                        currency, currency_code, currency_behavior,
+                        reference_type, scope_type,
+                        status, is_active,
+                        requires_cost_center, requires_analysis_code
+                    ) VALUES (
+                        @id, @company_id, NULL, @code, @code, @name, @type,
+                        @account_category, @account_subtype,
+                        '0', @parent_id, @account_level,
+                        @posting_allowed, @is_transactional, @is_group,
+                        @currency, @currency, 'FIXED_CURRENCY',
+                        'NONE', 'COMPANY',
+                        'ACTIVE', 1,
+                        0, 0
+                    )
+                    ON CONFLICT(id) DO UPDATE SET
+                        company_id = COALESCE(accounts.company_id, excluded.company_id),
+                        code = excluded.code,
+                        account_code = COALESCE(accounts.account_code, excluded.account_code),
+                        name = excluded.name,
+                        type = excluded.type,
+                        account_category = COALESCE(accounts.account_category, excluded.account_category),
+                        account_subtype = COALESCE(accounts.account_subtype, excluded.account_subtype),
+                        parent_id = excluded.parent_id,
+                        account_level = excluded.account_level,
+                        posting_allowed = COALESCE(accounts.posting_allowed, excluded.posting_allowed),
+                        is_transactional = COALESCE(accounts.is_transactional, excluded.is_transactional),
+                        is_group = COALESCE(accounts.is_group, excluded.is_group),
+                        currency = COALESCE(accounts.currency, excluded.currency),
+                        currency_code = COALESCE(accounts.currency_code, excluded.currency_code),
+                        currency_behavior = COALESCE(accounts.currency_behavior, excluded.currency_behavior),
+                        status = COALESCE(accounts.status, excluded.status),
+                        is_active = COALESCE(accounts.is_active, excluded.is_active)
+                `).run({
+                    id: payload.id,
+                    company_id: companyId,
+                    code: payload.code,
+                    name: payload.name,
+                    type: accountType,
+                    account_category: category,
+                    account_subtype: payload.subtype || 'GENERAL',
+                    parent_id: payload.parentLegacyId,
+                    account_level: payload.level,
+                    posting_allowed: postingAllowed,
+                    is_transactional: postingAllowed,
+                    is_group: isGroup,
+                    currency: payload.currency || currencyCode,
+                });
+            };
+
+            const normalizeLegacyParentId = (legacyId: string | null): string | null => {
+                if (!legacyId) return null;
+                const row = db.prepare("SELECT is_transactional FROM accounts WHERE id = ?").get(legacyId);
+                if (!row) return null;
+                // Legacy trigger blocks children under transactional/posting accounts.
+                if (Number(row.is_transactional || 0) === 1) return null;
+                return legacyId;
+            };
+
+            // Ensure a picked Chart-of-Accounts node always maps to a valid legacy "accounts" row.
+            const ensureLegacyAccountFromChart = (chartAccountId: string | null): string | null => {
+                if (!chartAccountId) return null;
+
+                const direct = db.prepare("SELECT id FROM accounts WHERE id = ?").get(chartAccountId);
+                if (direct) return direct.id;
+
+                const chart = db.prepare(`
+                    SELECT id, account_code, name_ar, name_en, parent_id, account_type, is_transactional, currency_id
+                    FROM gl_chart_of_accounts
+                    WHERE id = ?
+                `).get(chartAccountId);
+                if (!chart) return null;
+
+                const existingByCode = db.prepare("SELECT id FROM accounts WHERE code = ?").get(chart.account_code);
+                if (existingByCode) return existingByCode.id;
+
+                let parentLegacyId: string | null = null;
+                if (chart.parent_id) {
+                    const parentDirect = db.prepare("SELECT id FROM accounts WHERE id = ?").get(chart.parent_id);
+                    parentLegacyId = parentDirect?.id || ensureLegacyAccountFromChart(chart.parent_id);
                 }
-            } catch (e) { console.error("Currency lookup failed", e); }
+                parentLegacyId = normalizeLegacyParentId(parentLegacyId);
 
-            // --- AUTO-CREATE GL ACCOUNT LOGIC ---
-            let glAccountId = data.gl_account_id || null;
-            if (!data.id && data.parent_gl_id && !glAccountId) {
-                try {
-                    const parentAccount = db.prepare("SELECT * FROM accounts WHERE id = ?").get(data.parent_gl_id);
-                    if (parentAccount) {
-                        // 1. Generate Next Code
-                        // Find all children of this parent
-                        const children = db.prepare("SELECT account_code FROM accounts WHERE parent_id = ? ORDER BY account_code DESC LIMIT 1").get(data.parent_gl_id);
-                        let nextCode = parentAccount.account_code + '01'; // Default first child
-                        if (children && children.account_code) {
-                            const lastCode = children.account_code;
-                            // Increment last code
-                            // Assuming format is parentABCD...
-                            // If parent is 1110, child is 111001. 
-                            // Try to parse number
-                            const num = parseInt(lastCode);
-                            if (!isNaN(num)) {
-                                nextCode = (num + 1).toString();
-                            }
-                        }
+                let legacyCurrencyCode = currencyCode;
+                if (chart.currency_id) {
+                    const c = db.prepare("SELECT code FROM currencies WHERE id = ?").get(chart.currency_id);
+                    if (c?.code) legacyCurrencyCode = c.code;
+                }
 
-                        // 2. Create GL Account
-                        const newGlId = uuidv4();
-                        const newAccountName = data.account_name || `${data.bank_name || 'Bank'} - ${currencyCode}`;
+                db.prepare(`
+                    INSERT INTO accounts (
+                        id, code, name, type, balance, parent_id, account_level, is_transactional, currency, is_active
+                    ) VALUES (
+                        @id, @code, @name, @type, '0', @parent_id, @account_level, @is_transactional, @currency, 1
+                    )
+                `).run({
+                    id: chart.id,
+                    code: chart.account_code,
+                    name: chart.name_ar || chart.name_en || chart.account_code,
+                    type: normalizeType(chart.account_type),
+                    parent_id: parentLegacyId,
+                    account_level: String(chart.account_code || '').length || 1,
+                    is_transactional: chart.is_transactional ? 1 : 0,
+                    currency: legacyCurrencyCode
+                });
 
-                        db.prepare(`
-                            INSERT INTO accounts (
-                                id, account_code, name_ar, name_en, type, 
-                                parent_id, level, is_transactional, nature, currency_id, is_active
-                            ) VALUES (
-                                @id, @code, @name, @name, 'ASSET', 
-                                @parent_id, @level, 1, 'DEBIT', @currency_id, 1
-                            )
-                        `).run({
-                            id: newGlId,
-                            code: nextCode,
-                            name: newAccountName,
-                            parent_id: data.parent_gl_id,
-                            level: (parentAccount.level || 1) + 1,
-                            currency_id: currencyCode
-                        });
+                upsertLegacyAccountRow({
+                    id: chart.id,
+                    code: chart.account_code,
+                    name: chart.name_ar || chart.name_en || chart.account_code,
+                    type: chart.account_type || 'ASSET',
+                    parentLegacyId,
+                    level: String(chart.account_code || '').length || 1,
+                    isTransactional: chart.is_transactional ? 1 : 0,
+                    currency: legacyCurrencyCode,
+                    subtype: chart.is_transactional ? 'BANK' : 'GENERAL',
+                });
 
-                        glAccountId = newGlId;
-                        console.log(`[Auto-Create] Created GL Account ${newAccountName} (${nextCode})`);
+                return chart.id;
+            };
+
+            const resolveLinkedAccountId = (inputId: string | null | undefined): string | null => {
+                if (!inputId) return null;
+
+                const direct = db.prepare("SELECT id FROM accounts WHERE id = ?").get(inputId);
+                if (direct) return direct.id;
+
+                const synced = ensureLegacyAccountFromChart(inputId);
+                if (synced) return synced;
+
+                return inputId;
+            };
+
+            const bankNameFromMaster = data.bank_id
+                ? db.prepare("SELECT name_ar FROM banks WHERE id = ?").get(data.bank_id)?.name_ar
+                : null;
+
+            const resolveCurrencyLabel = (code: string) => {
+                const c = (code || '').toUpperCase();
+                if (c === 'JOD') return 'دينار';
+                if (c === 'USD') return 'دولار';
+                if (c === 'EUR') return 'يورو';
+                if (c === 'ILS' || c === 'NIS') return 'شيكل';
+                return code || 'متعدد العملات';
+            };
+
+            const resolveChartAccountId = (inputId: string | null | undefined): string | null => {
+                if (!inputId) return null;
+
+                const chartDirect = db.prepare("SELECT id FROM gl_chart_of_accounts WHERE id = ?").get(inputId);
+                if (chartDirect) return chartDirect.id;
+
+                const legacy = db.prepare("SELECT code FROM accounts WHERE id = ?").get(inputId);
+                if (legacy?.code) {
+                    const chartByCode = db.prepare("SELECT id FROM gl_chart_of_accounts WHERE account_code = ?").get(legacy.code);
+                    if (chartByCode) return chartByCode.id;
+                }
+
+                return null;
+            };
+
+            const findBankRootAccount = () => {
+                return db.prepare(`
+                    SELECT id, account_code, account_type
+                    FROM gl_chart_of_accounts
+                    WHERE account_code = '112'
+                      AND is_transactional = 0
+                    LIMIT 1
+                `).get() || db.prepare(`
+                    SELECT id, account_code, account_type
+                    FROM gl_chart_of_accounts
+                    WHERE is_transactional = 0
+                      AND account_type = 'ASSET'
+                      AND (name_ar LIKE '%بنوك%' OR name_ar LIKE '%البنوك%' OR name_en LIKE '%Bank%')
+                    ORDER BY LENGTH(account_code), account_code
+                    LIMIT 1
+                `).get();
+            };
+
+            const isDescendantOf = (nodeId: string, ancestorId: string) => {
+                if (!nodeId || !ancestorId) return false;
+                if (nodeId === ancestorId) return true;
+
+                let cursor: string | null = nodeId;
+                const guard = new Set<string>();
+
+                while (cursor && !guard.has(cursor)) {
+                    guard.add(cursor);
+                    const row = db.prepare(`SELECT parent_id FROM gl_chart_of_accounts WHERE id = ?`).get(cursor);
+                    const parentId = row?.parent_id || null;
+                    if (!parentId) return false;
+                    if (parentId === ancestorId) return true;
+                    cursor = parentId;
+                }
+
+                return false;
+            };
+
+            const isParentCompatibleWithCurrency = (parentChartId: string | null, targetCurrencyId: string | null) => {
+                if (!parentChartId) return false;
+                const parent = db.prepare(`SELECT currency_id, is_transactional FROM gl_chart_of_accounts WHERE id = ?`).get(parentChartId);
+                if (!parent) return false;
+                if (Number(parent.is_transactional || 0) === 1) return false;
+
+                const parentCurrencyId = parent.currency_id || null;
+                if (!targetCurrencyId) return true;
+                return !parentCurrencyId || parentCurrencyId === targetCurrencyId;
+            };
+
+            const getNextChildCode = (parentChartId: string, parentCode: string) => {
+                const lastSibling = db.prepare(`
+                    SELECT account_code
+                    FROM gl_chart_of_accounts
+                    WHERE parent_id = ?
+                    ORDER BY LENGTH(account_code) DESC, account_code DESC
+                    LIMIT 1
+                `).get(parentChartId);
+
+                let suffixDigits = 1;
+                let suffixNumber = 1;
+                if (lastSibling?.account_code && lastSibling.account_code.startsWith(parentCode)) {
+                    const suffix = lastSibling.account_code.slice(parentCode.length);
+                    if (/^\d+$/.test(suffix)) {
+                        suffixDigits = suffix.length || 1;
+                        suffixNumber = Number(suffix) + 1;
                     }
-                } catch (e) {
-                    console.error("Failed to auto-create GL account:", e);
-                    // Fallback: proceed without linking or throw? 
-                    // Let's log and proceed, user can link later.
+                }
+
+                let nextCode = `${parentCode}${suffixNumber.toString().padStart(suffixDigits, '0')}`;
+                let guard = 0;
+                while (db.prepare(`
+                    SELECT 1
+                    FROM gl_chart_of_accounts
+                    WHERE account_code = ?
+                    UNION ALL
+                    SELECT 1
+                    FROM accounts
+                    WHERE code = ?
+                    LIMIT 1
+                `).get(nextCode, nextCode)) {
+                    suffixNumber += 1;
+                    nextCode = `${parentCode}${suffixNumber.toString().padStart(suffixDigits, '0')}`;
+                    guard += 1;
+                    if (guard > 500) throw new Error("Unable to generate a unique account code");
+                }
+
+                return nextCode;
+            };
+
+            const ensureBankCurrencyParentAccount = (): string | null => {
+                if (data.id) return null;
+
+                const bankRoot = findBankRootAccount();
+
+                if (!bankRoot) return null;
+
+                if (currencyUUID) {
+                    const existingByCurrency = db.prepare(`
+                        SELECT id
+                        FROM gl_chart_of_accounts
+                        WHERE parent_id = ?
+                          AND is_transactional = 0
+                          AND currency_id = ?
+                          AND (name_ar LIKE '%بنوك%' OR name_ar LIKE '%البنوك%' OR name_en LIKE '%Bank%')
+                        ORDER BY account_code
+                        LIMIT 1
+                    `).get(bankRoot.id, currencyUUID);
+                    if (existingByCurrency) return existingByCurrency.id;
+                }
+
+                const label = resolveCurrencyLabel(currencyCode);
+                const parentNameAr = `البنوك - ${label}`;
+                const parentNameEn = `Banks - ${currencyCode}`;
+
+                const existingByName = db.prepare(`
+                    SELECT id
+                    FROM gl_chart_of_accounts
+                    WHERE parent_id = ?
+                      AND is_transactional = 0
+                      AND (name_ar = ? OR name_en = ?)
+                    LIMIT 1
+                `).get(bankRoot.id, parentNameAr, parentNameEn);
+                if (existingByName) return existingByName.id;
+
+                const parentId = uuidv4();
+                const parentCode = getNextChildCode(bankRoot.id, bankRoot.account_code);
+                const parentLegacyId = normalizeLegacyParentId(resolveLinkedAccountId(bankRoot.id));
+
+                db.prepare(`
+                    INSERT INTO gl_chart_of_accounts (
+                        id, account_code, name_ar, name_en, parent_id, account_type,
+                        is_transactional, currency_id, requires_cost_center, balance
+                    ) VALUES (
+                        @id, @account_code, @name_ar, @name_en, @parent_id, @account_type,
+                        0, @currency_id, 0, 0
+                    )
+                `).run({
+                    id: parentId,
+                    account_code: parentCode,
+                    name_ar: parentNameAr,
+                    name_en: parentNameEn,
+                    parent_id: bankRoot.id,
+                    account_type: bankRoot.account_type || 'ASSET',
+                    currency_id: currencyUUID
+                });
+
+                db.prepare(`
+                    INSERT INTO accounts (
+                        id, code, name, type, balance, parent_id, account_level, is_transactional, currency, is_active
+                    ) VALUES (
+                        @id, @code, @name, @type, '0', @parent_id, @account_level, 0, @currency, 1
+                    )
+                `).run({
+                    id: parentId,
+                    code: parentCode,
+                    name: parentNameAr,
+                    type: normalizeType(bankRoot.account_type || 'ASSET'),
+                    parent_id: parentLegacyId,
+                    account_level: String(parentCode).length,
+                    currency: currencyCode
+                });
+
+                upsertLegacyAccountRow({
+                    id: parentId,
+                    code: parentCode,
+                    name: parentNameAr,
+                    type: bankRoot.account_type || 'ASSET',
+                    parentLegacyId,
+                    level: String(parentCode).length,
+                    isTransactional: 0,
+                    currency: currencyCode,
+                    subtype: 'GENERAL',
+                });
+
+                return parentId;
+            };
+
+            const createAutoLinkedGLAccount = (parentChartId: string): string | null => {
+                if (data.id || !parentChartId) return null;
+
+                const parentChart = db.prepare(`
+                    SELECT id, account_code, account_type, currency_id
+                    FROM gl_chart_of_accounts
+                    WHERE id = ?
+                `).get(parentChartId);
+                if (!parentChart) return null;
+
+                const nextCode = getNextChildCode(parentChart.id, parentChart.account_code);
+                const newId = uuidv4();
+                const newAccountName = data.account_name || `${data.bank_name || bankNameFromMaster || 'Bank'} - ${currencyCode}`;
+                const parentLegacyId = normalizeLegacyParentId(resolveLinkedAccountId(parentChart.id));
+                const chartCurrencyId = parentChart.currency_id || currencyUUID || null;
+
+                db.prepare(`
+                    INSERT INTO gl_chart_of_accounts (
+                        id, account_code, name_ar, name_en, parent_id, account_type,
+                        is_transactional, currency_id, requires_cost_center, balance
+                    ) VALUES (
+                        @id, @account_code, @name_ar, @name_en, @parent_id, @account_type,
+                        1, @currency_id, 0, 0
+                    )
+                `).run({
+                    id: newId,
+                    account_code: nextCode,
+                    name_ar: newAccountName,
+                    name_en: newAccountName,
+                    parent_id: parentChart.id,
+                    account_type: parentChart.account_type || 'ASSET',
+                    currency_id: chartCurrencyId
+                });
+
+                db.prepare(`
+                    INSERT INTO accounts (
+                        id, code, name, type, balance, parent_id, account_level, is_transactional, currency, is_active
+                    ) VALUES (
+                        @id, @code, @name, @type, '0', @parent_id, @account_level, 1, @currency, 1
+                    )
+                `).run({
+                    id: newId,
+                    code: nextCode,
+                    name: newAccountName,
+                    type: normalizeType(parentChart.account_type || 'ASSET'),
+                    parent_id: parentLegacyId,
+                    account_level: String(nextCode).length,
+                    currency: currencyCode
+                });
+
+                upsertLegacyAccountRow({
+                    id: newId,
+                    code: nextCode,
+                    name: newAccountName,
+                    type: parentChart.account_type || 'ASSET',
+                    parentLegacyId,
+                    level: String(nextCode).length,
+                    isTransactional: 1,
+                    currency: currencyCode,
+                    subtype: 'BANK',
+                });
+
+                console.log(`[Auto-Create] Created bank GL account ${newAccountName} (${nextCode})`);
+                return newId;
+            };
+
+            let glAccountId = resolveLinkedAccountId(data.gl_account_id || null);
+            if (!glAccountId) {
+                const explicitParentChartId = resolveChartAccountId(data.parent_gl_id || null);
+                const bankRoot = findBankRootAccount();
+                const explicitParentIsValid =
+                    Boolean(bankRoot?.id) &&
+                    Boolean(explicitParentChartId) &&
+                    isDescendantOf(explicitParentChartId as string, bankRoot.id) &&
+                    isParentCompatibleWithCurrency(explicitParentChartId, currencyUUID);
+
+                const autoParentChartId = explicitParentIsValid
+                    ? explicitParentChartId
+                    : ensureBankCurrencyParentAccount();
+                if (autoParentChartId) {
+                    glAccountId = createAutoLinkedGLAccount(autoParentChartId);
                 }
             }
+
+            const commissionAccountId = resolveLinkedAccountId(data.commission_account_id || null);
+
+            // Heal existing linked accounts so they appear in modern chart listings by company.
+            const ensureAccountVisibleInCompanyChart = (accountId: string | null) => {
+                if (!accountId) return;
+                db.prepare(`
+                    UPDATE accounts
+                    SET company_id = COALESCE(company_id, ?),
+                        account_code = COALESCE(account_code, code),
+                        posting_allowed = COALESCE(posting_allowed, is_transactional, 1),
+                        is_group = COALESCE(is_group, CASE WHEN COALESCE(posting_allowed, is_transactional, 1)=1 THEN 0 ELSE 1 END),
+                        status = COALESCE(status, CASE WHEN COALESCE(is_active, 1)=1 THEN 'ACTIVE' ELSE 'INACTIVE' END),
+                        scope_type = COALESCE(scope_type, 'COMPANY')
+                    WHERE id = ?
+                `).run(companyId, accountId);
+            };
+            ensureAccountVisibleInCompanyChart(glAccountId);
+            ensureAccountVisibleInCompanyChart(commissionAccountId);
 
             const params = {
                 id,
@@ -246,9 +783,9 @@ export class MasterDataService {
                 currency: currencyCode, // Store code in 'currency' column
                 currency_id: currencyUUID, // Store UUID in 'currency_id' column (FK)
                 gl_account_id: glAccountId,
-                commission_account_id: data.commission_account_id || null,
+                commission_account_id: commissionAccountId,
                 account_name: data.account_name,
-                bank_name: data.bank_name || null,
+                bank_name: data.bank_name || bankNameFromMaster || null,
                 code: data.code || null, // Custom code
                 is_active: data.is_active !== false ? 1 : 0
             };

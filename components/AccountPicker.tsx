@@ -8,12 +8,24 @@ interface AccountPickerProps {
     onClose: () => void;
     onSelect: (account: Account) => void;
     showTransactionalOnly?: boolean;
+    selectableMode?: 'all' | 'posting' | 'header';
+    hideNonSelectableRows?: boolean;
     allowedPrefixes?: string[];
     parentId?: string | null;
     currencyId?: string | null; // Currency Filtering
 }
 
-export const AccountPicker: React.FC<AccountPickerProps> = ({ isOpen, onClose, onSelect, showTransactionalOnly = true, allowedPrefixes, parentId, currencyId }) => {
+export const AccountPicker: React.FC<AccountPickerProps> = ({
+    isOpen,
+    onClose,
+    onSelect,
+    showTransactionalOnly = true,
+    selectableMode,
+    hideNonSelectableRows = false,
+    allowedPrefixes,
+    parentId,
+    currencyId,
+}) => {
     const [treeData, setTreeData] = useState<Account[]>([]);
     const [filteredData, setFilteredData] = useState<Account[]>([]);
     const [search, setSearch] = useState('');
@@ -21,6 +33,22 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({ isOpen, onClose, o
     const [loading, setLoading] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [selectableAccounts, setSelectableAccounts] = useState<Account[]>([]);
+
+    const matchesCurrency = (node: any): boolean => {
+        if (!currencyId) return true;
+
+        const target = String(currencyId).trim().toLowerCase();
+        const nodeCurrencyId = String(node.currency_id || '').trim().toLowerCase();
+        const nodeCurrencyCode = String(node.currency_code || '').trim().toLowerCase();
+
+        if (!nodeCurrencyId && !nodeCurrencyCode) return true;
+        if (target === nodeCurrencyId || target === nodeCurrencyCode) return true;
+
+        const isCode = target.length <= 4 && !target.includes('-');
+        if (isCode && nodeCurrencyId && nodeCurrencyId === target) return true;
+
+        return false;
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -38,12 +66,18 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({ isOpen, onClose, o
         const filterNode = (node: Account): Account | null => {
             const nodeCode = node.account_code || node.code || '';
             const nodeName = (node.name || node.name_ar || '').toLowerCase();
+            const nodeIsTransactional = Boolean(node.is_transactional);
 
-            // Currency Validation
-            let isCurrencyValid = true;
-            if (currencyId && node.currency_id && node.currency_id !== currencyId) {
-                isCurrencyValid = false;
-            }
+            const effectiveMode: 'all' | 'posting' | 'header' = selectableMode || (showTransactionalOnly ? 'posting' : 'all');
+            const modeMatch =
+                effectiveMode === 'all'
+                    ? true
+                    : effectiveMode === 'posting'
+                        ? nodeIsTransactional
+                        : !nodeIsTransactional;
+
+            // Currency Validation (supports both UUID and code like JOD/USD)
+            const isCurrencyValid = matchesCurrency(node);
 
             // Prefix Validation
             let isPrefixValid = !allowedPrefixes || allowedPrefixes.length === 0;
@@ -54,7 +88,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({ isOpen, onClose, o
             if (!isPrefixValid) return null;
 
             // Search Validation (combined with currency)
-            const isMatch = (!term || nodeCode.includes(term) || nodeName.includes(term)) && isCurrencyValid;
+            const isMatch = (!term || nodeCode.includes(term) || nodeName.includes(term)) && isCurrencyValid && modeMatch;
 
             // Process Children
             let filteredChildren: Account[] = [];
@@ -156,10 +190,20 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({ isOpen, onClose, o
             // Selectable Rule:
             // 1. Must satisfy showTransactionalOnly
             // 2. Must satisfy Currency ID if provided
-            const isTransactionalMatch = !showTransactionalOnly || node.is_transactional;
-            const isCurrencyMatch = !currencyId || !node.currency_id || node.currency_id === currencyId;
+            const effectiveMode: 'all' | 'posting' | 'header' = selectableMode || (showTransactionalOnly ? 'posting' : 'all');
+            const isTransactionalMatch =
+                effectiveMode === 'all'
+                    ? true
+                    : effectiveMode === 'posting'
+                        ? Boolean(node.is_transactional)
+                        : !Boolean(node.is_transactional);
+            const isCurrencyMatch = matchesCurrency(node);
             const isSelectable = isTransactionalMatch && isCurrencyMatch;
             const isSelected = selectableAccounts[selectedIndex]?.id === node.id;
+
+            if (hideNonSelectableRows && !isSelectable && !hasChildren) {
+                return null;
+            }
 
             return (
                 <div key={node.id} className="select-none">

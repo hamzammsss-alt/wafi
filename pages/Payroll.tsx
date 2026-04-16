@@ -87,7 +87,7 @@ export const Payroll = () => {
                                 <span className="text-blue-600">{slips.length} موظف</span>
                             </h2>
                             <div className="flex-1 overflow-auto border rounded-xl mb-6">
-                                <table className="w-full text-sm">
+                                <table className="dense-table w-full">
                                     <thead className="bg-slate-100 font-bold sticky top-0">
                                         <tr>
                                             <th className="p-3 text-right">الموظف</th>

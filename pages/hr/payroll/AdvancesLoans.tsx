@@ -21,7 +21,7 @@ const AdvancesLoans = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl font-sans" dir="rtl">
+        <div className="app-page" dir="rtl">
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -50,7 +50,7 @@ const AdvancesLoans = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center text-gray-400">
+            <div className="card p-8 text-center text-gray-400">
                 <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                 <h3 className="text-lg font-bold text-gray-600">لا توجد سلف نشطة</h3>
                 <p>استخدم زر "طلب سلفة جديد" لإضافة سلفة لموظف.</p>

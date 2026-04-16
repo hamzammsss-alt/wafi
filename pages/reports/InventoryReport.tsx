@@ -3,9 +3,9 @@ import { Package, Calendar, Filter, Download } from 'lucide-react';
 
 export const InventoryReport: React.FC = () => {
     return (
-        <div className="h-full bg-gray-50 p-6" dir="rtl">
+        <div className="app-page h-full flex flex-col gap-4" dir="rtl">
             <div className="max-w-7xl mx-auto">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="bg-white/90 rounded-2xl shadow-sm border border-slate-200 p-6 mb-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
@@ -16,37 +16,45 @@ export const InventoryReport: React.FC = () => {
                                 <p className="text-sm text-gray-500">حالة المخزون الحالية</p>
                             </div>
                         </div>
-                        <button className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition flex items-center gap-2">
+                        <button className="btn btn-primary text-white px-6 py-3 rounded-lg transition flex items-center gap-2">
                             <Download size={18} />
                             تصدير Excel
                         </button>
                     </div>
                 </div>
 
+                <div className="mb-4 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm">
+                    <div className="relative max-w-sm flex-1">
+                        <input className="input w-full rounded-xl px-4 py-2" placeholder="بحث سريع في التقرير" />
+                    </div>
+                    <button className="app-toolbar-btn"><Filter size={16} /> فلاتر</button>
+                    <button className="app-toolbar-btn"><Calendar size={16} /> الفترة</button>
+                </div>
+
                 {/* Summary Cards */}
                 <div className="grid grid-cols-4 gap-6 mb-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="card p-6">
                         <p className="text-sm text-gray-500 mb-2">إجمالي الأصناف</p>
                         <p className="text-3xl font-bold text-purple-600">156</p>
                     </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="card p-6">
                         <p className="text-sm text-gray-500 mb-2">قيمة المخزون</p>
                         <p className="text-3xl font-bold text-green-600">125,450 ₪</p>
                     </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="card p-6">
                         <p className="text-sm text-gray-500 mb-2">أصناف قليلة</p>
                         <p className="text-3xl font-bold text-orange-600">8</p>
                     </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="card p-6">
                         <p className="text-sm text-gray-500 mb-2">أصناف راكدة</p>
                         <p className="text-3xl font-bold text-red-600">12</p>
                     </div>
                 </div>
 
                 {/* Inventory Table */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
+                <div className="card overflow-hidden">
+                    <table className="dense-table w-full">
+                        <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
                                 <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">الرمز</th>
                                 <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">اسم الصنف</th>

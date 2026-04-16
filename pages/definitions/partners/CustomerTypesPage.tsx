@@ -13,6 +13,8 @@ import {
     Percent
 } from 'lucide-react';
 import { CustomerType } from '../../../types';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
 export const CustomerTypesPage = () => {
     const [types, setTypes] = useState<CustomerType[]>([]);
@@ -77,6 +79,13 @@ export const CustomerTypesPage = () => {
         setError(null);
     };
 
+    const openCreate = () => {
+        handleClose();
+        setIsAdding(true);
+    };
+
+    useCreateIntent(openCreate);
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -129,9 +138,28 @@ export const CustomerTypesPage = () => {
     );
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
+        <div className="app-page" dir="rtl">
+            <WorkspaceHeader
+                icon={<Users size={24} />}
+                title="تصنيفات العملاء"
+                subtitle="إدارة فئات العملاء ونسب الخصم"
+                badges={[
+                    { label: `الإجمالي ${types.length}`, tone: 'warning' },
+                    { label: `المعروض ${filteredTypes.length}`, tone: 'info' },
+                ]}
+                actions={
+                    <button
+                        onClick={openCreate}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
+                    >
+                        <Plus size={20} />
+                        إضافة تصنيف جديد
+                    </button>
+                }
+                className="mb-6"
+            />
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div className="hidden flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                         <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
@@ -143,7 +171,7 @@ export const CustomerTypesPage = () => {
                 </div>
 
                 <button
-                    onClick={() => setIsAdding(true)}
+                    onClick={openCreate}
                     className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
                 >
                     <Plus size={20} />
@@ -163,7 +191,7 @@ export const CustomerTypesPage = () => {
             )}
 
             {/* Search & Content */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="card overflow-hidden">
                 {/* Toolbar */}
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
                     <div className="relative w-full sm:w-96">
@@ -190,7 +218,7 @@ export const CustomerTypesPage = () => {
                 ) : (
                     /* Table */
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right">
+                        <table className="dense-table w-full text-right">
                             <thead className="bg-[#f8fafc] text-gray-600 font-semibold text-sm uppercase tracking-wider border-b">
                                 <tr>
                                     <th className="px-6 py-4">اسم التصنيف</th>
@@ -382,3 +410,4 @@ export const CustomerTypesPage = () => {
         </div>
     );
 };
+

@@ -1,0 +1,16 @@
+export enum AccountSubtype {
+    GENERAL = 'GENERAL',
+    CASH = 'CASH',
+    BANK = 'BANK',
+    RECEIVABLE = 'RECEIVABLE',
+    PAYABLE = 'PAYABLE',
+    REVENUE = 'REVENUE',
+    EXPENSE = 'EXPENSE',
+    INVENTORY = 'INVENTORY',
+    COGS = 'COGS',
+    TAX_PAYABLE = 'TAX_PAYABLE',
+    TAX_RECEIVABLE = 'TAX_RECEIVABLE',
+    DISCOUNT = 'DISCOUNT',
+    ROUNDING = 'ROUNDING',
+}
+

@@ -12,7 +12,7 @@ import {
     CheckSquare, Filter, Grip, BookOpen, PenTool, Hash, Server,
     TrendingUp, TrendingDown, PlusCircle, Image, Table, Upload, Monitor,
     FileMinus, FilePlus, StickyNote, Activity, Scale, Receipt, BarChart3,
-    Network, Package, AlertTriangle, Clock, Sparkles, GitMerge, Book
+    Network, Package, AlertTriangle, Clock, Sparkles, GitMerge, Book, BadgeCheck, Building2, ShieldCheck
 } from 'lucide-react';
 
 // --- TYPE DEFINITIONS ---
@@ -22,6 +22,7 @@ export interface MenuItem {
     path?: string; // If it's a link
     icon?: any;    // Lucide Icon
     action?: string; // If it triggers an action (like logout)
+    capabilityKey?: string;
     shortcut?: string;
     divider?: boolean; // If it's a separator
     header?: boolean;  // If it's a section header
@@ -36,6 +37,7 @@ export interface RibbonGroup {
 export interface SideMenuSection {
     title: string;
     icon: any;
+    capabilityKey?: string;
     items: MenuItem[];
 }
 
@@ -59,6 +61,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
         { label: 'معلومات الشركة', icon: Settings, path: '/settings/company' },
         { label: 'إدارة الفروع والمستودعات', icon: MapPin, path: '/settings/branches' },
         { label: 'خيارات عامة للنظام', icon: Sliders, path: '/settings/preferences' },
+        { label: 'إدارة النسخ المتخصصة', icon: ShieldCheck, path: '/settings/edition' },
         { divider: true, label: '' },
         { header: true, label: 'المستخدمين والصلاحيات' },
         { label: 'دليل المستخدمين', icon: Users, path: '/system/users-guide' },
@@ -76,17 +79,20 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
         { divider: true, label: '' },
         { header: true, label: 'تعاريف المخزون' },
         { label: 'الوحدات', icon: Box, path: '/master/units' },
-        { label: 'مجموعات الأصناف', icon: Layers, path: '/master/item-categories' },
+        { label: 'فئات الأصناف', icon: Layers, path: '/master/item-categories' },
         { label: 'العلامات التجارية', icon: Tag, path: '/master/brands' },
+        { label: 'قائمة الأصناف', icon: Package, path: '/items' },
         { label: 'مواقع التخزين', icon: MapPin, path: '/master/warehouses' },
         { divider: true, label: '' },
         { header: true, label: 'تعاريف العلاقات' },
         { label: 'تصنيف الزبائن', icon: Users, path: '/master/customer-class' },
         { label: 'تصنيف الموردين', icon: Truck, path: '/master/vendor-class' },
         { label: 'المناطق الجغرافية', icon: MapPin, path: '/master/regions' },
-        { label: 'العملاء', icon: Users, path: '/master/partners' }, // Unified
-        // { label: 'بطاقة عميل', icon: Users, path: '/master/customer-card' }, // Deprecated
-        // { label: 'بطاقة مورد', icon: Truck, path: '/master/supplier-card' }, // Deprecated
+        { label: 'العضويات', icon: BadgeCheck, path: '/master/memberships' },
+        { label: 'القطاعات', icon: Building2, path: '/master/sectors' },
+        { label: 'سياسات الائتمان', icon: ShieldCheck, path: '/master/credit-policies' },
+        { label: 'قوائم الأسعار', icon: Tag, path: '/master/price-lists' },
+        { label: 'دليل', icon: Users, path: '/master/partners' }, // Unified
         { label: 'المندوبين وعمولاتهم', icon: Briefcase, path: '/master/salesmen' },
         { divider: true, label: '' },
         { header: true, label: 'الأصول الثابتة' },
@@ -100,6 +106,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
     'المخزون والأصناف': [
         { header: true, label: 'إدارة الأصناف' },
         { label: 'بطاقات الأصناف', icon: Package, path: '/items' },
+        { label: 'فئات الأصناف', icon: Layers, path: '/master/item-categories' },
         { label: 'الضريبة والرسوم', icon: Percent, path: '/master/taxes' },
         { label: 'رموز التحليل', icon: Network, path: '/definitions/analysis-codes' },
         { label: 'تعاريف السمات', icon: Tag, path: '/definitions/attributes' },
@@ -110,7 +117,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
         { header: true, label: 'حركات المخزون الداخلية' },
         { label: 'سند إدخال مخزني', icon: ArrowLeftRight, path: '/inventory/stock-in' },
         { label: 'سند إخراج مخزني', icon: ArrowLeftRight, path: '/inventory/stock-out' },
-        { label: 'نقل بين المستودعات', icon: Truck, path: '/inventory/transfer' },
+        { label: 'نقل بين المستودعات', icon: Truck, path: '/inventory/stock-transfers', capabilityKey: 'inventory.stock_transfer.read' },
         { label: 'سند تجميع/تفكيك', icon: Layers, path: '/inventory/assembly' },
         { label: 'إغلاق الفترة المخزنية', icon: Lock, path: '/inventory/close-period' },
         { divider: true, label: '' },
@@ -142,8 +149,8 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
         { divider: true, label: '' },
         { header: true, label: 'مستندات التصدير' },
         { label: 'فاتورة تصدير', icon: FileOutput, path: '/export/invoices' },
-        { label: 'قائمة التعبئة', icon: List, path: '/export/shipments' },
-        { label: 'شهادة المنشأ', icon: FileText, path: '/export/shipments' },
+        { label: 'قائمة التعبئة', icon: List, path: '/export/packing-list' },
+        { label: 'شهادة المنشأ', icon: FileText, path: '/export/certificate-origin' },
     ],
     'المشتريات': [
         { header: true, label: 'المشتريات المحلية' },
@@ -151,7 +158,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
         { label: 'طلب عرض سعر (RFQ)', icon: MessageSquare, path: '/trade/purchasing/rfq' },
         { label: 'طلبية مشتريات', icon: FileText, path: '/trade/purchasing/lpo' },
         { label: 'استلام بضاعة (GRN)', icon: Truck, path: '/trade/purchasing/receipts' },
-        { label: 'فاتورة مشتريات', icon: ShoppingCart, path: '/trade/purchasing/invoices' },
+        { label: 'فاتورة مشتريات', icon: ShoppingCart, path: '/trade/purchasing/invoices', capabilityKey: 'purchase.invoice.read' },
         { label: 'مرتجع مشتريات', icon: ArrowLeftRight, path: '/trade/purchasing/return' },
     ],
     'المبيعات': [
@@ -159,7 +166,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
         { label: 'عرض أسعار', icon: FileText, path: '/trade/sales/quotation' },
         { label: 'طلبية مبيعات', icon: ShoppingCart, path: '/trade/sales/order' },
         { label: 'إرسالية مبيعات', icon: Truck, path: '/trade/sales/delivery' },
-        { label: 'فاتورة مبيعات', icon: ShoppingCart, path: '/trade/sales/invoice' },
+        { label: 'فاتورة مبيعات', icon: ShoppingCart, path: '/sales/invoices', capabilityKey: 'sales.invoice.read' },
         { label: 'نقطة بيع (POS)', icon: Monitor, path: '/trade/sales/pos' },
         { label: 'مرتجع مبيعات', icon: ArrowLeftRight, path: '/trade/sales/return' },
         { label: 'إشعار دائن/مدين', icon: FileMinus, path: '/trade/sales/credit-note' },
@@ -173,13 +180,15 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
     'السندات': [
         { header: true, label: 'شجرة الحسابات' },
         { label: 'دليل الحسابات', icon: Layers, path: '/gl/chart-of-accounts' },
+        { label: 'التعاريف المالية', icon: Database, path: '/gl/financial-definitions' },
         { label: 'الأرصدة الافتتاحية', icon: FileText, path: '/gl/opening-balances' },
         { divider: true, label: '' },
         { header: true, label: 'العمليات اليومية' },
         { label: 'سند قبض', icon: Banknote, path: '/treasury/receipt' },
         { label: 'سند صرف', icon: Banknote, path: '/treasury/payment' },
 
-        { label: 'سند قيد يومي', icon: FileText, path: '/gl/journal-voucher' },
+        { label: 'سند قيد يومي', icon: FileText, path: '/gl/journal-vouchers', capabilityKey: 'accounting.journal_voucher.read' },
+        { label: 'سند موحد AE', icon: FilePlus, path: '/gl/ae-voucher' },
         { label: 'سند قيد متكرر', icon: RefreshCw, path: '/gl/recurring' },
         { label: 'قيود التسوية', icon: Sliders, path: '/gl/settlement' },
         { divider: true, label: '' },
@@ -303,6 +312,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
             icon: Box,
             subItems: [
                 { label: 'كشف حركة صنف', icon: Activity, path: '/reports/inventory/movement' },
+                { label: 'كمية الأصناف حسب المستودع', icon: Building2, path: '/reports/inventory/quantity-by-warehouse' },
                 { label: 'تقرير جرد المخزون', icon: Clipboard, path: '/reports/inventory/stock-count' },
                 { label: 'تقييم المخزون', icon: Coins, path: '/reports/inventory/valuation' },
                 { divider: true, label: '' },
@@ -335,8 +345,16 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
                 { label: 'الآلة الحاسبة', icon: Calculator, path: '/tools/calculator' },
                 { label: 'محول العملات', icon: Banknote, path: '/tools/converter' },
                 { label: 'المفكرة', icon: Clipboard, path: '/tools/notepad' },
-                { label: 'المفكرة', icon: Clipboard, path: '/tools/notepad' },
                 { label: 'WAFI AI', icon: Sparkles, path: '/wafi-ai' },
+            ]
+        },
+        {
+            label: 'الإصدارات القطاعية',
+            icon: Globe,
+            subItems: [
+                { label: 'مركز التطبيقات القطاعية', icon: Sparkles, path: '/vertical/apps' },
+                { label: 'لوحة NGO', icon: Users, path: '/editions/ngo' },
+                { label: 'لوحة Government', icon: Shield, path: '/editions/government' },
             ]
         },
         {
@@ -344,8 +362,24 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
             icon: MessageCircle,
             subItems: [
                 { label: 'البريد الداخلي', icon: Mail, path: '/tools/mail' },
+                { label: 'البريد الإلكتروني', icon: Mail, path: '/tools/email' },
+                { label: 'WhatsApp', icon: Smartphone, path: '/tools/whatsapp' },
                 { label: 'المحادثة', icon: MessageCircle, path: '/tools/chat' },
                 { label: 'رسائل SMS', icon: Smartphone, path: '/tools/sms' },
+            ]
+        },
+        {
+            label: 'أرشفة المستندات',
+            icon: FolderOpen,
+            subItems: [
+                { label: 'الأرشفة الذكية', icon: Archive, path: '/tools/archive' },
+            ]
+        },
+        {
+            label: 'تكامل الأجهزة',
+            icon: HardDrive,
+            subItems: [
+                { label: 'RFID', icon: HardDrive, path: '/tools/rfid' },
             ]
         },
         {
@@ -372,6 +406,53 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
     ],
 };
 
+const SECTION_CAPABILITY_MAP: Record<string, string> = {
+    'ملف وإدارة النظام': 'core.security.permissions.manage',
+    'التعاريف والبطاقات': 'ti.master.partner.manage',
+    'المخزون والأصناف': 'ti.master.item.manage',
+    'المستودعات': 'ti.master.item.manage',
+    'الاستيراد والتصدير': 'ti.purchase.invoice.create',
+    'المشتريات': 'ti.purchase.invoice.create',
+    'المبيعات': 'sales.invoice.read',
+    'السندات': 'ti.gl.journal.post',
+    'البنوك': 'ti.gl.journal.post',
+    'التصنيع': 'sector.manufacturing.production.plan',
+    'الموارد البشرية': 'prtax.master.employee.manage',
+    'التقارير والتحليلات': 'core.reporting.view',
+    'أدوات ومساعدة': 'core.reporting.view',
+};
+
+function inferCapabilityKeyFromPath(path?: string): string | undefined {
+    const p = String(path || '').trim();
+    if (!p) return undefined;
+
+    if (p.startsWith('/system') || p.startsWith('/settings')) return 'core.security.permissions.manage';
+    if (p.startsWith('/approval')) return 'core.workflow.approve';
+    if (p.startsWith('/reports')) return 'core.reporting.view';
+
+    if (p.startsWith('/trade/sales') || p.startsWith('/sales') || p.startsWith('/pos')) return 'sales.invoice.read';
+    if (p.startsWith('/trade/purchasing') || p.startsWith('/purchasing') || p.startsWith('/import') || p.startsWith('/export')) return 'ti.purchase.invoice.create';
+    if (p.startsWith('/inventory') || p.startsWith('/items') || p.startsWith('/master/warehouses') || p.startsWith('/master/units') || p.startsWith('/master/item-categories') || p.startsWith('/master/brands')) return 'ti.master.item.manage';
+    if (p.startsWith('/hr')) return 'prtax.master.employee.manage';
+    if (p.startsWith('/manufacturing')) return 'sector.manufacturing.production.plan';
+    if (p.startsWith('/gl') || p.startsWith('/treasury') || p.startsWith('/banking')) return 'ti.gl.journal.post';
+    if (p.startsWith('/master/partners') || p.startsWith('/master/customer') || p.startsWith('/master/vendor') || p.startsWith('/master/regions') || p.startsWith('/master/credit-policies') || p.startsWith('/master/memberships') || p.startsWith('/master/sectors')) return 'ti.master.partner.manage';
+
+    return undefined;
+}
+
+function attachCapabilityKeys(items: MenuItem[]): MenuItem[] {
+    return items.map((item) => ({
+        ...item,
+        capabilityKey: item.capabilityKey || inferCapabilityKeyFromPath(item.path),
+        subItems: item.subItems ? attachCapabilityKeys(item.subItems) : undefined,
+    }));
+}
+
+for (const category of Object.keys(TOP_MENU_ITEMS)) {
+    TOP_MENU_ITEMS[category] = attachCapabilityKeys(TOP_MENU_ITEMS[category]);
+}
+
 
 // --- STRIP 2: SIDE MENU (AUTOMATICALLY SYNCED) ---
 // Now we simply map the TOP_MENU_ITEMS keys to SideMenuSections.
@@ -396,6 +477,7 @@ const CATEGORY_ICONS: Record<string, any> = {
 export const SIDE_MENU_ITEMS: SideMenuSection[] = Object.keys(TOP_MENU_ITEMS).map(key => ({
     title: key,
     icon: CATEGORY_ICONS[key] || FolderOpen,
+    capabilityKey: SECTION_CAPABILITY_MAP[key],
     items: TOP_MENU_ITEMS[key]
 }));
 
@@ -485,7 +567,7 @@ export const RIBBON_CONTENT: Record<string, RibbonGroup[]> = {
         {
             label: 'الادخال والاخراج',
             items: [
-                { label: 'نقل داخلي', icon: ArrowLeftRight, path: '/inventory/transfer' },
+                { label: 'نقل داخلي', icon: ArrowLeftRight, path: '/inventory/stock-transfers', capabilityKey: 'inventory.stock_transfer.read' },
                 { label: 'ارسالية مشتريات', icon: Truck, path: '/purchasing/grn' },
                 { label: 'ارسالية مبيعات', icon: Truck, path: '/sales/delivery-note' },
             ]
@@ -517,7 +599,7 @@ export const RIBBON_CONTENT: Record<string, RibbonGroup[]> = {
             items: [
                 { label: 'عرض اسعار', icon: FileText, path: '/sales/quotations' }, // Updated
                 { label: 'طلبية مبيعات', icon: ShoppingCart, path: '/sales/orders' }, // Updated
-                { label: 'فاتورة مبيعات', icon: ShoppingCart, path: '/sales/invoice' },
+                { label: 'فاتورة مبيعات', icon: ShoppingCart, path: '/sales/invoices', capabilityKey: 'sales.invoice.read' },
                 { label: 'فاتورة مردودات', icon: ArrowLeftRight, path: '/sales/return' },
             ]
         },
@@ -525,7 +607,7 @@ export const RIBBON_CONTENT: Record<string, RibbonGroup[]> = {
             label: 'المشتريات',
             items: [
                 { label: 'طلبية مشتريات', icon: FileText, path: '/purchasing/order' },
-                { label: 'فاتورة مشتريات', icon: ShoppingCart, path: '/purchasing/invoice' },
+                { label: 'فاتورة مشتريات', icon: ShoppingCart, path: '/purchases/invoices', capabilityKey: 'purchase.invoice.read' },
                 { label: 'فاتورة مردودات', icon: ArrowLeftRight, path: '/purchasing/return' },
             ]
         },
@@ -549,7 +631,7 @@ export const RIBBON_CONTENT: Record<string, RibbonGroup[]> = {
             items: [
                 { label: 'قبض', icon: Banknote, path: '/treasury/receipt' },
                 { label: 'صرف', icon: Banknote, path: '/treasury/payment' },
-                { label: 'قيد', icon: FileText, path: '/gl/journal-voucher' },
+                { label: 'قيد', icon: FileText, path: '/gl/journal-vouchers', capabilityKey: 'accounting.journal_voucher.read' },
                 { label: 'قيد بنكي', icon: FileText, path: '/banking/entries' },
                 { label: 'اشعار دائن', icon: FileMinus, path: '/gl/credit-note' },
                 { label: 'اشعار مدين', icon: FilePlus, path: '/gl/debit-note' },

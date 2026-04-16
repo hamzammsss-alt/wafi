@@ -51,7 +51,7 @@ const AttendanceImport = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl font-sans" dir="rtl">
+        <div className="app-page" dir="rtl">
             <h1 className="text-2xl font-bold text-gray-800 mb-6">استيراد بصمات الدوام</h1>
 
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">

@@ -97,7 +97,7 @@ export const Payslips = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl" dir="rtl">
+        <div className="app-page" dir="rtl">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -139,7 +139,7 @@ export const Payslips = () => {
 const PayslipCard = ({ slip, onPrint }: any) => {
     const deductions = slip.absent_days_deduction + slip.advance_deduction + slip.penalty_deduction;
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+        <div className="card overflow-hidden hover:shadow-md transition-shadow">
             <div className="bg-gray-50 p-4 border-b flex justify-between items-center">
                 <div>
                     <div className="font-bold text-gray-800">{slip.employee_name}</div>
@@ -173,3 +173,4 @@ const PayslipCard = ({ slip, onPrint }: any) => {
         </div>
     )
 }
+

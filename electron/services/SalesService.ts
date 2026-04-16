@@ -2,17 +2,64 @@ import { db } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 import { JournalService } from './JournalService';
 import { InventoryService } from './InventoryService';
+import { AccountingResolutionUseCases } from '../../src/main/application/useCases/AccountingResolutionUseCases';
+import { ResolveAccountsOutput } from '../../src/main/application/dtos/AccountingResolutionDtos';
+import { FinancialAccountRole } from '../../src/main/domain/accountingResolution/enums/FinancialAccountRole';
+import { ResolutionDirection } from '../../src/main/domain/accountingResolution/enums/ResolutionDirection';
+
+type SalesInvoiceCreateContext = {
+    companyId?: string | null;
+    branchId?: string | null;
+    userId?: string | null;
+};
+
+type ItemResolutionMeta = {
+    itemGroupId: string | null;
+    isService: boolean;
+};
+
+type PreparedSalesInvoiceLine = {
+    sourceLine: any;
+    itemId: string | null;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+    taxAmount: number;
+    netTotal: number;
+    receivableAccountId: string;
+    revenueAccountId: string;
+    vatOutputAccountId: string | null;
+    cogsAccountId: string | null;
+    inventoryAccountId: string | null;
+    unitCost: number;
+    cogsTotal: number;
+};
+
+type JournalAccumulatorLine = {
+    debit: number;
+    credit: number;
+    description: string;
+};
 
 export class SalesService {
+    private static accountResolutionUseCases: AccountingResolutionUseCases | null = null;
+
+    static configureAccountResolutionUseCases(useCases: AccountingResolutionUseCases): void {
+        this.accountResolutionUseCases = useCases;
+    }
 
     // --- Invoice Operations ---
     // --- Invoice Operations ---
-    static createInvoice(invoice: any) {
+    static async createInvoice(invoice: any, createContext: SalesInvoiceCreateContext = {}) {
         // Invoice Data Structure:
         // { header: { customer_id, branch_id, manual_ref, cost_center_id, ... }, lines: [ ... ] }
 
         const { header, lines } = invoice;
         const invoiceId = uuidv4();
+        const dispatchDocumentId = String(header?.dispatch_document_id || '').trim();
+        const salesOrderId = String(header?.sales_order_id || '').trim();
+        const quotationId = String(header?.quotation_id || '').trim();
+        const companyId = String(header?.company_id || createContext.companyId || 'COMP_01').trim() || 'COMP_01';
 
         // 0. Self-Heal Schema (Add missing columns)
         try {
@@ -22,6 +69,15 @@ export class SalesService {
             }
             if (!cols.some((c: any) => c.name === 'cost_center_id')) {
                 db.prepare("ALTER TABLE sales_invoices ADD COLUMN cost_center_id TEXT").run();
+            }
+            if (!cols.some((c: any) => c.name === 'dispatch_document_id')) {
+                db.prepare("ALTER TABLE sales_invoices ADD COLUMN dispatch_document_id TEXT").run();
+            }
+            if (!cols.some((c: any) => c.name === 'sales_order_id')) {
+                db.prepare("ALTER TABLE sales_invoices ADD COLUMN sales_order_id TEXT").run();
+            }
+            if (!cols.some((c: any) => c.name === 'quotation_id')) {
+                db.prepare("ALTER TABLE sales_invoices ADD COLUMN quotation_id TEXT").run();
             }
         } catch (e) {
             console.error("Schema heal failed", e);
@@ -41,8 +97,8 @@ export class SalesService {
         }
 
         // Resolve Branch (Fallback logic)
-        let branchId = header.branch_id;
-        if (!branchId || branchId === 'MAIN') {
+        let branchId = String(header?.branch_id || createContext.branchId || '').trim();
+        if (!branchId || branchId.toUpperCase() === 'MAIN') {
             const main = db.prepare("SELECT id FROM branches WHERE is_main = 1").get();
             if (main) branchId = main.id;
             else {
@@ -58,24 +114,29 @@ export class SalesService {
 
         // 1. Validate
         if (!header.customer_id || lines.length === 0) throw new Error("Invalid invoice data");
+        const workingLines = (Array.isArray(lines) ? lines : []).filter((line: any) => {
+            const marker = this.normalizeNullableId(line?.item_id || line?.itemId);
+            const qty = this.toNumber(line?.quantity ?? line?.qty);
+            const price = this.toNumber(line?.unit_price ?? line?.price);
+            const tax = this.toNumber(line?.tax_amount ?? line?.taxAmount);
+            return Boolean(marker) || qty !== 0 || price !== 0 || tax !== 0;
+        });
+        if (workingLines.length === 0) throw new Error("Invalid invoice data");
+        const customer = db.prepare('SELECT id, name_ar FROM business_partners WHERE id = ?').get(header.customer_id) as any;
+        if (!customer) throw new Error("Customer not found");
+
+        const postingPlan = await SalesService.prepareSalesInvoicePosting({
+            companyId,
+            branchId,
+            invoiceNo,
+            dispatchDocumentId,
+            header,
+            lines: workingLines,
+        });
+        const createdBy = String(createContext.userId || header?.created_by || 'System');
 
         // Start Transaction
         const runTx = db.transaction(() => {
-
-            // 2. Create Journal Entry (Financial Impact)
-            // Debit: Customer (AR)
-            // Credit: Sales Revenue
-            // Credit: VAT Out
-
-            // We need to fetch Customer's Linked Account
-            const customer = db.prepare('SELECT linked_account_id, name_ar FROM business_partners WHERE id = ?').get(header.customer_id);
-            if (!customer || !customer.linked_account_id) throw new Error("Customer has no linked account");
-
-            // Calculate Totals for Journal
-            const subtotal = lines.reduce((sum: number, l: any) => sum + (l.quantity * l.unit_price), 0);
-            const vatTotal = lines.reduce((sum: number, l: any) => sum + (l.tax_amount || 0), 0);
-            const grandTotal = subtotal + vatTotal; // Logic simplification (ignoring discount for now)
-
             // Create Journal Header
             const journalResult = JournalService.createJournalEntry({
                 voucher_type: 'Sales Invoice',
@@ -86,33 +147,7 @@ export class SalesService {
                 exchange_rate: header.exchange_rate,
                 status: 'POSTED',
                 branch_id: branchId
-            }, [
-                // DEBIT: Customer
-                {
-                    account_id: customer.linked_account_id,
-                    debit: grandTotal,
-                    credit: 0,
-                    line_description: `فاتورة مبيعات رقم ${invoiceNo}`,
-                    cost_center_id: header.cost_center_id
-                },
-                // CREDIT: Sales (Account 4101 - General Sales - Should effectively be dynamic per item or global setting)
-                // For prototype: Hardcoded or Fetched helper
-                {
-                    account_id: SalesService.getSalesAccount(),
-                    debit: 0,
-                    credit: subtotal,
-                    line_description: `مبيعات`,
-                    cost_center_id: header.cost_center_id
-                },
-                // CREDIT: VAT (Account 213 - Output VAT)
-                ...(vatTotal > 0 ? [{
-                    account_id: SalesService.getVATAccount(),
-                    debit: 0,
-                    credit: vatTotal,
-                    line_description: `ضريبة مبيعات`,
-                    cost_center_id: header.cost_center_id
-                }] : [])
-            ]);
+            }, postingPlan.journalLines);
 
             if (!journalResult.success) throw new Error("Failed to create journal entry");
 
@@ -122,69 +157,453 @@ export class SalesService {
                     id, invoice_no, customer_id, branch_id, warehouse_id, date, due_date,
                     subtotal, tax_total, grand_total, currency_id, exchange_rate,
                     status, payment_status, journal_header_id, created_by,
-                    manual_ref, cost_center_id
+                    manual_ref, cost_center_id, notes,
+                    dispatch_document_id, sales_order_id, quotation_id
                 ) VALUES (
                     @id, @no, @custId, @branchId, @whId, @date, @dueDate,
                     @sub, @tax, @grand, @curr, @rate,
                     'POSTED', 'UNPAID', @journalId, @user,
-                    @manual_ref, @cost_center_id
+                    @manual_ref, @cost_center_id, @notes,
+                    @dispatch_document_id, @sales_order_id, @quotation_id
                 )
             `).run({
                 id: invoiceId, no: invoiceNo, custId: header.customer_id, branchId: branchId, whId: header.warehouse_id,
                 date: header.date, dueDate: header.due_date,
-                sub: subtotal, tax: vatTotal, grand: grandTotal,
+                sub: postingPlan.subtotal, tax: postingPlan.taxTotal, grand: postingPlan.grandTotal,
                 curr: header.currency_id, rate: header.exchange_rate,
-                journalId: journalResult.id, user: 'System',
+                journalId: journalResult.id, user: createdBy,
                 manual_ref: header.manual_ref || null,
-                cost_center_id: header.cost_center_id || null
+                cost_center_id: header.cost_center_id || null,
+                notes: header.notes || null,
+                dispatch_document_id: dispatchDocumentId || null,
+                sales_order_id: salesOrderId || null,
+                quotation_id: quotationId || null
             });
 
             // 4. Save Lines & Update Stock
             const insertLine = db.prepare(`
                 INSERT INTO sales_invoice_lines (
                     id, invoice_id, item_id, description, quantity, unit_id,
-                    unit_price, total_price, tax_amount, net_total
+                    unit_price, total_price, tax_amount, net_total, dispatch_line_id
                 ) VALUES (
                     @id, @invId, @itemId, @desc, @qty, @unitId,
-                    @price, @total, @tax, @net
+                    @price, @total, @tax, @net, @dispatchLineId
                 )
             `);
 
-            for (const line of lines) {
+            for (const preparedLine of postingPlan.lines) {
+                const line = preparedLine.sourceLine;
+                // Get dispatch line to trace back to source sales order line
+                let sourceLineId = null;
+                if (dispatchDocumentId) {
+                    const dl = db.prepare('SELECT source_line_id FROM dispatch_lines WHERE id = ?').get(line.dispatch_line_id) as any;
+                    if (dl) sourceLineId = dl.source_line_id;
+                }
+
                 // Insert Line
                 insertLine.run({
                     id: uuidv4(),
                     invId: invoiceId,
-                    itemId: line.item_id,
+                    itemId: preparedLine.itemId,
                     desc: line.description,
-                    qty: line.quantity,
+                    qty: preparedLine.quantity,
                     unitId: line.unit_id,
-                    price: line.unit_price,
-                    total: line.quantity * line.unit_price,
-                    tax: line.tax_amount || 0,
-                    net: (line.quantity * line.unit_price) + (line.tax_amount || 0)
+                    price: preparedLine.unitPrice,
+                    total: preparedLine.subtotal,
+                    tax: preparedLine.taxAmount,
+                    net: preparedLine.netTotal,
+                    dispatchLineId: line.dispatch_line_id || null
                 });
 
-                // Get current stock cost (Weighted Average or Standard)
-                const stockInfo = InventoryService.getStock(line.item_id, header.warehouse_id);
-                // @ts-ignore
-                const cost = stockInfo.avg_cost || 0;
+                // Update Sales Order Line invoiced_qty if we have a source
+                if (sourceLineId) {
+                    db.prepare(`
+                        UPDATE sales_order_lines
+                        SET invoiced_qty = COALESCE(invoiced_qty, 0) + ?
+                        WHERE id = ?
+                    `).run(preparedLine.quantity, sourceLineId);
+                }
 
-                // Update Stock (OUT) with Cost for History
-                InventoryService.updateStock(
-                    line.item_id,
-                    line.quantity,
-                    'OUT',
-                    invoiceNo,
-                    `Sales Invoice`,
-                    cost, // Pass the cost to inventory transaction
-                    header.warehouse_id
-                );
+                // Update Stock ONLY IF NOT DISPATCHED (direct invoice)
+                if (!dispatchDocumentId && preparedLine.itemId) {
+                    InventoryService.updateStock(
+                        preparedLine.itemId,
+                        preparedLine.quantity,
+                        'OUT',
+                        invoiceNo,
+                        `Sales Invoice`,
+                        preparedLine.unitCost,
+                        header.warehouse_id
+                    );
+                }
+            }
+
+            // Update associated documents
+            if (dispatchDocumentId) {
+                db.prepare("UPDATE dispatch_header SET status = 'مرحل', invoice_id = ?, invoiced_at = CURRENT_TIMESTAMP WHERE id = ?").run(invoiceId, dispatchDocumentId);
+            }
+
+            if (salesOrderId) {
+                db.prepare("UPDATE sales_orders SET status = 'COMPLETED' WHERE id = ?").run(salesOrderId);
+            }
+            if (quotationId) {
+                db.prepare("UPDATE sales_quotations SET status = 'CONVERTED' WHERE id = ?").run(quotationId);
             }
         });
 
         runTx();
         return { success: true, id: invoiceId, invoice_no: invoiceNo };
+    }
+
+    private static async prepareSalesInvoicePosting(input: {
+        companyId: string;
+        branchId: string;
+        invoiceNo: string;
+        dispatchDocumentId: string;
+        header: any;
+        lines: any[];
+    }): Promise<{
+        lines: PreparedSalesInvoiceLine[];
+        journalLines: any[];
+        subtotal: number;
+        taxTotal: number;
+        grandTotal: number;
+    }> {
+        const resolutionUseCases = this.getAccountResolutionUseCases();
+        const itemMetaCache = new Map<string, ItemResolutionMeta | null>();
+        const preparedLines: PreparedSalesInvoiceLine[] = [];
+        const journalAccumulator = new Map<string, JournalAccumulatorLine>();
+
+        let subtotal = 0;
+        let taxTotal = 0;
+        let grandTotal = 0;
+
+        for (let index = 0; index < input.lines.length; index += 1) {
+            const sourceLine = input.lines[index];
+            const itemId = this.normalizeNullableId(sourceLine?.item_id || sourceLine?.itemId);
+
+            const quantity = this.roundAmount(this.toNumber(sourceLine?.quantity ?? sourceLine?.qty));
+            const unitPrice = this.roundAmount(this.toNumber(sourceLine?.unit_price ?? sourceLine?.price));
+            const lineSubtotal = this.roundAmount(quantity * unitPrice);
+
+            const taxRate = this.toNumber(sourceLine?.tax_rate);
+            const explicitTaxAmount = this.toNumber(sourceLine?.tax_amount ?? sourceLine?.taxAmount);
+            const lineTaxAmount = this.roundAmount(
+                explicitTaxAmount !== 0 ? explicitTaxAmount : lineSubtotal * (taxRate / 100),
+            );
+            const lineNetTotal = this.roundAmount(lineSubtotal + lineTaxAmount);
+
+            let itemMeta: ItemResolutionMeta | null = null;
+            if (itemId) {
+                if (!itemMetaCache.has(itemId)) {
+                    itemMetaCache.set(itemId, this.getItemResolutionMeta(itemId));
+                }
+                itemMeta = itemMetaCache.get(itemId) || null;
+            }
+
+            const isService = this.isServiceLine(sourceLine, itemMeta);
+            const requiresInventory = !input.dispatchDocumentId && !isService;
+            const requiredRoles: FinancialAccountRole[] = [FinancialAccountRole.RECEIVABLE_ACCOUNT];
+            if (lineTaxAmount > 0) requiredRoles.push(FinancialAccountRole.VAT_OUTPUT_ACCOUNT);
+            if (requiresInventory) {
+                requiredRoles.push(FinancialAccountRole.COGS_ACCOUNT);
+                requiredRoles.push(FinancialAccountRole.INVENTORY_ACCOUNT);
+            }
+
+            const resolution = await resolutionUseCases.resolveRequiredAccounts(input.companyId, {
+                companyId: input.companyId,
+                branchId: input.branchId,
+                documentType: 'SALES_INVOICE',
+                lineType: isService ? 'SERVICE' : 'ITEM',
+                itemId,
+                itemGroupId: itemMeta?.itemGroupId || null,
+                warehouseId: this.normalizeNullableId(input.header?.warehouse_id),
+                partnerId: this.normalizeNullableId(input.header?.customer_id),
+                taxProfileId: this.normalizeNullableId(input.header?.tax_group_id),
+                isService,
+                requiresInventory,
+                requiresTax: lineTaxAmount > 0,
+                currencyCode: this.normalizeNullableId(input.header?.currency_id),
+                direction: ResolutionDirection.SALE,
+                requiredRoles,
+                optionalRoles: [
+                    FinancialAccountRole.REVENUE_ACCOUNT,
+                    FinancialAccountRole.SERVICE_REVENUE_ACCOUNT,
+                    FinancialAccountRole.SALES_DISCOUNT_ACCOUNT,
+                    FinancialAccountRole.ROUNDING_ACCOUNT,
+                ],
+            });
+
+            if (!resolution.success) {
+                throw this.buildResolutionError(index + 1, resolution);
+            }
+
+            const receivable = resolution.resolvedAccounts[FinancialAccountRole.RECEIVABLE_ACCOUNT];
+            if (!receivable) {
+                throw this.buildRoleMissingError(index + 1, FinancialAccountRole.RECEIVABLE_ACCOUNT, resolution);
+            }
+
+            const preferredRevenueRole = isService
+                ? FinancialAccountRole.SERVICE_REVENUE_ACCOUNT
+                : FinancialAccountRole.REVENUE_ACCOUNT;
+            const alternateRevenueRole = isService
+                ? FinancialAccountRole.REVENUE_ACCOUNT
+                : FinancialAccountRole.SERVICE_REVENUE_ACCOUNT;
+
+            const revenue =
+                resolution.resolvedAccounts[preferredRevenueRole] ||
+                resolution.resolvedAccounts[alternateRevenueRole];
+
+            if (!revenue) {
+                throw this.buildRoleMissingError(index + 1, preferredRevenueRole, resolution, {
+                    fallbackRole: alternateRevenueRole,
+                });
+            }
+
+            const vatOutput =
+                lineTaxAmount > 0
+                    ? resolution.resolvedAccounts[FinancialAccountRole.VAT_OUTPUT_ACCOUNT] || null
+                    : null;
+            if (lineTaxAmount > 0 && !vatOutput) {
+                throw this.buildRoleMissingError(index + 1, FinancialAccountRole.VAT_OUTPUT_ACCOUNT, resolution);
+            }
+
+            const cogs =
+                requiresInventory
+                    ? resolution.resolvedAccounts[FinancialAccountRole.COGS_ACCOUNT] || null
+                    : null;
+            const inventory =
+                requiresInventory
+                    ? resolution.resolvedAccounts[FinancialAccountRole.INVENTORY_ACCOUNT] || null
+                    : null;
+
+            if (requiresInventory && (!cogs || !inventory)) {
+                throw this.buildRoleMissingError(index + 1, FinancialAccountRole.COGS_ACCOUNT, resolution, {
+                    requiredPair: FinancialAccountRole.INVENTORY_ACCOUNT,
+                });
+            }
+
+            let unitCost = 0;
+            let cogsTotal = 0;
+            if (requiresInventory && itemId) {
+                const stockInfo = InventoryService.getStock(itemId, input.header?.warehouse_id) as any;
+                unitCost = this.roundAmount(this.toNumber(stockInfo?.avg_cost));
+                cogsTotal = this.roundAmount(unitCost * quantity);
+            }
+
+            preparedLines.push({
+                sourceLine,
+                itemId,
+                quantity,
+                unitPrice,
+                subtotal: lineSubtotal,
+                taxAmount: lineTaxAmount,
+                netTotal: lineNetTotal,
+                receivableAccountId: receivable.accountId,
+                revenueAccountId: revenue.accountId,
+                vatOutputAccountId: vatOutput ? vatOutput.accountId : null,
+                cogsAccountId: cogs ? cogs.accountId : null,
+                inventoryAccountId: inventory ? inventory.accountId : null,
+                unitCost,
+                cogsTotal,
+            });
+
+            subtotal = this.roundAmount(subtotal + lineSubtotal);
+            taxTotal = this.roundAmount(taxTotal + lineTaxAmount);
+            grandTotal = this.roundAmount(grandTotal + lineNetTotal);
+
+            this.addJournalAmount(
+                journalAccumulator,
+                receivable.accountId,
+                lineNetTotal,
+                0,
+                `فاتورة مبيعات رقم ${input.invoiceNo}`,
+            );
+            this.addJournalAmount(
+                journalAccumulator,
+                revenue.accountId,
+                0,
+                lineSubtotal,
+                'مبيعات',
+            );
+
+            if (lineTaxAmount > 0 && vatOutput) {
+                this.addJournalAmount(
+                    journalAccumulator,
+                    vatOutput.accountId,
+                    0,
+                    lineTaxAmount,
+                    'ضريبة مبيعات',
+                );
+            }
+
+            if (cogsTotal > 0 && cogs && inventory) {
+                this.addJournalAmount(
+                    journalAccumulator,
+                    cogs.accountId,
+                    cogsTotal,
+                    0,
+                    `تكلفة مبيعات الإرسالية ${input.invoiceNo}`,
+                );
+                this.addJournalAmount(
+                    journalAccumulator,
+                    inventory.accountId,
+                    0,
+                    cogsTotal,
+                    `نقص مخزون إرسالية ${input.invoiceNo}`,
+                );
+            }
+        }
+
+        const journalLines = Array.from(journalAccumulator.entries()).map(([accountId, value]) => ({
+            account_id: accountId,
+            debit: this.roundAmount(value.debit),
+            credit: this.roundAmount(value.credit),
+            line_description: value.description,
+            cost_center_id: input.header?.cost_center_id || null,
+        }));
+
+        const debitTotal = this.roundAmount(journalLines.reduce((sum: number, line: any) => sum + this.toNumber(line.debit), 0));
+        const creditTotal = this.roundAmount(journalLines.reduce((sum: number, line: any) => sum + this.toNumber(line.credit), 0));
+
+        if (Math.abs(debitTotal - creditTotal) > 0.000001) {
+            const err: any = new Error('Unbalanced Sales Invoice posting after account resolution');
+            err.code = 'UNBALANCED_POSTING';
+            err.messageKey = 'error.sales_invoice.posting.unbalanced';
+            err.details = {
+                debitTotal,
+                creditTotal,
+                journalLines,
+            };
+            throw err;
+        }
+
+        return {
+            lines: preparedLines,
+            journalLines,
+            subtotal,
+            taxTotal,
+            grandTotal,
+        };
+    }
+
+    private static addJournalAmount(
+        bucket: Map<string, JournalAccumulatorLine>,
+        accountId: string,
+        debit: number,
+        credit: number,
+        description: string,
+    ): void {
+        if (!accountId) {
+            return;
+        }
+
+        const normalizedDebit = this.roundAmount(this.toNumber(debit));
+        const normalizedCredit = this.roundAmount(this.toNumber(credit));
+        if (normalizedDebit === 0 && normalizedCredit === 0) {
+            return;
+        }
+
+        const current = bucket.get(accountId);
+        if (!current) {
+            bucket.set(accountId, {
+                debit: normalizedDebit,
+                credit: normalizedCredit,
+                description,
+            });
+            return;
+        }
+
+        current.debit = this.roundAmount(current.debit + normalizedDebit);
+        current.credit = this.roundAmount(current.credit + normalizedCredit);
+    }
+
+    private static getItemResolutionMeta(itemId: string): ItemResolutionMeta | null {
+        const row = db.prepare('SELECT * FROM items WHERE id = ?').get(itemId) as Record<string, unknown> | undefined;
+        if (!row) {
+            return null;
+        }
+
+        const type = String((row as any).type || '').trim().toUpperCase();
+        const isService =
+            this.toNumber((row as any).is_service) === 1 ||
+            type === 'SERVICE' ||
+            type === 'SERVICES';
+
+        return {
+            itemGroupId: this.normalizeNullableId(
+                (row as any).item_group_id ||
+                (row as any).group_id ||
+                (row as any).category_id,
+            ),
+            isService,
+        };
+    }
+
+    private static isServiceLine(line: any, itemMeta: ItemResolutionMeta | null): boolean {
+        if (this.toNumber(line?.is_service) === 1) {
+            return true;
+        }
+        if (itemMeta?.isService) {
+            return true;
+        }
+        const type = String(line?.type || line?.item_type || '').trim().toUpperCase();
+        return type === 'SERVICE' || type === 'SERVICES';
+    }
+
+    private static getAccountResolutionUseCases(): AccountingResolutionUseCases {
+        if (!this.accountResolutionUseCases) {
+            const err: any = new Error('Account Resolution Engine is not configured for SalesService');
+            err.code = 'ACCOUNT_RESOLUTION_NOT_CONFIGURED';
+            err.messageKey = 'error.account_resolution.not_configured';
+            throw err;
+        }
+        return this.accountResolutionUseCases;
+    }
+
+    private static buildResolutionError(lineNo: number, resolution: ResolveAccountsOutput): Error {
+        const err: any = new Error(`Account resolution failed for sales invoice line ${lineNo}`);
+        err.code = 'ACCOUNT_RESOLUTION_FAILED';
+        err.messageKey = 'error.sales_invoice.account_resolution.failed';
+        err.details = {
+            line: lineNo,
+            missingRoles: resolution.missingRoles,
+            trace: resolution.trace,
+        };
+        return err;
+    }
+
+    private static buildRoleMissingError(
+        lineNo: number,
+        role: FinancialAccountRole,
+        resolution: ResolveAccountsOutput,
+        extra: Record<string, unknown> = {},
+    ): Error {
+        const err: any = new Error(`Resolved accounts missing role ${role} for sales invoice line ${lineNo}`);
+        err.code = 'ACCOUNT_RESOLUTION_ROLE_MISSING';
+        err.messageKey = 'error.sales_invoice.account_resolution.role_missing';
+        err.details = {
+            line: lineNo,
+            role,
+            ...extra,
+            resolvedAccounts: resolution.resolvedAccounts,
+            trace: resolution.trace,
+        };
+        return err;
+    }
+
+    private static normalizeNullableId(value: unknown): string | null {
+        const normalized = String(value || '').trim();
+        return normalized ? normalized : null;
+    }
+
+    private static toNumber(value: unknown): number {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    private static roundAmount(value: number): number {
+        return Number(value.toFixed(6));
     }
 
     // --- Helpers (Mocking Configuration) ---
@@ -243,6 +662,52 @@ export class SalesService {
             LEFT JOIN business_partners c ON i.customer_id = c.id
             ORDER BY i.created_at DESC
         `).all();
+    }
+
+    static postInvoice(id: string, userId: string = 'System') {
+        const doc = db.prepare('SELECT status FROM sales_invoices WHERE id = ?').get(id) as any;
+        if (!doc) throw new Error("Document not found");
+        if (doc.status === 'POSTED') throw new Error("Document is already POSTED");
+
+        try {
+            const cols = db.prepare("PRAGMA table_info(sales_invoices)").all();
+            if (!cols.some((c: any) => c.name === 'posted_by')) {
+                db.prepare("ALTER TABLE sales_invoices ADD COLUMN posted_by TEXT").run();
+                db.prepare("ALTER TABLE sales_invoices ADD COLUMN posted_at DATETIME").run();
+            }
+        } catch (e) {
+            console.error("Schema heal failed", e);
+        }
+
+        db.prepare(`
+            UPDATE sales_invoices 
+            SET status = 'POSTED', posted_by = ?, posted_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        `).run(userId, id);
+        return { success: true };
+    }
+
+    static submitInvoiceForApproval(id: string, userId: string = 'System') {
+        const doc = db.prepare('SELECT status FROM sales_invoices WHERE id = ?').get(id) as any;
+        if (!doc) throw new Error("Document not found");
+        if (doc.status === 'POSTED') throw new Error("Document is already POSTED");
+
+        try {
+            const cols = db.prepare("PRAGMA table_info(sales_invoices)").all();
+            if (!cols.some((c: any) => c.name === 'submitted_by')) {
+                db.prepare("ALTER TABLE sales_invoices ADD COLUMN submitted_by TEXT").run();
+                db.prepare("ALTER TABLE sales_invoices ADD COLUMN submitted_at DATETIME").run();
+            }
+        } catch (e) {
+            console.error("Schema heal failed", e);
+        }
+
+        db.prepare(`
+            UPDATE sales_invoices 
+            SET status = 'PENDING_APPROVAL', submitted_by = ?, submitted_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        `).run(userId, id);
+        return { success: true };
     }
     // --- Quotations ---
     static createQuotation(data: any) {
@@ -460,10 +925,21 @@ export class SalesService {
 
     static getOrders() {
         return db.prepare(`
-            SELECT o.*, c.name_ar as customer_name 
+            SELECT o.*, c.name_ar as customer_name, q.quotation_no
             FROM sales_orders o
             LEFT JOIN business_partners c ON o.customer_id = c.id
+            LEFT JOIN sales_quotations q ON o.quotation_id = q.id
             ORDER BY o.created_at DESC
+        `).all();
+    }
+
+    static getPendingOrders() {
+        return db.prepare(`
+            SELECT o.*, c.name_ar as customer_name
+            FROM sales_orders o
+            LEFT JOIN business_partners c ON o.customer_id = c.id
+            WHERE o.status = 'CONFIRMED' AND o.delivery_status IN ('PENDING', 'PARTIAL')
+            ORDER BY o.date ASC
         `).all();
     }
 

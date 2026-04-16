@@ -6,9 +6,9 @@ export const SalesReport: React.FC = () => {
     const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
 
     return (
-        <div className="h-full bg-gray-50 p-6" dir="rtl">
+        <div className="app-page h-full" dir="rtl">
             <div className="max-w-7xl mx-auto">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="card p-6 mb-6">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                             <TrendingUp size={24} className="text-green-600" />
@@ -21,7 +21,7 @@ export const SalesReport: React.FC = () => {
                 </div>
 
                 {/* Filters */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="card p-6 mb-6">
                     <div className="grid grid-cols-4 gap-4">
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
@@ -65,27 +65,27 @@ export const SalesReport: React.FC = () => {
 
                 {/* Summary Cards */}
                 <div className="grid grid-cols-4 gap-6 mb-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="card p-6">
                         <p className="text-sm text-gray-500 mb-2">إجمالي المبيعات</p>
                         <p className="text-3xl font-bold text-green-600">15,450 ₪</p>
                     </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="card p-6">
                         <p className="text-sm text-gray-500 mb-2">عدد الفواتير</p>
                         <p className="text-3xl font-bold text-blue-600">24</p>
                     </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="card p-6">
                         <p className="text-sm text-gray-500 mb-2">متوسط الفاتورة</p>
                         <p className="text-3xl font-bold text-purple-600">643 ₪</p>
                     </div>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="card p-6">
                         <p className="text-sm text-gray-500 mb-2">صافي الربح</p>
                         <p className="text-3xl font-bold text-orange-600">4,320 ₪</p>
                     </div>
                 </div>
 
                 {/* Details Table */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <table className="w-full">
+                <div className="card overflow-hidden">
+                    <table className="dense-table w-full">
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
                                 <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">رقم الفاتورة</th>
@@ -114,3 +114,4 @@ export const SalesReport: React.FC = () => {
         </div>
     );
 };
+

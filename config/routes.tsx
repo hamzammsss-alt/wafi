@@ -13,11 +13,12 @@ import Users from '../pages/system/Users';
 import { ChangePassword } from '@/pages/system/ChangePassword';
 import { Logout } from '@/pages/system/Logout';
 import Login from '../pages/system/Login';
-import { Currencies } from '../pages/definitions/financial/Currencies';
+import { CurrencyList } from '../pages/definitions/finance/CurrencyList';
 import { Dashboard } from '../pages/Dashboard';
 import { ExpenseTypes } from '../pages/definitions/financial/ExpenseTypes';
-import { CostCenters } from '../pages/definitions/financial/CostCenters';
-import { Taxes } from '../pages/definitions/financial/Taxes';
+import { CostCenterList } from '../pages/definitions/finance/CostCenterList';
+import { CostCenterForm } from '../pages/definitions/finance/CostCenterForm';
+import { TaxList } from '../pages/definitions/finance/TaxList';
 import { PaymentMethods } from '../pages/definitions/financial/PaymentMethods';
 import { ReceiptVoucher } from '../pages/treasury/operations/ReceiptVoucher';
 import { ReceiptVoucherList } from '../pages/treasury/operations/ReceiptVoucherList';
@@ -63,6 +64,9 @@ import { CustomerTypesPage } from '../pages/definitions/partners/CustomerTypesPa
 import { VendorTypesPage } from '../pages/definitions/partners/VendorTypesPage';
 import { RegionsPage } from '../pages/definitions/partners/RegionsPage';
 import { SalesRepsPage } from '../pages/definitions/partners/SalesRepsPage';
+import { MembershipsPage } from '../pages/definitions/partners/MembershipsPage';
+import { SectorsPage } from '../pages/definitions/partners/SectorsPage';
+import { CreditPoliciesPage } from '../pages/definitions/partners/CreditPoliciesPage';
 import { CustomerCard } from '../pages/definitions/CustomerCard';
 import { SupplierCard } from '../pages/definitions/SupplierCard';
 import { PartnerForm } from '../pages/definitions/partners/PartnerForm'; // Unified
@@ -83,15 +87,16 @@ import { StockTake } from '../pages/inventory/StockTake';
 import { ClosePeriod } from '../pages/inventory/ClosePeriod';
 import { StockTransactions } from '../pages/inventory/StockTransactions';
 import InternalOrderPage from '../pages/inventory/InternalOrderPage';
-import DispatchPage from '../pages/inventory/DispatchPage';
-import ReceiptPage from '../pages/inventory/ReceiptPage';
+import DispatchListDoc from '../src/pages/inventory/DispatchList';
+import DispatchPageDoc from '../src/pages/inventory/DispatchPage';
+import ReceiptListDoc from '../src/pages/inventory/ReceiptList';
+import ReceiptPageDoc from '../src/pages/inventory/ReceiptPage';
 import SuppliesRequestPage from '../pages/inventory/SuppliesRequestPage';
 import StockAdjustmentPage from '../pages/inventory/StockAdjustmentPage';
 
 // Purchases & Import
 // Purchasing & Import
 import { GoodsReceipt, PurchaseReturn } from '../pages/purchases/PurchasingCycle';
-import GoodsReceiptList from '../pages/purchases/GoodsReceiptList';
 import { PurchaseRequestList } from '../pages/purchases/requests/PurchaseRequestList';
 import { PurchaseRequestForm } from '../pages/purchases/requests/PurchaseRequestForm';
 import RFQList from '../pages/purchases/rfq/RFQList';
@@ -139,17 +144,26 @@ import { ProformaInvoiceForm } from '../pages/import-export/ProformaInvoiceForm'
 import ShipmentCostReport from '../pages/import-export/ShipmentCostReport';
 import CostComparisonReport from '../pages/import-export/CostComparisonReport';
 import ContainerArrivalReport from '../pages/import-export/ContainerArrivalReport';
-import { InvoiceList } from '../pages/sales/operations/InvoiceList';
-import { SalesInvoice } from '../pages/sales/operations/SalesInvoice';
+// ── NEW Sales Invoice Reference Document ──
+import SalesInvoiceList from '../src/pages/sales/SalesInvoiceList';
+import SalesInvoicePage from '../src/pages/sales/SalesInvoicePage';
+import PurchaseInvoiceListDoc from '../src/pages/purchases/PurchaseInvoiceList';
+import PurchaseInvoicePageDoc from '../src/pages/purchases/PurchaseInvoicePage';
+import StockTransferListDoc from '../src/pages/inventory/StockTransferList';
+import StockTransferPageDoc from '../src/pages/inventory/StockTransferPage';
+import JournalVoucherListDoc from '../src/pages/accounting/JournalVoucherList';
+import JournalVoucherPageDoc from '../src/pages/accounting/JournalVoucherPage';
 import { POSScreen } from '../pages/pos/POSScreen';
 // import { SalesReturn } from '../pages/sales/operations/SalesReturn'; // TODO: Implement
 // const SalesReturn = () => <PlaceholderPage title="مردودات مبيعات" category="Sales" />; // Placeholder for now
 const SalesReturn = () => <PlaceholderPage title="مردودات مبيعات" category="Sales" />; // Placeholder for now
 // Accounting
 import { ChartOfAccounts } from '../pages/accounting/master/ChartOfAccounts';
+import { FinancialDefinitions } from '../pages/accounting/master/FinancialDefinitions';
 import { OpeningBalances } from '../pages/accounting/master/OpeningBalances';
 import { JournalVoucher } from '../pages/accounting/operations/JournalVoucher';
 import JournalList from '../pages/accounting/operations/JournalList';
+import UnifiedAEVoucherPage from '../pages/accounting/operations/UnifiedAEVoucherPage';
 import { RecurringVoucher } from '../pages/accounting/operations/RecurringVoucher';
 import { SettlementVoucher } from '../pages/accounting/operations/SettlementVoucher';
 import { AssetsRegister } from '../pages/accounting/assets/AssetsRegister';
@@ -157,9 +171,15 @@ import { Depreciation } from '../pages/accounting/assets/Depreciation';
 import { AssetDisposal } from '../pages/accounting/assets/AssetDisposal';
 import { Budgets } from '../pages/accounting/budgets/Budgets';
 import { EstimatedBudgets } from '../pages/accounting/budgets/EstimatedBudgets';
-import BudgetList from '../pages/gl/BudgetList';
-import BudgetForm from '../pages/gl/BudgetForm';
-import BudgetReport from '../pages/gl/BudgetReport';
+import { BudgetList } from '../src/pages/financials/budgets/BudgetList';
+import { BudgetForm } from '../src/pages/financials/budgets/BudgetForm';
+import { FixedAssetList } from '../src/pages/financials/fixed-assets/FixedAssetList';
+import { FixedAssetForm } from '../src/pages/financials/fixed-assets/FixedAssetForm';
+import { BOMList } from '../src/pages/manufacturing/BOMList';
+import { BOMForm } from '../src/pages/manufacturing/BOMForm';
+import { ProductionOrderList } from '../src/pages/manufacturing/ProductionOrderList';
+import { ProductionOrderForm } from '../src/pages/manufacturing/ProductionOrderForm';
+const BudgetReport = () => <PlaceholderPage title="تقرير الموازنة" category="GL" />;
 
 // HR
 import OrganizationPage from '../pages/hr/OrganizationPage';
@@ -176,7 +196,7 @@ const StockTransfer = lazy(() => import('../pages/inventory/transactions/StockTr
 const AssemblyPage = lazy(() => import('../pages/inventory/transactions/AssemblyPage'));
 
 // --- Tools ---
-const LabelPrinting = lazy(() => import('../pages/inventory/tools/LabelPrinting'));
+const BarcodePrintingForm = lazy(() => import('../pages/inventory/tools/BarcodePrintingForm'));
 const BulkPricing = lazy(() => import('../pages/inventory/tools/BulkPricing'));
 
 // --- Assets ---
@@ -207,6 +227,7 @@ import { PurchasingAnalysis } from '../pages/reports/purchases/PurchasingAnalysi
 import { ImportReports } from '../pages/reports/purchases/ImportReports';
 import { InventoryStatus } from '../pages/reports/inventory/InventoryStatus';
 import { InventoryValuationReport } from '../pages/reports/inventory/InventoryValuationReport';
+import ItemsQuantityByWarehouseReport from '../pages/reports/inventory/ItemsQuantityByWarehouseReport';
 import { ChequeReports } from '../pages/reports/cheques/ChequeReports';
 import { Dashboard as ReportsDashboard } from '../pages/reports/Dashboard';
 import { PartnerLedger } from '../pages/reports/PartnerLedger';
@@ -223,6 +244,10 @@ import { NotepadApp } from '../pages/tools/office/NotepadApp';
 import { InternalMail } from '../pages/tools/communication/InternalMail';
 import { TeamChat } from '../pages/tools/communication/TeamChat';
 import { SMSService } from '../pages/tools/communication/SMSService';
+import { EmailService } from '../pages/tools/communication/EmailService';
+import { WhatsAppService } from '../pages/tools/communication/WhatsAppService';
+import { RFIDIntegration } from '../pages/tools/integration/RFIDIntegration';
+import { SmartArchive } from '../pages/tools/archiving/SmartArchive';
 import { FormDesigner } from '../pages/tools/designers/FormDesigner';
 import { PrintLayoutEditor } from '../pages/tools/designers/PrintLayoutEditor';
 
@@ -247,16 +272,22 @@ import { ToolsDashboard } from '../pages/tools/ToolsDashboard';
 import { WorkflowSimulation } from '../pages/tools/WorkflowSimulation';
 import PrintPreview from '@/pages/common/PrintPreview';
 import { WafiAi } from '../pages/WafiAi';
-
+import ApprovalInbox from '../src/pages/workflow/ApprovalInbox';
+import ApprovalAdmin from '../src/pages/workflow/ApprovalAdmin';
+import { EditionSettings } from '../src/pages/settings/EditionSettings';
+import { VerticalAppsHub } from '../src/pages/vertical/VerticalAppsHub';
+import { NgoDashboard } from '../src/pages/editions/NgoDashboard';
+import { GovernmentDashboard } from '../src/pages/editions/GovernmentDashboard';
 
 export interface RouteConfig {
     path: string;
     description: string;
     component: React.ReactNode;
+    capabilityKey?: string;
 }
 
 // Maps paths to their components
-export const APP_ROUTES: RouteConfig[] = [
+const APP_ROUTES_RAW: RouteConfig[] = [
     { path: '/definitions/attributes', description: 'تعاريف السمات', component: <AttributesPage /> },
     { path: '/definitions/analysis-codes', description: 'رموز التحليل', component: <AnalysisCodesPage /> },
     { path: '/', description: 'الرئيسية', component: <Dashboard /> },
@@ -266,6 +297,10 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/system/login', description: 'تسجيل الدخول', component: <Login /> }, // Note: Handled specially in App.tsx but good to have ref
     { path: '/system/close-year', description: 'إغلاق السنة المالية', component: <CloseYear /> },
     { path: '/logout', description: 'تسجيل الخروج', component: <Logout /> },
+
+    // Workflow
+    { path: '/approval-inbox', description: 'صندوق الاعتمادات', component: <ApprovalInbox /> },
+    { path: '/approval-rules', description: 'قواعد الاعتمادات', component: <ApprovalAdmin /> },
 
     // System - Database & Security
     { path: '/system/backup', description: 'النسخ الاحتياطي', component: <BackupRestore /> },
@@ -277,6 +312,7 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/settings/company', description: 'ملف الشركة', component: <CompanyProfile /> },
     { path: '/settings/branches', description: 'الفروع', component: <Branches /> },
     { path: '/settings/preferences', description: 'خيارات النظام', component: <Settings /> },
+    { path: '/settings/edition', description: 'إعداد النسخة', component: <EditionSettings /> },
 
     // System - Users & Permissions
     { path: '/system/users-guide', description: 'دليل المستخدمين', component: <Users /> },
@@ -285,10 +321,12 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/system/password', description: 'تغيير كلمة المرور', component: <ChangePassword /> },
 
     // Master Data - Financial
-    { path: '/master/currencies', description: 'العملات', component: <Currencies /> },
+    { path: '/master/currencies', description: 'العملات', component: <CurrencyList /> },
     { path: '/master/expense-types', description: 'أنواع المصاريف', component: <ExpenseTypes /> },
-    { path: '/master/cost-centers', description: 'مراكز التكلفة', component: <CostCenters /> },
-    { path: '/master/taxes', description: 'الضرائب', component: <Taxes /> },
+    { path: '/master/cost-centers', description: 'مراكز التكلفة', component: <CostCenterList /> },
+    { path: '/master/cost-centers/new', description: 'إضافة مركز تكلفة', component: <CostCenterForm /> },
+    { path: '/master/cost-centers/:id', description: 'تعديل مركز تكلفة', component: <CostCenterForm /> },
+    { path: '/master/taxes', description: 'الضرائب', component: <TaxList /> },
     { path: '/master/payment-methods', description: 'طرق الدفع', component: <PaymentMethods /> },
     { path: '/master/banks', description: 'البنوك والحسابات', component: <BanksPage /> },
 
@@ -298,12 +336,12 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/master/brands', description: 'الماركات', component: <BrandsPage /> },
     { path: '/master/stock-entry', description: 'إدخال مخزني', component: <StockEntry /> },
     { path: '/master/stock-issue', description: 'إخراج مخزني', component: <StockIssue /> },
-    { path: '/master/stock-transfer', description: 'نقل مخزني', component: <StockTransfer /> },
+    { path: '/master/stock-transfer', description: 'نقل مخزني', component: <StockTransferListDoc />, capabilityKey: 'inventory.stock_transfer.read' },
     { path: '/master/assembly', description: 'تجميع / تفكيك', component: <AssemblyPage /> },
     { path: '/master/warehouses', description: 'المستودعات', component: <WarehousesPage /> },
 
     // Tools
-    { path: '/inventory/tools/labels', description: 'طباعة الباركود', component: <LabelPrinting /> },
+    { path: '/inventory/tools/labels', description: 'طباعة الباركود', component: <BarcodePrintingForm /> },
     { path: '/inventory/tools/bulk-pricing', description: 'تعديل الأسعار الجماعي', component: <BulkPricing /> },
 
     // Master Data - Relationships
@@ -312,9 +350,13 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/master/regions', description: 'المناطق الجغرافية', component: <RegionsPage /> },
     { path: '/master/customer-types', description: 'تصنيف الزبائن', component: <CustomerTypesPage /> },
     { path: '/master/vendor-types', description: 'تصنيف الموردين', component: <VendorTypesPage /> },
+    { path: '/master/memberships', description: 'العضويات', component: <MembershipsPage /> },
+    { path: '/master/sectors', description: 'القطاعات', component: <SectorsPage /> },
+    { path: '/master/credit-policies', description: 'سياسات الائتمان', component: <CreditPoliciesPage /> },
+    { path: '/master/price-lists', description: 'قوائم الأسعار', component: <PriceListsPage /> },
     { path: '/master/customer-card', description: 'بطاقة عميل', component: <CustomerCard /> },
     { path: '/master/supplier-card', description: 'بطاقة مورد', component: <SupplierCard /> },
-    { path: '/master/partners', description: 'العملاء', component: <PartnerForm /> }, // Unified Route
+    { path: '/master/partners', description: 'دليل', component: <PartnerForm /> }, // Unified Route
     { path: '/master/customer-class', description: 'مجموعات الزبائن', component: <CustomerTypesPage /> }, // Legacy alias
     { path: '/master/vendor-class', description: 'مجموعات الموردين', component: <VendorTypesPage /> }, // Legacy alias
     { path: '/master/asset-categories', description: 'مجموعات الأصول الثابتة', component: <AssetCategories /> },
@@ -323,22 +365,32 @@ export const APP_ROUTES: RouteConfig[] = [
 
     // Inventory
     { path: '/items', description: 'بطاقة صنف', component: <ItemMaster /> }, // Updated component
+    { path: '/items/new', description: 'صنف جديد', component: <ItemMaster startInCreateMode /> },
     { path: '/items/services', description: 'أصناف خدمية', component: <ItemMaster defaultType="Service" /> },
-    { path: '/items/labels', description: 'طباعة الباركود', component: <BarcodeLabels /> },
+    { path: '/items/services/new', description: 'صنف خدمي جديد', component: <ItemMaster defaultType="Service" startInCreateMode /> },
+    { path: '/items/labels', description: 'طباعة الباركود', component: <BarcodePrintingForm /> },
     { path: '/items/price-update', description: 'تعديل أسعار', component: <PriceUpdate /> },
     { path: '/items/promotions', description: 'العروض', component: <Promotions /> },
 
     { path: '/inventory/stock-in', description: 'سند إدخال', component: <StockIn /> },
     { path: '/inventory/stock-out', description: 'سند إخراج', component: <StockOut /> },
     { path: '/inventory/transfer', description: 'نقل مخزني', component: <Transfer /> },
+    { path: '/inventory/stock-transfers', description: 'Stock Transfers', component: <StockTransferListDoc />, capabilityKey: 'inventory.stock_transfer.read' },
+    { path: '/inventory/stock-transfers/new', description: 'New Stock Transfer', component: <StockTransferPageDoc />, capabilityKey: 'inventory.stock_transfer.create' },
+    { path: '/inventory/stock-transfers/:id', description: 'Stock Transfer', component: <StockTransferPageDoc />, capabilityKey: 'inventory.stock_transfer.read' },
     { path: '/inventory/assembly', description: 'تجميع/تفكيك', component: <Assembly /> },
     { path: '/inventory/stock-take-sheets', description: 'أوراق الجرد', component: <StocktakeSheets /> },
     { path: '/inventory/stock-take', description: 'الجرد المخزني', component: <StockTake /> },
     { path: '/inventory/stock-transactions', description: 'حركات المخزون', component: <StockTransactions /> }, // This is "Stock Transactions" / تسوية
+    { path: '/inventory/transactions', description: 'حركات المخزون', component: <StockTransactions /> },
     { path: '/inventory/close-period', description: 'إغلاق الفترة', component: <ClosePeriod /> },
     { path: '/inventory/internal-order', description: 'طلبية مستودع داخلية', component: <InternalOrderPage /> },
-    { path: '/inventory/dispatch', description: 'سند إرسال', component: <DispatchPage /> },
-    { path: '/inventory/receipt', description: 'سند استلام مخزني', component: <ReceiptPage /> },
+    { path: '/inventory/dispatch', description: 'سندات الإرسال', component: <DispatchListDoc /> },
+    { path: '/inventory/dispatch/new', description: 'سند إرسال جديد', component: <DispatchPageDoc /> },
+    { path: '/inventory/dispatch/:id', description: 'سند إرسال', component: <DispatchPageDoc /> },
+    { path: '/inventory/receipt', description: 'سندات الاستلام', component: <ReceiptListDoc /> },
+    { path: '/inventory/receipt/new', description: 'سند استلام جديد', component: <ReceiptPageDoc /> },
+    { path: '/inventory/receipt/:id', description: 'سند استلام', component: <ReceiptPageDoc /> },
     { path: '/inventory/supplies-request', description: 'طلب لوازم', component: <SuppliesRequestPage /> },
     { path: '/inventory/adjustment', description: 'تعديل مخزون', component: <StockAdjustmentPage /> },
 
@@ -353,9 +405,12 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/purchasing/orders/new', description: 'طلبية شراء جديدة', component: <PurchaseOrderForm /> },
     { path: '/purchasing/order', description: 'طلبيات الشراء', component: <PurchaseOrderList /> }, // Legacy alias
 
-    { path: '/purchasing/grn', description: 'سند استلام', component: <GoodsReceipt /> },
-    { path: '/purchasing/invoice', description: 'فاتورة مشتريات', component: <PurchaseInvoice /> },
-    { path: '/purchasing/invoice/new', description: 'فاتورة جديدة', component: <PurchaseInvoice /> },
+    { path: '/purchasing/grn', description: 'سندات الاستلام', component: <ReceiptListDoc /> },
+    { path: '/purchasing/grn/new', description: 'سند استلام جديد', component: <ReceiptPageDoc /> },
+    { path: '/purchasing/grn/:id', description: 'سند استلام', component: <ReceiptPageDoc /> },
+    { path: '/purchasing/invoice', description: 'فاتورة مشتريات', component: <PurchaseInvoiceListDoc />, capabilityKey: 'purchase.invoice.read' },
+    { path: '/purchasing/invoice/new', description: 'فاتورة جديدة', component: <PurchaseInvoicePageDoc />, capabilityKey: 'purchase.invoice.create' },
+    { path: '/purchasing/invoice/:id', description: 'فاتورة مشتريات', component: <PurchaseInvoicePageDoc />, capabilityKey: 'purchase.invoice.read' },
 
     { path: '/purchasing/returns', description: 'مردودات المشتريات', component: <PurchaseReturnList /> },
     { path: '/purchasing/returns/:id', description: 'مردود مشتريات', component: <PurchaseReturnForm /> },
@@ -369,12 +424,17 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/purchasing/rfq/new', description: 'طلب تسعير جديد', component: <RFQForm /> },
     { path: '/purchasing/rfq/:id', description: 'تفاصيل طلب التسعير', component: <RFQForm /> },
     { path: '/trade/purchasing/lpo', description: 'أمر شراء محلي', component: <PurchaseOrderList /> },
-    { path: '/trade/purchasing/receipts', description: 'سندات استلام بضائع', component: <GoodsReceiptList /> },
-    { path: '/trade/purchasing/receipt/new', description: 'سند استلام جديد', component: <GoodsReceipt /> },
-    { path: '/trade/purchasing/receipt/:id', description: 'تفاصيل سند استلام', component: <GoodsReceipt /> },
-    { path: '/trade/purchasing/invoices', description: 'فواتير مشتريات محلية', component: <PurchaseInvoiceList /> },
-    { path: '/trade/purchasing/invoice', description: 'فاتورة مشتريات محلية', component: <PurchaseInvoice /> },
-    { path: '/trade/purchasing/invoice/:id', description: 'تعديل فاتورة مشتريات', component: <PurchaseInvoice /> },
+    { path: '/trade/purchasing/receipts', description: 'سندات استلام بضائع', component: <ReceiptListDoc /> },
+    { path: '/trade/purchasing/receipt/new', description: 'سند استلام جديد', component: <ReceiptPageDoc /> },
+    { path: '/trade/purchasing/receipt/:id', description: 'تفاصيل سند استلام', component: <ReceiptPageDoc /> },
+    { path: '/trade/purchasing/invoices', description: 'فواتير مشتريات محلية', component: <PurchaseInvoiceListDoc />, capabilityKey: 'purchase.invoice.read' },
+    { path: '/trade/purchasing/invoice', description: 'فاتورة مشتريات محلية', component: <PurchaseInvoiceListDoc />, capabilityKey: 'purchase.invoice.read' },
+    { path: '/trade/purchasing/invoice/:id', description: 'تعديل فاتورة مشتريات', component: <PurchaseInvoicePageDoc />, capabilityKey: 'purchase.invoice.read' },
+
+    // Purchase Invoice: Standard Document Contract routes
+    { path: '/purchases/invoices', description: 'Purchase Invoices', component: <PurchaseInvoiceListDoc />, capabilityKey: 'purchase.invoice.read' },
+    { path: '/purchases/invoices/new', description: 'New Purchase Invoice', component: <PurchaseInvoicePageDoc />, capabilityKey: 'purchase.invoice.create' },
+    { path: '/purchases/invoices/:id', description: 'Purchase Invoice', component: <PurchaseInvoicePageDoc />, capabilityKey: 'purchase.invoice.read' },
     { path: '/trade/purchasing/return', description: 'مرتجع مشتريات', component: <PurchaseReturnList /> },
 
     // TRADE - SALES (New Paths)
@@ -388,13 +448,20 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/sales/orders/:id', description: 'تفاصيل الطلبية', component: <SalesOrderForm /> },
 
     { path: '/trade/sales/order', description: 'طلبية مبيعات', component: <SalesOrderList /> },
-    { path: '/trade/sales/delivery', description: 'إرسالية مبيعات', component: <DeliveryNote /> },
-    { path: '/trade/sales/invoice', description: 'فاتورة مبيعات', component: <InvoiceList /> },
+    { path: '/trade/sales/delivery', description: 'إرساليات المبيعات', component: <DispatchListDoc /> },
+    { path: '/trade/sales/delivery/new', description: 'إرسالية مبيعات جديدة', component: <DispatchPageDoc /> },
+    { path: '/trade/sales/delivery/:id', description: 'إرسالية مبيعات', component: <DispatchPageDoc /> },
+    { path: '/trade/sales/invoice', description: 'فاتورة مبيعات (قائمة)', component: <SalesInvoiceList />, capabilityKey: 'sales.invoice.read' },
+    { path: '/trade/sales/invoice/new', description: 'فاتورة مبيعات جديدة', component: <SalesInvoicePage />, capabilityKey: 'sales.invoice.create' },
+    { path: '/trade/sales/invoice/:id', description: 'تفاصيل فاتورة مبيعات', component: <SalesInvoicePage />, capabilityKey: 'sales.invoice.read' },
     { path: '/trade/sales/pos', description: 'نقطة بيع', component: <POSScreen /> },
 
-    // Explicit New/Edit Routes (Systematic Fix)
-    { path: '/sales/invoices/new', description: 'فاتورة مبيعات جديدة', component: <SalesInvoice /> },
-    { path: '/sales/invoices/:id', description: 'تفاصيل الفاتورة', component: <SalesInvoice /> },
+    // ── Sales Invoices: NEW Reference Document ──
+    { path: '/sales/invoices', description: 'قائمة فواتير المبيعات', component: <SalesInvoiceList />, capabilityKey: 'sales.invoice.read' },
+    { path: '/sales/invoices/new', description: 'فاتورة مبيعات جديدة', component: <SalesInvoicePage />, capabilityKey: 'sales.invoice.create' },
+    { path: '/sales/invoices/:id', description: 'تفاصيل فاتورة مبيعات', component: <SalesInvoicePage />, capabilityKey: 'sales.invoice.read' },
+    { path: '/sales/invoice', description: 'فاتورة مبيعات (قائمة)', component: <SalesInvoiceList />, capabilityKey: 'sales.invoice.read' },
+    { path: '/sales/invoice/:id', description: 'فاتورة مبيعات', component: <SalesInvoicePage />, capabilityKey: 'sales.invoice.read' },
 
     { path: '/trade/sales/return', description: 'مرتجعات المبيعات', component: <SalesReturnList /> },
     { path: '/sales/returns/new', description: 'مرتجع مبيعات جديد', component: <ReturnInvoice /> },
@@ -451,13 +518,20 @@ export const APP_ROUTES: RouteConfig[] = [
 
     { path: '/export/packing-list/:id', description: 'قائمة التعبئة', component: <PackingListForm /> },
     { path: '/export/certificate-origin/:id', description: 'شهادة المنشأ', component: <CertificateOfOriginForm /> },
+    { path: '/export/packing-list', description: 'قائمة التعبئة', component: <PlaceholderPage title="قائمة التعبئة" category="Export" /> },
+    { path: '/export/certificate-origin', description: 'شهادة المنشأ', component: <PlaceholderPage title="شهادة المنشأ" category="Export" /> },
 
 
     // GL
     { path: '/gl/chart-of-accounts', description: 'دليل الحسابات', component: <ChartOfAccounts /> },
+    { path: '/gl/financial-definitions', description: 'التعاريف المالية', component: <FinancialDefinitions /> },
     { path: '/gl/opening-balances', description: 'الأرصدة الافتتاحية', component: <OpeningBalances /> },
     { path: '/gl/journal-entries', description: 'سجل القيود اليومية', component: <JournalList /> },
-    { path: '/gl/journal-voucher', description: 'سند قيد', component: <JournalVoucher /> },
+    { path: '/gl/journal-voucher', description: 'سند قيد', component: <JournalVoucherListDoc />, capabilityKey: 'accounting.journal_voucher.read' },
+    { path: '/gl/journal-vouchers', description: 'Journal Vouchers', component: <JournalVoucherListDoc />, capabilityKey: 'accounting.journal_voucher.read' },
+    { path: '/gl/journal-vouchers/new', description: 'New Journal Voucher', component: <JournalVoucherPageDoc />, capabilityKey: 'accounting.journal_voucher.create' },
+    { path: '/gl/journal-vouchers/:id', description: 'Journal Voucher', component: <JournalVoucherPageDoc />, capabilityKey: 'accounting.journal_voucher.read' },
+    { path: '/gl/ae-voucher', description: 'Unified AE Voucher', component: <UnifiedAEVoucherPage /> },
     { path: '/gl/recurring', description: 'سند تكرار', component: <RecurringVoucher /> },
     { path: '/gl/settlement', description: 'قيود التسوية', component: <SettlementVoucher /> },
     { path: '/gl/budgets', description: 'الموازنات', component: <BudgetList /> },
@@ -467,7 +541,9 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/gl/estimated-budgets', description: 'الموازنات التقديرية', component: <EstimatedBudgets /> },
 
     // Assets
-    { path: '/assets/register', description: 'سجل الأصول', component: <AssetsRegister /> },
+    { path: '/assets/register', description: 'سجل الأصول الثابتة', component: <FixedAssetList /> },
+    { path: '/assets/register/new', description: 'أصل ثابت جديد', component: <FixedAssetForm /> },
+    { path: '/assets/register/:id', description: 'تفاصيل الأصل الثابت', component: <FixedAssetForm /> },
     { path: '/assets/depreciation', description: 'الإهلاك', component: <Depreciation /> },
     { path: '/assets/disposal', description: 'استبعاد أصل', component: <AssetDisposal /> },
 
@@ -491,6 +567,9 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/banking/deposit', description: 'إيداع بنكي', component: <BankDeposit /> },
     { path: '/banking/transfer', description: 'تحويل', component: <BankTransfer /> },
     { path: '/banking/entries', description: 'قيود بنكية', component: <BankEntries /> },
+    { path: '/banking/statements', description: 'كشوفات واردة من البنك', component: <PlaceholderPage title="كشوفات واردة من البنك" category="Banking" /> },
+    { path: '/banking/pending-status', description: 'حالة العالق', component: <PlaceholderPage title="حالة الشيكات العالقة" category="Banking" /> },
+    { path: '/banking/weak-credit', description: 'قائمة الائتمان الضعيف', component: <PlaceholderPage title="قائمة الائتمان الضعيف" category="Banking" /> },
     // { path: '/banking/reconciliation', description: 'مطابقة', component: <BankReconciliation /> }, // Legacy
 
     // Treasury - Reconciliation
@@ -532,6 +611,14 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/hr/payslips', description: 'قسائم الراتب', component: <Payslips /> },
     { path: '/hr/salary-entry', description: 'قيد الرواتب', component: <SalaryEntry /> },
 
+    // Manufacturing (Reference List)
+    { path: '/manufacturing/bom-list', description: 'معادلات التصنيع', component: <BOMList /> },
+    { path: '/manufacturing/bom-list/new', description: 'معادلة تصنيع جديدة', component: <BOMForm /> },
+    { path: '/manufacturing/bom-list/:id', description: 'تفاصيل معادلة التصنيع', component: <BOMForm /> },
+    { path: '/manufacturing/orders', description: 'أوامر الإنتاج', component: <ProductionOrderList /> },
+    { path: '/manufacturing/orders/new', description: 'أمر إنتاج جديد', component: <ProductionOrderForm /> },
+    { path: '/manufacturing/orders/:id', description: 'تفاصيل أمر الإنتاج', component: <ProductionOrderForm /> },
+
     // Reports - Financial
     { path: '/reports/financial/partner-ledger', description: 'كشف حساب', component: <PartnerLedger /> },
     { path: '/reports/financial/tb-general', description: 'ميزان المراجعة', component: <TrialBalanceReport /> },
@@ -552,18 +639,31 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/reports/sales/profitability', description: 'ربحية الأصناف', component: <ProfitabilityReport /> },
     { path: '/reports/sales/summary', description: 'الملخص التنفيذي', component: <Dashboard /> },
     { path: '/reports/sales/invoices', description: 'فواتير المبيعات', component: <SalesInvoicesReport /> },
+    { path: '/reports/sales/by-item', description: 'مبيعات حسب الصنف', component: <SalesAnalytics /> },
+    { path: '/reports/sales/by-customer', description: 'مبيعات حسب الزبون', component: <SalesAnalytics /> },
+    { path: '/reports/sales/by-salesman', description: 'مبيعات حسب المندوب', component: <SalesAnalytics /> },
+    { path: '/reports/sales/by-region', description: 'مبيعات حسب المنطقة', component: <SalesAnalytics /> },
+    { path: '/reports/sales/invoice-profit', description: 'ربحية الفواتير', component: <ProfitabilityReport /> },
+    { path: '/reports/sales/top-profit-items', description: 'الأصناف الأكثر ربحية', component: <ProfitabilityReport /> },
+    { path: '/reports/sales/monthly-yearly', description: 'المبيعات الشهرية/السنوية', component: <SalesAnalytics /> },
+    { path: '/reports/sales/inactive-customers', description: 'الزبائن المنقطعون', component: <SalesAnalytics /> },
     // Reports - Purchasing
     { path: '/reports/purchases/analysis', description: 'تحليل المشتريات', component: <PurchasingAnalysis /> },
     { path: '/reports/purchases/import', description: 'تقارير الاستيراد', component: <ImportReports /> },
     { path: '/reports/purchases/by-vendor', description: 'مشتريات حسب المورد', component: <PurchasesByVendorReport /> },
-    { path: '/reports/purchases/by-item', description: 'مشتريات حسب الصنف', component: <PlaceholderPage title="مشتريات حسب الصنف" category="Reports" /> },
+    { path: '/reports/purchases/by-item', description: 'مشتريات حسب الصنف', component: <PurchasingAnalysis /> },
+    { path: '/reports/purchases/lc-status', description: 'كشف الاعتمادات المستندية', component: <ImportReports /> },
+    { path: '/reports/purchases/import-costing', description: 'تحليل تكلفة الاستيراد', component: <ImportReports /> },
+    { path: '/reports/purchases/vendor-payments', description: 'استحقاق دفعات الموردين', component: <PurchasingAnalysis /> },
     { path: '/reports/purchases/total', description: 'إجمالي المشتريات', component: <PlaceholderPage title="إجمالي المشتريات" category="Reports" /> },
     { path: '/reports/purchases/returns', description: 'مردود المشتريات', component: <PlaceholderPage title="مردود المشتريات" category="Reports" /> },
     { path: '/reports/purchases/invoices', description: 'فواتير المشتريات', component: <PlaceholderPage title="فواتير المشتريات" category="Reports" /> },
 
     // Reports - Inventory
     { path: '/reports/inventory/movement', description: 'حركة صنف', component: <ItemMovement /> },
+    { path: '/reports/inventory/quantity-by-warehouse', description: 'كمية الأصناف حسب المستودع', component: <ItemsQuantityByWarehouseReport /> },
     { path: '/reports/inventory/status', description: 'حالة المخزون', component: <InventoryStatus /> },
+    { path: '/reports/inventory/stock-count', description: 'تقرير جرد المخزون', component: <InventoryStatus /> },
     { path: '/reports/inventory/items-list', description: 'قائمة الأصناف', component: <PlaceholderPage title="قائمة الأصناف" category="Reports" /> },
     { path: '/reports/inventory/sales-prices', description: 'أسعار البيع', component: <PlaceholderPage title="أسعار البيع" category="Reports" /> },
     { path: '/reports/inventory/cost-prices', description: 'أسعار التكلفة', component: <PlaceholderPage title="أسعار التكلفة" category="Reports" /> },
@@ -572,6 +672,9 @@ export const APP_ROUTES: RouteConfig[] = [
 
     { path: '/reports/inventory/valuation', description: 'قيمة المخزون', component: <InventoryValuationReport /> },
     { path: '/reports/inventory/shortages', description: 'النواقص', component: <PlaceholderPage title="النواقص" category="Reports" /> },
+    { path: '/reports/inventory/reorder', description: 'حد الطلب', component: <InventoryStatus /> },
+    { path: '/reports/inventory/dead-stock', description: 'الأصناف الراكدة', component: <InventoryStatus /> },
+    { path: '/reports/inventory/expiry', description: 'تواريخ الصلاحية', component: <InventoryStatus /> },
 
 
     // Reports - Cheques
@@ -579,6 +682,11 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/reports/checks/issued', description: 'الشيكات الصادرة', component: <PlaceholderPage title="الشيكات الصادرة" category="Reports" /> },
     { path: '/reports/checks/received', description: 'الشيكات الواردة', component: <PlaceholderPage title="الشيكات الواردة" category="Reports" /> },
     { path: '/reports/checks/history', description: 'حركة شيك', component: <PlaceholderPage title="حركة شيك" category="Reports" /> },
+    { path: '/reports/checks/in-hand', description: 'شيكات في الصندوق', component: <ChequeReports /> },
+    { path: '/reports/checks/under-collection', description: 'شيكات برسم التحصيل', component: <ChequeReports /> },
+    { path: '/reports/checks/bounced', description: 'شيكات راجعة', component: <ChequeReports /> },
+    { path: '/reports/checks/postdated', description: 'شيكات مؤجلة', component: <ChequeReports /> },
+    { path: '/reports/checks/payable', description: 'شيكات مستحقة الدفع', component: <ChequeReports /> },
 
     // Reports - Vendors/Customers
     { path: '/reports/vendors/balances', description: 'أرصدة الموردين', component: <PlaceholderPage title="أرصدة الموردين" category="Reports" /> },
@@ -594,6 +702,10 @@ export const APP_ROUTES: RouteConfig[] = [
     { path: '/tools/converter', description: 'محول العملات', component: <CurrencyConverter /> },
     { path: '/tools/notepad', description: 'المفكرة', component: <NotepadApp /> },
     { path: '/tools/mail', description: 'البريد', component: <InternalMail /> },
+    { path: '/tools/whatsapp', description: 'WhatsApp', component: <WhatsAppService /> },
+    { path: '/tools/email', description: 'البريد الإلكتروني', component: <EmailService /> },
+    { path: '/tools/rfid', description: 'RFID', component: <RFIDIntegration /> },
+    { path: '/tools/archive', description: 'الأرشفة الذكية', component: <SmartArchive /> },
     { path: '/tools/chat', description: 'المحادثة', component: <TeamChat /> },
     { path: '/tools/sms', description: 'SMS', component: <SMSService /> },
     { path: '/tools/designer', description: 'مصمم النماذج', component: <FormDesigner /> },
@@ -608,10 +720,12 @@ export const APP_ROUTES: RouteConfig[] = [
 
     // Dashboard
     { path: '/reports/dashboard', description: 'لوحة التحكم', component: <Dashboard /> },
-    { path: '/reports/dashboard', description: 'لوحة التحكم', component: <Dashboard /> },
 
     // WAFI AI
     { path: '/wafi-ai', description: 'المساعد الذكي', component: <WafiAi /> },
+    { path: '/vertical/apps', description: 'التطبيقات القطاعية', component: <VerticalAppsHub /> },
+    { path: '/editions/ngo', description: 'لوحة NGO', component: <NgoDashboard /> },
+    { path: '/editions/government', description: 'لوحة Government', component: <GovernmentDashboard /> },
 
     // Print Previews
     { path: '/treasury/print/:type/:id', description: 'معاينة الطباعة', component: <PrintPreview /> },
@@ -619,6 +733,45 @@ export const APP_ROUTES: RouteConfig[] = [
 
 import { matchPath } from 'react-router-dom';
 
+const inferRouteCapabilityKey = (path: string): string | undefined => {
+    const p = String(path || '').trim();
+    if (!p) return undefined;
+
+    if (p.startsWith('/system') || p.startsWith('/settings')) return 'core.security.permissions.manage';
+    if (p.startsWith('/approval')) return 'core.workflow.approve';
+    if (p.startsWith('/reports')) return 'core.reporting.view';
+    if (p.startsWith('/dashboard')) return 'core.reporting.view';
+    if (p.startsWith('/tools') || p.startsWith('/help') || p.startsWith('/wafi-ai') || p.startsWith('/vertical') || p.startsWith('/editions')) return 'core.reporting.view';
+
+    if (p.startsWith('/trade/sales') || p.startsWith('/sales') || p.startsWith('/pos')) return 'sales.invoice.read';
+    if (p.startsWith('/trade/distribution') || p.startsWith('/trade/agreements')) return 'sales.invoice.read';
+    if (p.startsWith('/trade/purchasing') || p.startsWith('/purchasing') || p.startsWith('/import') || p.startsWith('/export')) return 'ti.purchase.invoice.create';
+    if (p.startsWith('/inventory') || p.startsWith('/items') || p.startsWith('/master/warehouses') || p.startsWith('/master/units') || p.startsWith('/master/item-categories') || p.startsWith('/master/brands')) return 'ti.master.item.manage';
+    if (p.startsWith('/master') || p.startsWith('/definitions') || p.startsWith('/hub/')) return 'ti.master.partner.manage';
+    if (p.startsWith('/assets')) return 'ti.gl.journal.post';
+    if (p.startsWith('/hr')) return 'prtax.master.employee.manage';
+    if (p.startsWith('/manufacturing')) return 'sector.manufacturing.production.plan';
+    if (p.startsWith('/gl') || p.startsWith('/treasury') || p.startsWith('/banking')) return 'ti.gl.journal.post';
+    if (p.startsWith('/master/partners') || p.startsWith('/master/customer') || p.startsWith('/master/vendor') || p.startsWith('/master/regions')) return 'ti.master.partner.manage';
+
+    return undefined;
+};
+
+export const APP_ROUTES: RouteConfig[] = APP_ROUTES_RAW.map((route) => ({
+    ...route,
+    capabilityKey: route.capabilityKey || inferRouteCapabilityKey(route.path),
+}));
+
+const normalizeLookupPath = (path: string): string => {
+    const raw = String(path || '').trim();
+    if (!raw) return '/';
+    const noHash = raw.split('#')[0] || raw;
+    return (noHash.split('?')[0] || '/').trim() || '/';
+};
+
 export const getRouteByPath = (path: string) => {
-    return APP_ROUTES.find(r => r.path === path || matchPath({ path: r.path, end: true }, path));
+    const lookupPath = normalizeLookupPath(path);
+    return APP_ROUTES.find(
+        (r) => r.path === lookupPath || !!matchPath({ path: r.path, end: true }, lookupPath)
+    );
 };

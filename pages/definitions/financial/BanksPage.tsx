@@ -3,6 +3,8 @@ import { Save, Plus, Trash2, Edit, Building, X, Search, Loader2, Archive } from 
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import initialBanks from './initial_banks.json';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
 export const BanksPage = () => {
     const navigate = useNavigate();
@@ -68,9 +70,36 @@ export const BanksPage = () => {
         b.branch_code?.includes(search)
     );
 
+    const openCreate = () => {
+        setCurrentBank({ bank_code: '', branch_code: '' });
+        setIsModalOpen(true);
+    };
+
+    useCreateIntent(openCreate);
+
     return (
-        <div className="p-8 bg-gray-50 min-h-screen font-sans" dir="rtl">
-            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3 mb-8">
+        <div className="h-full bg-gray-50 p-4 md:p-6 font-sans" dir="rtl">
+            <WorkspaceHeader
+                icon={<Building size={24} />}
+                title="دليل البنوك والفروع"
+                subtitle="تعريف البنوك والفروع وربطها مع العمليات البنكية داخل النظام"
+                badges={[
+                    { label: `الإجمالي ${banks.length}`, tone: 'warning' },
+                    { label: `المعروض ${filteredBanks.length}`, tone: 'success' },
+                ]}
+                actions={
+                    <>
+                        <button onClick={openCreate} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition-colors shadow-sm hover:shadow">
+                            <Plus size={18} /> إضافة بنك/فرع جديد
+                        </button>
+                        <button onClick={handleImportHtml} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition-colors shadow-sm hover:shadow">
+                            استيراد ملف البنوك
+                        </button>
+                    </>
+                }
+                className="mb-6"
+            />
+            <h1 className="hidden text-3xl font-bold text-gray-800 flex items-center gap-3 mb-8">
                 <div className="bg-emerald-100 p-3 rounded-xl text-emerald-600">
                     <Building size={32} />
                 </div>
@@ -89,7 +118,7 @@ export const BanksPage = () => {
                         className="w-full pr-10 pl-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                     />
                 </div>
-                <div className="flex gap-2">
+                <div className="hidden flex gap-2">
                     <button onClick={() => { setCurrentBank({ bank_code: '', branch_code: '' }); setIsModalOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-colors shadow-sm hover:shadow">
                         <Plus size={18} /> إضافة بنك/فرع جديد
                     </button>
@@ -179,8 +208,8 @@ export const BanksPage = () => {
 
             <AnimatePresence>
                 {isModalOpen && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex justify-center items-center p-4">
-                        <div className="bg-[#f8f9fa] rounded shadow-2xl animate-in zoom-in-95 border border-gray-300 w-full max-w-2xl overflow-hidden font-sans">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex justify-center items-start p-3 md:p-4 pt-6 md:pt-10 overflow-y-auto">
+                        <div className="bg-[#f8f9fa] rounded shadow-2xl animate-in zoom-in-95 border border-gray-300 w-full max-w-2xl overflow-hidden font-sans max-h-[calc(100vh-4rem)]">
                             {/* Header */}
                             <div className="bg-gradient-to-l from-blue-600 to-blue-500 text-white p-3 flex justify-between items-center shadow-sm" dir="rtl">
                                 <span className="font-bold flex items-center gap-2">

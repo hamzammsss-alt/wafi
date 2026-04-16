@@ -10,10 +10,10 @@ const icons = {
 };
 
 const styles = {
-    success: 'bg-white border-l-4 border-emerald-500 shadow-lg shadow-emerald-500/10',
-    error: 'bg-white border-l-4 border-red-500 shadow-lg shadow-red-500/10',
-    warning: 'bg-white border-l-4 border-amber-500 shadow-lg shadow-amber-500/10',
-    info: 'bg-white border-l-4 border-blue-500 shadow-lg shadow-blue-500/10',
+    success: 'bg-white/95 border border-emerald-200 shadow-lg shadow-emerald-500/15',
+    error: 'bg-white/95 border border-red-200 shadow-lg shadow-red-500/15',
+    warning: 'bg-white/95 border border-amber-200 shadow-lg shadow-amber-500/15',
+    info: 'bg-white/95 border border-blue-200 shadow-lg shadow-blue-500/15',
 };
 
 export const ToastContainer: React.FC = () => {
@@ -32,12 +32,12 @@ const ToastItem: React.FC<{ notification: Notification; onClose: () => void }> =
     return (
         <div
             className={`
-        pointer-events-auto
-        flex items-start gap-3 p-4 rounded-lg
-        transform transition-all duration-300 ease-in-out
-        animate-in slide-in-from-top-2 fade-in zoom-in-95
-        ${styles[notification.type]}
-      `}
+                pointer-events-auto
+                flex items-start gap-3 rounded-xl p-4
+                transform transition-all duration-300 ease-in-out
+                animate-in slide-in-from-top-2 fade-in zoom-in-95
+                ${styles[notification.type]}
+            `}
             role="alert"
         >
             <div className="shrink-0 mt-0.5">{icons[notification.type]}</div>

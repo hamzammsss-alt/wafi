@@ -2,6 +2,63 @@ import { db } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 
 export class AuthService {
+    private static tableExists(tableName: string): boolean {
+        try {
+            const row = db.prepare(`
+                SELECT name FROM sqlite_master
+                WHERE type = 'table' AND name = ?
+                LIMIT 1
+            `).get(tableName);
+            return Boolean(row);
+        } catch {
+            return false;
+        }
+    }
+
+    private static syncUserRoleAssignment(userId: string, roleId: string, branchId?: string, companyId = 'COMP_01') {
+        if (!userId || !roleId) return;
+        if (!AuthService.tableExists('user_role_assignments')) return;
+
+        const normalizedBranchId = String(branchId || '').trim() || null;
+        const existing = db.prepare(`
+            SELECT id
+            FROM user_role_assignments
+            WHERE company_id = @companyId
+              AND user_id = @userId
+              AND COALESCE(branch_id, '') = COALESCE(@branchId, '')
+              AND role_id = @roleId
+            LIMIT 1
+        `).get({
+            companyId,
+            userId,
+            branchId: normalizedBranchId,
+            roleId,
+        }) as { id?: string } | undefined;
+
+        if (existing?.id) {
+            db.prepare(`
+                UPDATE user_role_assignments
+                SET is_active = 1, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `).run(existing.id);
+            return;
+        }
+
+        db.prepare(`
+            INSERT INTO user_role_assignments (
+                id, company_id, branch_id, user_id, role_id, scope_level, is_active, created_at, updated_at
+            ) VALUES (
+                @id, @companyId, @branchId, @userId, @roleId, @scopeLevel, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+        `).run({
+            id: uuidv4(),
+            companyId,
+            branchId: normalizedBranchId,
+            userId,
+            roleId,
+            scopeLevel: normalizedBranchId ? 'BRANCH' : 'COMPANY',
+        });
+    }
 
     // --- Authentication ---
 
@@ -72,6 +129,7 @@ export class AuthService {
             branch_id: user.branch_id,
             is_active: user.is_active ? 1 : 0
         });
+        AuthService.syncUserRoleAssignment(id, String(user.role_id || ''), String(user.branch_id || ''), 'COMP_01');
         return { success: true, id };
     }
 
@@ -88,6 +146,7 @@ export class AuthService {
             WHERE id=@id
         `).run({ ...user, is_active: user.is_active ? 1 : 0 });
         }
+        AuthService.syncUserRoleAssignment(String(user.id || ''), String(user.role_id || ''), String(user.branch_id || ''), 'COMP_01');
         return { success: true };
     }
 
@@ -97,6 +156,9 @@ export class AuthService {
         if (count <= 1) throw new Error('Cannot delete the last user');
 
         db.prepare('DELETE FROM users WHERE id = ?').run(id);
+        if (AuthService.tableExists('user_role_assignments')) {
+            db.prepare('DELETE FROM user_role_assignments WHERE user_id = ?').run(id);
+        }
         return { success: true };
     }
 
@@ -174,19 +236,42 @@ export class AuthService {
         return rows.map((r: any) => r.permission_key);
     }
 
+    static getUserPermissions(userId: string) {
+        // Find role_id for user
+        const user = db.prepare('SELECT role_id FROM users WHERE id = ?').get(userId);
+        if (!user || !user.role_id) return [];
+        return AuthService.getPermissions(user.role_id);
+    }
+
     static savePermissions(roleId: string, permissions: string[]) {
         const transaction = db.transaction(() => {
             // 1. Clear existing
             db.prepare('DELETE FROM permissions WHERE role_id = ?').run(roleId);
+            if (AuthService.tableExists('role_permissions')) {
+                db.prepare('DELETE FROM role_permissions WHERE role_id = ?').run(roleId);
+            }
 
             // 2. Insert new
             const insert = db.prepare('INSERT INTO permissions (id, role_id, permission_key) VALUES (@id, @role_id, @key)');
+            const insertRolePermission = AuthService.tableExists('role_permissions')
+                ? db.prepare(`
+                    INSERT OR IGNORE INTO role_permissions (id, role_id, capability_key, effect, created_at)
+                    VALUES (@id, @roleId, @capabilityKey, 'ALLOW', CURRENT_TIMESTAMP)
+                `)
+                : null;
             for (const key of permissions) {
                 insert.run({
                     id: uuidv4(),
                     role_id: roleId,
                     key: key
                 });
+                if (insertRolePermission) {
+                    insertRolePermission.run({
+                        id: uuidv4(),
+                        roleId,
+                        capabilityKey: key,
+                    });
+                }
             }
         });
         transaction();

@@ -1,83 +1,227 @@
-const { PartnerService } = require('./electron/services/PartnerService');
-const { db } = require('./electron/database');
+const fs = require("fs");
+const path = require("path");
+const Module = require("module");
 
-console.log("=== Verifying Unified Partner Service ===");
+process.resourcesPath = process.cwd();
 
-// 1. Create a Customer
-console.log("\n1. Test: Create Customer (Should go to business_partners)");
-const customerData = {
-    code: 'CUST-TEST-001',
-    name_ar: 'Test Customer Unified',
-    type: 'CUSTOMER',
-    is_active: 1,
-    credit_limit: 5000
+const dbPath = path.resolve(process.argv[2] || path.join(__dirname, "wafi.db"));
+const databaseModulePath = path.resolve(__dirname, "dist-electron/electron/database.js");
+const serviceModulePath = path.resolve(__dirname, "dist-electron/electron/services/PartnerService.js");
+
+const createBetterSqliteShim = () => {
+    const { DatabaseSync } = require("node:sqlite");
+    let savepointCounter = 0;
+
+    return class BetterSqlite3Shim {
+        constructor(filePath) {
+            this.db = new DatabaseSync(filePath);
+        }
+
+        exec(sql) {
+            return this.db.exec(sql);
+        }
+
+        prepare(sql) {
+            return this.db.prepare(sql);
+        }
+
+        transaction(fn) {
+            return (...args) => {
+                savepointCounter += 1;
+                const savepoint = `verify_sp_${savepointCounter}`;
+
+                this.db.exec(`SAVEPOINT ${savepoint}`);
+                try {
+                    const result = fn(...args);
+                    this.db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+                    return result;
+                } catch (error) {
+                    try {
+                        this.db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+                    } catch {
+                        // noop
+                    }
+                    try {
+                        this.db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+                    } catch {
+                        // noop
+                    }
+                    throw error;
+                }
+            };
+        }
+
+        pragma(query, options = {}) {
+            const trimmed = query.trim();
+            const pragmaSql = /^pragma\b/i.test(trimmed) ? trimmed : `PRAGMA ${trimmed}`;
+
+            try {
+                const rows = this.db.prepare(pragmaSql).all();
+                if (options.simple) {
+                    const firstRow = rows[0];
+                    if (!firstRow) return undefined;
+                    const firstColumn = Object.keys(firstRow)[0];
+                    return firstRow[firstColumn];
+                }
+                return rows;
+            } catch {
+                this.db.exec(pragmaSql);
+                return options.simple ? undefined : [];
+            }
+        }
+
+        close() {
+            return this.db.close();
+        }
+    };
 };
 
-try {
-    const custResult = PartnerService.savePartner(customerData);
-    console.log("Customer Created ID:", custResult.lastInsertRowid || "Success");
+const originalRequire = Module.prototype.require;
+let shimWarningShown = false;
+Module.prototype.require = function patchedRequire(request) {
+    if (request === "electron") {
+        const userDataPath = path.resolve(__dirname, ".verify-user-data");
+        if (!fs.existsSync(userDataPath)) {
+            fs.mkdirSync(userDataPath, { recursive: true });
+        }
 
-    // Verify DB
-    const custCheck = db.prepare("SELECT * FROM business_partners WHERE code = ?").get('CUST-TEST-001');
-    if (custCheck) console.log("✅ Customer found in business_partners:", custCheck.name_ar);
-    else console.error("❌ Customer NOT found in business_partners");
+        return {
+            app: {
+                getPath: (name) => {
+                    if (name === "userData") return userDataPath;
+                    if (name === "documents") return process.cwd();
+                    return process.cwd();
+                },
+            },
+            dialog: {
+                showSaveDialog: async () => ({ filePath: undefined }),
+                showOpenDialog: async () => ({ filePaths: [] }),
+            },
+        };
+    }
 
-} catch (e) {
-    console.error("❌ Failed to create customer:", e.message);
+    if (request === "better-sqlite3") {
+        if (!shimWarningShown) {
+            console.warn("[WARN] Using node:sqlite compatibility shim for verification.");
+            shimWarningShown = true;
+        }
+        return createBetterSqliteShim();
+    }
+
+    return originalRequire.apply(this, arguments);
+};
+
+if (!fs.existsSync(databaseModulePath) || !fs.existsSync(serviceModulePath)) {
+    console.error("[ERROR] Dist modules not found.");
+    console.error("Run the electron build first, then rerun this script.");
+    process.exit(1);
 }
 
-// 2. Create an Employee
-console.log("\n2. Test: Create Employee (Should go to hr_employees via Facade)");
-const employeeData = {
-    code: 'EMP-TEST-001',
-    name_ar: 'Ahmad Employee Unified',
-    type: 'EMPLOYEE',
-    is_active: 1,
-    mobile: '0555555555',
-    email: 'ahmad.emp@example.com',
-    // HR Fields
-    basic_salary: 3000
+const assert = (condition, message) => {
+    if (!condition) throw new Error(message);
 };
 
+let database;
+let db;
+let customerCode;
+let supplierCode;
+
 try {
-    // Note: PartnerService.savePartner logic for employee expects name split
-    const empResult = PartnerService.savePartner(employeeData);
-    console.log("Employee Created Result:", empResult);
+    database = require(databaseModulePath);
+    const { PartnerService } = require(serviceModulePath);
+    const BetterSqlite3 = require("better-sqlite3");
 
-    // Verify DB
-    const empCheck = db.prepare("SELECT * FROM hr_employees WHERE employee_code = ?").get('EMP-TEST-001');
-    if (empCheck) {
-        console.log("✅ Employee found in hr_employees:", empCheck.first_name, empCheck.last_name);
+    console.log(`[INFO] Opening database at ${dbPath}`);
+    database.db = new BetterSqlite3(dbPath);
+    db = database.db;
 
-        // Verify Contract (Salary)
-        const contractCheck = db.prepare("SELECT * FROM hr_employee_contracts WHERE employee_id = ?").get(empCheck.id);
-        if (contractCheck && contractCheck.basic_salary === 3000) {
-            console.log("✅ Employee Contract found with correct salary:", contractCheck.basic_salary);
-        } else {
-            console.error("❌ Employee Contract mismatch or missing");
+    const suffix = Date.now().toString(36).toUpperCase();
+    customerCode = `CUST-VERIFY-${suffix}`;
+    supplierCode = `SUP-VERIFY-${suffix}`;
+
+    const fallbackAccount = db
+        .prepare("SELECT id FROM gl_chart_of_accounts WHERE is_transactional = 1 LIMIT 1")
+        .get();
+
+    console.log("[INFO] Creating test customer via PartnerService.savePartner");
+    PartnerService.savePartner({
+        code: customerCode,
+        name_ar: "Verify Customer",
+        type: "CUSTOMER",
+        is_active: 1,
+        credit_limit: 5000,
+        linked_account_id: fallbackAccount ? fallbackAccount.id : undefined,
+    });
+
+    const savedCustomer = db
+        .prepare("SELECT id, code, type FROM business_partners WHERE code = ?")
+        .get(customerCode);
+    assert(savedCustomer, "Customer was not saved to business_partners.");
+
+    console.log("[INFO] Creating test supplier via PartnerService.savePartner");
+    PartnerService.savePartner({
+        code: supplierCode,
+        name_ar: "Verify Supplier",
+        type: "SUPPLIER",
+        is_active: 1,
+        mobile: "0500000000",
+        email: `verify-${suffix.toLowerCase()}@example.com`,
+        linked_account_id: fallbackAccount ? fallbackAccount.id : undefined,
+    });
+
+    const savedSupplier = db
+        .prepare("SELECT id, code, type FROM business_partners WHERE code = ?")
+        .get(supplierCode);
+    assert(savedSupplier, "Supplier was not saved to business_partners.");
+
+    console.log("[INFO] Verifying PartnerService.getPartners output");
+    const partners = PartnerService.getPartners();
+
+    const customerInList = partners.find((partner) => partner.code === customerCode && partner.type === "CUSTOMER");
+    const supplierInList = partners.find((partner) => partner.code === supplierCode && partner.type === "SUPPLIER");
+
+    assert(customerInList, "getPartners() did not return the created customer.");
+    assert(supplierInList, "getPartners() did not return the created supplier.");
+
+    const customerById = PartnerService.getPartner(savedCustomer.id);
+    const supplierById = PartnerService.getPartner(savedSupplier.id);
+    assert(customerById?.code === customerCode, "getPartner() failed for customer.");
+    assert(supplierById?.code === supplierCode, "getPartner() failed for supplier.");
+
+    console.log("[PASS] PartnerService verification completed.");
+    console.log(`       Customer code: ${customerCode}`);
+    console.log(`       Supplier code: ${supplierCode}`);
+} catch (error) {
+    console.error("[FAIL] PartnerService verification failed.");
+
+    if (error && error.code === "ERR_DLOPEN_FAILED") {
+        console.error("better-sqlite3 is built for a different Node version.");
+        console.error("Run: npm rebuild better-sqlite3");
+    } else {
+        console.error(error && error.stack ? error.stack : error);
+    }
+
+    process.exitCode = 1;
+} finally {
+    Module.prototype.require = originalRequire;
+
+    if (db) {
+        try {
+            if (customerCode) {
+                db.prepare("DELETE FROM business_partners WHERE code = ?").run(customerCode);
+            }
+
+            if (supplierCode) {
+                db.prepare("DELETE FROM business_partners WHERE code = ?").run(supplierCode);
+            }
+        } catch (cleanupError) {
+            console.error("[WARN] Cleanup issue:", cleanupError.message || cleanupError);
+        }
+
+        try {
+            db.close();
+        } catch {
+            // noop
         }
     }
-    else console.error("❌ Employee NOT found in hr_employees");
-
-} catch (e) {
-    console.error("❌ Failed to create employee:", e.message);
 }
-
-// 3. Test Unified Fetch
-console.log("\n3. Test: getPartners() (Should return both matching the interface)");
-try {
-    const partners = PartnerService.getPartners();
-    const foundCustomer = partners.find(p => p.code === 'CUST-TEST-001');
-    const foundEmployee = partners.find(p => p.code === 'EMP-TEST-001');
-
-    if (foundCustomer && foundCustomer.type === 'CUSTOMER') console.log("✅ getPartners returned Customer");
-    else console.error("❌ getPartners missing Customer");
-
-    if (foundEmployee && foundEmployee.type === 'EMPLOYEE') console.log("✅ getPartners returned Employee");
-    else console.error("❌ getPartners missing Employee");
-
-} catch (e) {
-    console.error("❌ getPartners failed:", e.message);
-}
-
-console.log("\n=== Test Complete ===");

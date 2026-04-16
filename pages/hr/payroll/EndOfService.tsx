@@ -26,7 +26,7 @@ const EndOfService = () => {
     };
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen rtl text-right" dir="rtl">
+        <div className="app-page" dir="rtl">
             <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                 <Calculator className="text-purple-600" />
                 احتساب نهاية الخدمة

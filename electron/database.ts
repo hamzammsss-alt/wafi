@@ -10,6 +10,15 @@ export const initDB = (dbPath: string) => {
   // Initialize Database
   db = new Database(dbPath);
 
+  // Operational policy for SQLite runtime.
+  try {
+    db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = NORMAL');
+    db.pragma('busy_timeout = 5000');
+  } catch (e) {
+    console.warn('[DB] PRAGMA policy setup warning:', e);
+  }
+
   // *** CRITICAL: Keep FK checks OFF during the entire schema loading & migration ***
   // schema_v1_foundation.sql has "PRAGMA foreign_keys = ON" which would cause
   // FK constraint failures when dropping/recreating tables during init.
@@ -62,6 +71,70 @@ export const initDB = (dbPath: string) => {
     if (resolved) {
       console.log(`[DB] Loading ${name} from: ${resolved}`);
       const sql = require('fs').readFileSync(resolved, 'utf8');
+
+      // Trigger bodies contain semicolons, so they require boundary-aware parsing.
+      if (/CREATE\s+TRIGGER/i.test(sql)) {
+        const triggerAwareStatements: string[] = [];
+        const lines = sql.split(/\r?\n/);
+        let current = '';
+        let inTrigger = false;
+        let triggerCaseDepth = 0;
+
+        for (const line of lines) {
+          const trimmedUpper = line.trim().toUpperCase();
+          if (!inTrigger && /^\s*CREATE\s+(?:TEMP\s+)?TRIGGER\b/i.test(line)) {
+            inTrigger = true;
+            triggerCaseDepth = 0;
+          }
+
+          current += line + '\n';
+
+          if (inTrigger) {
+            const sqlPart = line.split('--')[0];
+            const caseMatches = sqlPart.match(/\bCASE\b/gi);
+            if (caseMatches) triggerCaseDepth += caseMatches.length;
+
+            if (/^\s*END\s*;\s*$/i.test(line)) {
+              if (triggerCaseDepth > 0) {
+                triggerCaseDepth--;
+              } else {
+                triggerAwareStatements.push(current);
+                current = '';
+                inTrigger = false;
+              }
+            }
+          } else if (trimmedUpper.endsWith(';')) {
+            triggerAwareStatements.push(current);
+            current = '';
+          }
+        }
+
+        if (current.trim().length > 0) {
+          triggerAwareStatements.push(current);
+        }
+
+        for (let idx = 0; idx < triggerAwareStatements.length; idx++) {
+          const stmt = triggerAwareStatements[idx];
+          const sqlStmt = stmt.trim();
+          if (!sqlStmt) continue;
+          try {
+            db.exec(sqlStmt);
+          } catch (err: any) {
+            if (err.message?.includes('duplicate column name')) {
+              console.warn(`[DB] Skipped duplicate column in ${name}: ${err.message}`);
+              continue;
+            }
+            if (err.message?.includes('already exists')) {
+              console.warn(`[DB] Skipped existing object in ${name}: ${err.message}`);
+              continue;
+            }
+            const compactStmt = sqlStmt.replace(/\s+/g, ' ').slice(0, 240);
+            console.error(`[DB] Failed trigger-aware statement in ${name} [#${idx + 1}]:`, err.message, '| SQL:', compactStmt);
+            throw err;
+          }
+        }
+        return;
+      }
 
       // Split statements to handle errors individually (e.g. for ALTER TABLE)
       const statements = sql.split(';').filter((s: string) => s.trim().length > 0);
@@ -134,6 +207,18 @@ export const initDB = (dbPath: string) => {
   // Indexes
   db.exec(`CREATE INDEX IF NOT EXISTS idx_accounts_code ON accounts(code);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_accounts_parent ON accounts(parent_id);`);
+
+  // Compatibility guard: legacy migrations (v53/v55) use is_group in COALESCE logic.
+  // Ensure the column exists before those schemas run to avoid startup failure.
+  try {
+    const accountCols = db.prepare("PRAGMA table_info(accounts)").all() as Array<{ name: string }>;
+    if (!accountCols.some((c) => c.name === 'is_group')) {
+      db.prepare("ALTER TABLE accounts ADD COLUMN is_group INTEGER DEFAULT 0").run();
+      console.log("[DB] Added missing accounts.is_group compatibility column.");
+    }
+  } catch (e) {
+    console.error("[DB] Failed to ensure accounts.is_group compatibility column", e);
+  }
 
   // 2. Transactions Header
   db.exec(`
@@ -238,10 +323,36 @@ export const initDB = (dbPath: string) => {
   loadSchema('database/schema_v37_taxes_update.sql', 'Taxes Update V37');
   loadSchema('database/schema_v38_analysis_codes.sql', 'Analysis Codes V38');
   loadSchema('database/schema_v39_stock_documents.sql', 'Stock Documents V39');
+  loadSchema('database/schema_v42_partner_profile_expansion.sql', 'Partners Profile V42');
   loadSchema('database/seed_banks_custom.sql', 'Seeding Custom Bank Accounts');
-
-
-
+  loadSchema('database/schema_v43_dispatch.sql', 'Dispatch V43');
+  loadSchema('database/schema_v44_order_to_invoice_cycle.sql', 'Order to Invoice Cycle V44');
+  loadSchema('database/schema_v45_treasury_updates.sql', 'Treasury Schema V45');
+  loadSchema('database/schema_v53_accounting_foundation.sql', 'Accounting Foundation V53');
+  loadSchema('database/schema_v54_account_resolution_engine.sql', 'Account Resolution Engine V54');
+  loadSchema('database/schema_v55_chart_of_accounts_fixed_width.sql', 'Chart of Accounts Fixed Width V55');
+  loadSchema('database/schema_v56_financial_definitions_resolution.sql', 'Financial Definitions + Resolution V56');
+  loadSchema('database/schema_v57_expense_dimensions.sql', 'Expense Dimensions V57');
+  loadSchema('database/schema_v58_journal_engine.sql', 'Journal Engine V58');
+  loadSchema('electron/database/schema_v60_treasury_foundation.sql', 'Treasury Foundation V60');
+  loadSchema('electron/database/schema_v61_sales_operations_foundation.sql', 'Sales Operations Foundation V61');
+  loadSchema('electron/database/schema_v62_purchase_operations_foundation.sql', 'Purchase Operations Foundation V62');
+  loadSchema('electron/database/schema_v63_manufacturing_foundation.sql', 'Manufacturing Foundation V63');
+  loadSchema('electron/database/schema_v64_crm_receivables_foundation.sql', 'CRM + Receivables Foundation V64');
+  loadSchema('electron/database/schema_v65_vendor_payables_foundation.sql', 'Vendor + Payables Foundation V65');
+  loadSchema('electron/database/schema_v66_accounting_engine_foundation.sql', 'Accounting Engine Foundation V66');
+  // Approvals + Permissions Engine migrations are maintained under electron/database.
+  // Keep legacy lookup first for compatibility with older branches, then canonical electron path.
+  loadSchema('database/schema_v46_approvals.sql', 'Approvals Workflow V46 (legacy path)');
+  loadSchema('database/schema_v47_approval_inbox.sql', 'Approvals Inbox V47 (legacy path)');
+  loadSchema('electron/database/schema_v46_approvals.sql', 'Approvals Workflow V46');
+  loadSchema('electron/database/schema_v47_approval_inbox.sql', 'Approvals Inbox V47');
+  loadSchema('electron/database/schema_v48_permissions_engine.sql', 'Permissions Engine V48');
+  loadSchema('electron/database/schema_v49_screen_views.sql', 'Screen Views V49');
+  loadSchema('electron/database/schema_v50_audit_engine.sql', 'Audit Engine V50');
+  loadSchema('electron/database/schema_v51_sales_invoice_hardening.sql', 'Sales Invoice Hardening V51');
+  loadSchema('electron/database/schema_v52_document_contract_hardening.sql', 'Document Contract Hardening V52');
+  loadSchema('electron/database/schema_v59_inventory_documents.sql', 'Inventory Documents V59');
 
   // MIGRATION: Add system_type to gl_chart_of_accounts (Account Linking Logic)
   try {
@@ -265,21 +376,48 @@ export const initDB = (dbPath: string) => {
     console.error("[DB] Failed to migrate journal_entry_lines (reconciled)", e);
   }
 
+  // MIGRATION: Add invoice tracking to dispatch_header
+  try {
+    const dispatchCols = db.prepare("PRAGMA table_info(dispatch_header)").all();
+    if (dispatchCols.length > 0) {
+      if (!dispatchCols.some((col: any) => col.name === 'invoice_id')) db.prepare("ALTER TABLE dispatch_header ADD COLUMN invoice_id TEXT").run();
+      if (!dispatchCols.some((col: any) => col.name === 'posted_at')) db.prepare("ALTER TABLE dispatch_header ADD COLUMN posted_at TEXT").run();
+      if (!dispatchCols.some((col: any) => col.name === 'invoiced_at')) db.prepare("ALTER TABLE dispatch_header ADD COLUMN invoiced_at TEXT").run();
+      console.log("[DB] Verified dispatch_header schema (added invoice fields).");
+    }
+  } catch (e) {
+    console.error("[DB] Failed to migrate dispatch_header (invoice tracking)", e);
+  }
+
   // SEED: Default Parent Accounts for Partners (Auto-GL)
   try {
-    const settingsCheck = db.prepare("SELECT value FROM settings WHERE key = 'default_customer_parent'").get();
-    if (!settingsCheck) {
-      console.log("[DB] Seeding Default Parent Accounts...");
-      // Try to find reasonable defaults
+    const settingsRows = db.prepare(`
+      SELECT key, value FROM settings
+      WHERE key IN ('default_customer_parent', 'default_supplier_parent', 'default_employee_parent', 'default_partner_parent')
+    `).all();
+    const settingsMap = new Map<string, string>();
+    settingsRows.forEach((row: any) => settingsMap.set(row.key, row.value));
+
+    const insertSetting = db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)");
+
+    if (!settingsMap.get('default_customer_parent')) {
       const receivables = db.prepare("SELECT id FROM gl_chart_of_accounts WHERE (name_ar LIKE '%ذمم%' OR name_en LIKE '%Receivable%') AND account_level < 4 LIMIT 1").get();
-      const payables = db.prepare("SELECT id FROM gl_chart_of_accounts WHERE (name_ar LIKE '%مورد%' OR name_en LIKE '%Payable%') AND account_level < 4 LIMIT 1").get();
-      const employees = db.prepare("SELECT id FROM gl_chart_of_accounts WHERE (name_ar LIKE '%ذمم موظفين%' OR name_en LIKE '%Employee%') AND account_level < 4 LIMIT 1").get();
-
-      const insertSetting = db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)");
-
       if (receivables) insertSetting.run('default_customer_parent', receivables.id);
+    }
+
+    if (!settingsMap.get('default_supplier_parent')) {
+      const payables = db.prepare("SELECT id FROM gl_chart_of_accounts WHERE (name_ar LIKE '%مورد%' OR name_en LIKE '%Payable%') AND account_level < 4 LIMIT 1").get();
       if (payables) insertSetting.run('default_supplier_parent', payables.id);
+    }
+
+    if (!settingsMap.get('default_employee_parent')) {
+      const employees = db.prepare("SELECT id FROM gl_chart_of_accounts WHERE (name_ar LIKE '%ذمم موظفين%' OR name_en LIKE '%Employee%') AND account_level < 4 LIMIT 1").get();
       if (employees) insertSetting.run('default_employee_parent', employees.id);
+    }
+
+    if (!settingsMap.get('default_partner_parent')) {
+      const partners = db.prepare("SELECT id FROM gl_chart_of_accounts WHERE (name_ar LIKE '%شركاء%' OR name_en LIKE '%Partner%') AND account_level < 4 LIMIT 1").get();
+      if (partners) insertSetting.run('default_partner_parent', partners.id);
     }
   } catch (e) {
     console.error("[DB] Failed to seed default parent accounts", e);
@@ -332,6 +470,32 @@ export const initDB = (dbPath: string) => {
       is_base INTEGER DEFAULT 0
     );
   `);
+
+  // --- AUTO-MIGRATION: Extend Units Definition Fields ---
+  try {
+    const unitCols = db.prepare("PRAGMA table_info('units')").all() as Array<{ name: string }>;
+    const has = (col: string) => unitCols.some((c) => c.name === col);
+
+    if (!has('name_ar')) db.exec("ALTER TABLE units ADD COLUMN name_ar TEXT");
+    if (!has('name_en')) db.exec("ALTER TABLE units ADD COLUMN name_en TEXT");
+    if (!has('name_he')) db.exec("ALTER TABLE units ADD COLUMN name_he TEXT");
+    if (!has('code')) db.exec("ALTER TABLE units ADD COLUMN code TEXT");
+    if (!has('is_active')) db.exec("ALTER TABLE units ADD COLUMN is_active INTEGER DEFAULT 1");
+    if (!has('is_used')) db.exec("ALTER TABLE units ADD COLUMN is_used INTEGER DEFAULT 0");
+    if (!has('unit_type')) db.exec("ALTER TABLE units ADD COLUMN unit_type TEXT DEFAULT 'كمية'");
+    if (!has('parent_unit_id')) db.exec("ALTER TABLE units ADD COLUMN parent_unit_id TEXT");
+    if (!has('level_no')) db.exec("ALTER TABLE units ADD COLUMN level_no INTEGER DEFAULT 1");
+    if (!has('symbol_ar')) db.exec("ALTER TABLE units ADD COLUMN symbol_ar TEXT");
+    if (!has('symbol_en')) db.exec("ALTER TABLE units ADD COLUMN symbol_en TEXT");
+    if (!has('symbol_he')) db.exec("ALTER TABLE units ADD COLUMN symbol_he TEXT");
+    if (!has('multiplier')) db.exec("ALTER TABLE units ADD COLUMN multiplier REAL DEFAULT 1");
+    if (!has('total_factor')) db.exec("ALTER TABLE units ADD COLUMN total_factor REAL DEFAULT 1");
+    if (!has('updated_at')) db.exec("ALTER TABLE units ADD COLUMN updated_at TEXT");
+
+    db.exec("UPDATE units SET name_ar = COALESCE(name_ar, name), code = COALESCE(code, symbol), is_active = COALESCE(is_active, 1), level_no = COALESCE(level_no, 1), multiplier = COALESCE(multiplier, 1), total_factor = COALESCE(total_factor, 1)");
+  } catch (unitMigErr) {
+    console.error('[DB] Units migration failed:', unitMigErr);
+  }
 
   // Items (Master)
   db.exec(`
@@ -681,91 +845,201 @@ export const initDB = (dbPath: string) => {
     console.error("[DB] Cleanup failed", e);
   }
 
-  // SELF-REPAIR: Remove broken triggers/views referencing missing backup tables
+  // SELF-REPAIR: Fix broken FK references by recreating affected tables safely.
+  // We cannot use PRAGMA writable_schema=ON because better-sqlite3 runs with DBCONFIG_DEFENSIVE enabled.
   try {
-    console.log("[DB] Checking for broken backup triggers/views...");
+    console.log("[DB REPAIR] Checking for phantom FK references in tables...");
 
-    // *** CRITICAL: Must disable FKs for the entire repair process ***
-    db.exec("PRAGMA foreign_keys = OFF");
+    // Find tables that have broken schemas
+    const brokenTables = db.prepare(
+      `SELECT name, sql FROM sqlite_master 
+       WHERE type = 'table' AND (
+          sql LIKE '%business_partners_backup_fix_fk%' 
+       OR sql LIKE '%treasury_vouchers_old_bad%'
+       )`
+    ).all() as any[];
 
-    // STEP 1: Drop the orphaned backup table if it somehow exists
+    if (brokenTables.length > 0) {
+      console.log(`[DB REPAIR] Found ${brokenTables.length} tables with broken FK references. Repairing...`);
+
+      // 1. Foreign keys must be OFF during schema patching
+      db.exec("PRAGMA foreign_keys = OFF");
+
+      // Transaction to safely update and verify
+      db.transaction(() => {
+        for (const tbl of brokenTables) {
+          console.log(`[DB REPAIR] Repairing table: ${tbl.name}`);
+
+          // Determine fixed SQL
+          let fixedSql = tbl.sql
+            .replace(/"business_partners_backup_fix_fk"/g, 'business_partners')
+            .replace(/business_partners_backup_fix_fk/g, 'business_partners')
+            .replace(/"treasury_vouchers_old_bad"/g, 'treasury_vouchers')
+            .replace(/treasury_vouchers_old_bad/g, 'treasury_vouchers');
+
+          // Capture associated indexes & triggers BEFORE renaming
+          const indexes = db.prepare(`SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name = ? AND sql IS NOT NULL`).all(tbl.name) as any[];
+          const triggers = db.prepare(`SELECT sql FROM sqlite_master WHERE type='trigger' AND tbl_name = ? AND sql IS NOT NULL`).all(tbl.name) as any[];
+
+          const badName = tbl.name + '_bad_fk';
+
+          // Ensure temp name is clear
+          db.exec(`DROP TABLE IF EXISTS "${badName}"`);
+
+          // Rename broken table
+          db.exec(`ALTER TABLE "${tbl.name}" RENAME TO "${badName}"`);
+
+          // Recreate fixed table using captured original SQL with fixes
+          db.exec(fixedSql);
+
+          // Copy data over
+          const cols = db.prepare(`PRAGMA table_info("${tbl.name}")`).all() as any[];
+          const colNames = cols.map(c => `"${c.name}"`).join(', ');
+
+          if (colNames.length > 0) {
+            db.exec(`INSERT INTO "${tbl.name}" (${colNames}) SELECT ${colNames} FROM "${badName}"`);
+          }
+
+          // Drop the broken backup
+          db.exec(`DROP TABLE "${badName}"`);
+
+          // Restore Indexes
+          for (const idx of indexes) {
+            db.exec(idx.sql);
+          }
+          // Restore Triggers
+          for (const trig of triggers) {
+            db.exec(trig.sql);
+          }
+        }
+      })();
+
+      // Perform integrity check and FK check
+      const integrity = db.prepare("PRAGMA integrity_check").get() as any;
+      console.log("[DB REPAIR] Integrity check result:", integrity ? integrity.integrity_check : 'unknown');
+
+      const fkCheck = db.prepare("PRAGMA foreign_key_check").all() as any[];
+      if (fkCheck.length > 0) {
+        console.warn("[DB REPAIR] ⚠️ Warning: Foreign key violations still exist in data:", fkCheck);
+      } else {
+        console.log("[DB REPAIR] ✅ Foreign key data check passed.");
+      }
+
+      // Safely turn FKs back on 
+      db.exec("PRAGMA foreign_keys = ON");
+      console.log("[DB REPAIR] ✅ DB Schema repair completed successfully.");
+
+    } else {
+      console.log("[DB REPAIR] ✅ No phantom FK references found. DB schema is clean.");
+    }
+
+    // Drop orphaned backup/temp tables that may exist from previous failed migrations (from older repair attempts)
+    db.exec("PRAGMA foreign_keys = OFF"); // Ensure FKs are off for dropping tables
     db.exec("DROP TABLE IF EXISTS business_partners_backup_fix_fk");
     db.exec("DROP TABLE IF EXISTS business_partners_new_fix");
-    // Also clean up leftover temp tables from previous failed repairs
     db.exec("DROP TABLE IF EXISTS treasury_vouchers_bad_fk_backup");
     db.exec("DROP TABLE IF EXISTS cheques_bad_fk_backup");
     db.exec("DROP TABLE IF EXISTS treasury_vouchers_old_bad");
     db.exec("DROP TABLE IF EXISTS cheques_old_bad");
+    db.exec("PRAGMA foreign_keys = ON");
 
-    // STEP 2: Find and fix tables with broken Foreign Keys
-    const brokenTables = db.prepare(`SELECT name, sql FROM sqlite_master WHERE type='table' AND sql LIKE '%business_partners_backup_fix_fk%'`).all();
-
-    if (brokenTables.length > 0) {
-      console.log(`[DB] Found ${brokenTables.length} tables with broken Foreign Keys. Repairing...`);
-
-      db.transaction(() => {
-        for (const tbl of brokenTables) {
-          console.log(`[DB] Repairing table: ${tbl.name}`);
-          const tempName = `${tbl.name}_bad_fk_backup`;
-
-          // Drop temp table if it somehow exists from previous failed run
-          db.exec(`DROP TABLE IF EXISTS "${tempName}"`);
-
-          // 1. Rename bad table
-          db.exec(`ALTER TABLE "${tbl.name}" RENAME TO "${tempName}"`);
-
-          // 2. Create new table with corrected SQL
-          let newSql = tbl.sql.replace(/"?business_partners_backup_fix_fk"?/g, '"business_partners"');
-          newSql = newSql.replace(/REFERENCES\s+("?business_partners_backup_fix_fk"?)/gi, 'REFERENCES business_partners');
-
-          db.exec(newSql);
-
-          // 3. Copy data
-          db.exec(`INSERT INTO "${tbl.name}" SELECT * FROM "${tempName}"`);
-
-          // 4. Drop old
-          db.exec(`DROP TABLE "${tempName}"`);
-
-          console.log(`[DB] Repaired ${tbl.name}`);
-        }
-      })();
-    }
-
-    // STEP 3: Find and drop ALL triggers whose SQL references broken tables
-    const allTriggers = db.prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'trigger'`).all();
+    // Drop any triggers/views that still reference broken table names
+    const allTriggers = db.prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'trigger'`).all() as any[];
     for (const trig of allTriggers) {
       if (trig.sql && (
         trig.sql.includes('business_partners_backup_fix_fk') ||
         trig.sql.includes('backup_fix') ||
-        trig.sql.includes('gl_journal_header')
+        trig.sql.includes('treasury_vouchers_old_bad')
       )) {
-        console.log(`[DB] Dropping broken trigger: ${trig.name}`);
+        console.log(`[DB REPAIR] Dropping broken trigger: ${trig.name}`);
         db.prepare(`DROP TRIGGER IF EXISTS "${trig.name}"`).run();
       }
     }
 
-    // STEP 4: Find and drop broken views
-    const allViews = db.prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'view'`).all();
+    const allViews = db.prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'view'`).all() as any[];
     for (const view of allViews) {
       if (view.sql && (
         view.sql.includes('business_partners_backup_fix_fk') ||
         view.sql.includes('backup_fix') ||
-        view.sql.includes('gl_journal_header')
+        view.sql.includes('treasury_vouchers_old_bad')
       )) {
-        console.log(`[DB] Dropping broken view: ${view.name}`);
+        console.log(`[DB REPAIR] Dropping broken view: ${view.name}`);
         db.prepare(`DROP VIEW IF EXISTS "${view.name}"`).run();
       }
     }
 
-    console.log("[DB] Backup table cleanup complete.");
-  } catch (e) {
-    console.error("[DB] Failed to clean broken triggers/views or repair tables", e);
-  } finally {
-    // Re-enable FK checks after all repairs done
-    db.exec("PRAGMA foreign_keys = ON");
+  } catch (e: any) {
+    console.error("[DB REPAIR] ❌ Fatal error during broken FK reference patch:", e);
+    // Ensure FKs and writable_schema are always restored to safe state
+    try { db.exec("PRAGMA writable_schema = OFF"); } catch { }
+    try { db.exec("PRAGMA foreign_keys = ON"); } catch { }
   }
 
-  // MIGRATION: Add 'code' and 'is_active' to item_categories if missing
+  // MIGRATION: Create dispatch tables (dispatch_header + dispatch_lines)
+  // These tables power the dispatch (سند الإرسال) module.
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dispatch_header (
+        id TEXT PRIMARY KEY,
+        serial_no TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'محفوظ',
+        dispatch_type TEXT DEFAULT 'تحويل داخلي',
+        dispatch_date DATE NOT NULL,
+        dispatch_time TEXT,
+        from_warehouse_id TEXT,
+        to_type TEXT DEFAULT 'Warehouse',
+        to_id TEXT,
+        ledger_id TEXT,
+        sales_rep_id TEXT,
+        truck_id TEXT,
+        carrier_id TEXT,
+        tracking_no TEXT,
+        is_sent INTEGER DEFAULT 0,
+        is_maintenance INTEGER DEFAULT 0,
+        customer_ref TEXT,
+        send_to TEXT,
+        shipment_no TEXT,
+        receiver_name TEXT,
+        receiver_phone TEXT,
+        delivery_date DATE,
+        delivery_address TEXT,
+        delivery_instructions TEXT,
+        source_type TEXT,
+        source_id TEXT,
+        notes TEXT,
+        posted_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (from_warehouse_id) REFERENCES warehouses(id)
+      )
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dispatch_lines (
+        id TEXT PRIMARY KEY,
+        header_id TEXT NOT NULL,
+        line_no INTEGER DEFAULT 0,
+        item_id TEXT NOT NULL,
+        uom TEXT,
+        qty REAL NOT NULL DEFAULT 0,
+        available_qty REAL DEFAULT 0,
+        bin_id TEXT,
+        batch_no TEXT,
+        expiry_date DATE,
+        ref TEXT,
+        line_note TEXT,
+        source_line_id TEXT,
+        FOREIGN KEY (header_id) REFERENCES dispatch_header(id) ON DELETE CASCADE,
+        FOREIGN KEY (item_id) REFERENCES items(id)
+      )
+    `);
+
+    console.log("[DB] dispatch_header and dispatch_lines tables ready.");
+  } catch (e) {
+    console.error("[DB] Failed to create dispatch tables:", e);
+  }
+
+
   try {
     const tableInfo = db.prepare("PRAGMA table_info(item_categories)").all();
     const hasCode = tableInfo.some((col: any) => col.name === 'code');
@@ -821,7 +1095,8 @@ export const initDB = (dbPath: string) => {
     // Fix HR Leave Requests (Missing submission_date)
     const reqCols = db.prepare("PRAGMA table_info(hr_leave_requests)").all();
     if (reqCols.length > 0 && !reqCols.some((c: any) => c.name === 'submission_date')) {
-      db.prepare("ALTER TABLE hr_leave_requests ADD COLUMN submission_date DATE DEFAULT CURRENT_DATE").run();
+      db.prepare("ALTER TABLE hr_leave_requests ADD COLUMN submission_date DATE").run();
+      db.prepare("UPDATE hr_leave_requests SET submission_date = COALESCE(submission_date, CURRENT_DATE) WHERE submission_date IS NULL").run();
       console.log("[DB] Added 'submission_date' to hr_leave_requests");
     }
 
@@ -951,129 +1226,12 @@ export const initDB = (dbPath: string) => {
     console.error("[DB] Failed to add commission_account_id", e);
   }
 
-  // MIGRATION: Fix Business Partners FK (gl_chart_of_accounts -> accounts)
-  // Check if we need migration: Try to insert dummy with valid account ID, if it fails with FK error, we need fix?
-  // Or just check table info.
-  // Safer: Just recreate the table structure if we suspect it's wrong.
-  // To be safe and idempotent, we check if we already fixed it? Hard to detect constraint name in SQLite.
-  // We will perform the migration if 'business_partners' exists.
-  try {
-    db.exec("PRAGMA foreign_keys=OFF;");
+  // MIGRATION: Fix Business Partners FK
+  // (Removed: The old migration logic here was causing 'business_partners_backup_fix_fk' phantom references. 
+  // It has been replaced by the PRAGMA writable_schema fix at the top of this file.)
 
-    db.transaction(() => {
-      // Drop dependent views first to avoid errors during table rename
-      db.exec("DROP VIEW IF EXISTS view_partner_ledger");
-
-      // 1. Rename old table
-      // Check if temp table exists from failed previous run
-      db.exec("DROP TABLE IF EXISTS business_partners_backup_fix_fk");
-
-      // We can't easily rename because of existing indexes/triggers maybe? 
-      // Better: Create NEW table, Copy, Drop Old, Rename New.
-
-      db.exec(`
-            CREATE TABLE IF NOT EXISTS business_partners_new_fix (
-                id TEXT PRIMARY KEY,
-                code TEXT UNIQUE,
-                name_ar TEXT NOT NULL,
-                name_en TEXT,
-                type TEXT NOT NULL,
-                phone TEXT,
-                mobile TEXT,
-                email TEXT,
-                address TEXT,
-                city TEXT,
-                tax_number TEXT,
-                
-                linked_account_id TEXT, 
-                credit_limit DECIMAL(18,4) DEFAULT 0, 
-                payment_term_days INTEGER DEFAULT 0, 
-                price_list_id TEXT, 
-                
-                is_active INTEGER DEFAULT 1,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                
-                -- V19 Columns
-                region_id TEXT,
-                group_id TEXT,
-                sales_rep_id TEXT,
-                website TEXT,
-                credit_days INTEGER,
-                
-                -- Corrected FK
-                FOREIGN KEY (linked_account_id) REFERENCES accounts(id),
-                FOREIGN KEY (region_id) REFERENCES regions(id),
-                FOREIGN KEY (group_id) REFERENCES customer_groups(id),
-                FOREIGN KEY (sales_rep_id) REFERENCES sales_reps(id)
-            );
-          `);
-
-      // Copy Data
-      // We use INSERT OR IGNORE to avoid primary key collisions if something weird happens, 
-      // but we want to transfer data.
-      // Note: We need to match columns. unique name conflict might occur if we are not careful.
-      // 'INSERT INTO ... SELECT * FROM ...' works if columns match exactly.
-      // Since we might have extra columns in old table or new table, explicit column list is safer.
-      // But hard to maintain.
-      // Assumption: The schema matches the accumulation of v2 + v19.
-
-      // Let's try flexible copy:
-      // We can't do dynamic SQL in this environment easily.
-      // We will rely on matching names.
-
-      const columns = [
-        'id', 'code', 'name_ar', 'name_en', 'type', 'phone', 'mobile', 'email', 'address', 'city', 'tax_number',
-        'linked_account_id', 'credit_limit', 'payment_term_days', 'price_list_id', 'is_active', 'created_at',
-        'region_id', 'group_id', 'sales_rep_id', 'website', 'credit_days'
-      ];
-
-      const colString = columns.join(',');
-
-      // Check if old table exists
-      const exists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='business_partners'").get();
-      if (exists) {
-        console.log("[DB] Migrating business_partners to fix Foreign Key...");
-
-        // We need to verify if source table has all these columns.
-        // If not, we might fail.
-        // Simple heuristic: Copy what we can.
-        // Actually, simply renaming old to backup and creating new is safer.
-
-        db.exec("ALTER TABLE business_partners RENAME TO business_partners_backup_fix_fk");
-        db.exec(`INSERT INTO business_partners_new_fix (${colString}) SELECT ${colString} FROM business_partners_backup_fix_fk`);
-        db.exec("DROP TABLE business_partners_backup_fix_fk");
-      }
-
-      db.exec("ALTER TABLE business_partners_new_fix RENAME TO business_partners");
-
-      // Recreate Indexes ?? 
-      // code is unique constraint, so index created.
-    })();
-
-    db.exec("PRAGMA foreign_keys=ON;");
-
-    // Recreate the view that was dropped during migration
-    loadSchema('database/schema_v7_views.sql', 'Schema V7 (Reports Views) - Recreate after FK fix');
-
-    console.log("[DB] Fixed business_partners Foreign Key constraint.");
-
-  } catch (e: any) {
-    // If error (e.g. column missing in old table), log it.
-    // If "no such column", it means our Assumption on V19 columns was wrong or user didn't have them yet.
-    // This is acceptable, we abort migration then.
-    console.error("[DB] FK Fix Migration Failed (This is expected if table structure varies):", e.message);
-
-    // Rollback (Sort of): If we renamed old table, restore it.
-    try {
-      db.exec("DROP TABLE IF EXISTS business_partners_new_fix");
-      const backupExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='business_partners_backup_fix_fk'").get();
-      if (backupExists) {
-        db.exec("ALTER TABLE business_partners_backup_fix_fk RENAME TO business_partners");
-      }
-    } catch (rollbackErr) {
-      console.error("[DB] Rollback failed:", rollbackErr);
-    }
-  }
+  // Ensure V7 Report Views are loaded
+  loadSchema('database/schema_v7_views.sql', 'Schema V7 (Reports Views)');
 
   // DEBUG: Dump Schema to file
   try {
@@ -1095,6 +1253,20 @@ export const initDB = (dbPath: string) => {
 };
 
 export function seedSystem() {
+  const tableExists = (tableName: string): boolean => {
+    try {
+      const row = db.prepare(`
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = ?
+        LIMIT 1
+      `).get(tableName);
+      return Boolean(row);
+    } catch {
+      return false;
+    }
+  };
+
   // 1. Seed Main Branch
   const mainBranch = db.prepare("SELECT * FROM branches WHERE is_main = 1").get();
   let branchId = mainBranch?.id;
@@ -1120,6 +1292,29 @@ export function seedSystem() {
     }
 
     // Grant all permissions (*.*) - logic handled in app
+  }
+
+  // Keep legacy "System Manager" role usable in all databases:
+  // this role is the default role for bootstrap admin users.
+  const hasAllPermission = db.prepare(`
+    SELECT 1
+    FROM permissions
+    WHERE role_id = ?
+      AND permission_key = 'ALL'
+    LIMIT 1
+  `).get(roleId);
+  if (!hasAllPermission) {
+    db.prepare(`
+      INSERT INTO permissions (id, role_id, permission_key)
+      VALUES (?, ?, 'ALL')
+    `).run(uuidv4(), roleId);
+  }
+
+  if (tableExists('role_permissions')) {
+    db.prepare(`
+      INSERT OR IGNORE INTO role_permissions (id, role_id, capability_key, effect, created_at)
+      VALUES (?, ?, 'ALL', 'ALLOW', CURRENT_TIMESTAMP)
+    `).run(uuidv4(), roleId);
   }
 
   // 3. Seed Admin User (Default: admin / admin123)

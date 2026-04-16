@@ -70,7 +70,7 @@ export const OpeningBalances = () => {
     const diff = totalDebit - totalCredit;
 
     return (
-        <div className="flex flex-col h-full bg-gray-50 p-6" dir="rtl">
+        <div className="flex flex-col app-page h-full" dir="rtl">
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -83,7 +83,7 @@ export const OpeningBalances = () => {
                 </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col flex-1 overflow-hidden">
+            <div className="card flex flex-col flex-1 overflow-hidden">
                 <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
                     <div className="relative w-96">
                         <Search className="absolute right-3 top-2.5 text-gray-400" size={18} />
@@ -112,7 +112,7 @@ export const OpeningBalances = () => {
                 </div>
 
                 <div className="flex-1 overflow-auto">
-                    <table className="w-full">
+                    <table className="dense-table w-full">
                         <thead className="bg-gray-100 sticky top-0 z-10 text-xs font-bold text-gray-600 uppercase">
                             <tr>
                                 <th className="px-6 py-3 text-right">رقم الحساب</th>
@@ -153,3 +153,4 @@ export const OpeningBalances = () => {
         </div>
     );
 };
+

@@ -2,11 +2,20 @@ import { app, BrowserWindow, ipcMain, screen, dialog, protocol, net } from 'elec
 import { pathToFileURL } from 'url';
 import path from 'path';
 import fs from 'fs';
+import nodemailer from 'nodemailer';
 
 import { initDB, seedCOA, seedSystem } from './database';
 
 // Disable security warnings in dev
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+
+[process.stdout, process.stderr].forEach((stream) => {
+  stream?.on?.('error', (error: any) => {
+    if (error?.code === 'EPIPE') {
+      return;
+    }
+  });
+});
 
 import { InventoryService } from './services/InventoryService';
 import { LogisticsService } from './services/LogisticsService';
@@ -21,6 +30,10 @@ import { ReportService } from './services/ReportService';
 import { ManufacturingService } from './services/ManufacturingService'; // The new one for SQL Views
 import { MasterDataService } from './services/MasterDataService';
 import { CurrencyService } from './services/CurrencyService';
+import { CostCenterService } from './services/CostCenterService';
+import { TaxGroupService } from './services/TaxGroupService';
+import { WarehouseService } from './services/WarehouseService';
+import { ItemTrackingService } from './services/ItemTrackingService';
 import { BranchService } from './services/BranchService';
 import { AccountService } from './services/AccountService';
 import { ItemService } from './services/ItemService';
@@ -28,6 +41,7 @@ import { PartnerService } from './services/PartnerService';
 import { FinancialDefinitionService } from './services/FinancialDefinitionService';
 // JournalService imported only once
 import { JournalService } from './services/JournalService';
+import { AccountingEngineService } from './services/AccountingEngineService';
 import { PurchaseService } from './services/PurchaseService';
 import { ExportService } from './services/ExportService';
 import { TreasuryService } from './services/TreasuryService';
@@ -41,13 +55,193 @@ import { AttendanceService } from './services/AttendanceService';
 import { PayrollService } from './services/PayrollService';
 import { LeaveService } from './services/LeaveService';
 import { WorkflowTestService } from './services/WorkflowTestService';
-
-
+import { DispatchService } from './services/DispatchService';
+import { GRNService } from './services/GRNService';
+import { WorkflowService } from './services/WorkflowService';
+import { SalesInvoiceService } from './services/SalesInvoiceService';
+import { PurchaseInvoiceService } from './services/PurchaseInvoiceService';
+import { StockTransferService } from './services/StockTransferService';
+import { JournalVoucherService } from './services/JournalVoucherService';
+import { DocumentServiceFactory } from './services/DocumentServiceFactory';
+import { registerFixedAssetIPC } from '../src/main/ipc/fixedAssets.ipc';
+import { SqliteFixedAssetRepo } from '../src/main/infrastructure/adapters/SqliteFixedAssetRepo';
+import { FixedAssetUseCases } from '../src/main/application/useCases/FixedAssetUseCases';
+import { registerManufacturingIPC } from '../src/main/ipc/manufacturing.ipc';
+import { SqliteManufacturingRepo } from '../src/main/infrastructure/adapters/SqliteManufacturingRepo';
+import { ManufacturingUseCases } from '../src/main/application/useCases/ManufacturingUseCases';
+import { ManufacturingStockLedgerService } from '../src/main/application/services/ManufacturingStockLedgerService';
+import { ManufacturingAccountingBuilder } from '../src/main/application/services/ManufacturingAccountingBuilder';
+import { ManufacturingService as ManufacturingDomainService } from '../src/main/application/services/ManufacturingService';
+import { registerCustomerReceivablesIPC } from '../src/main/ipc/customerReceivables.ipc';
+import { SqliteCustomerReceivablesRepo } from '../src/main/infrastructure/adapters/SqliteCustomerReceivablesRepo';
+import { CustomerReceivablesService } from '../src/main/application/services/CustomerReceivablesService';
+import { CustomerReceivablesUseCases } from '../src/main/application/useCases/CustomerReceivablesUseCases';
+import { registerVendorPayablesIPC } from '../src/main/ipc/vendorPayables.ipc';
+import { SqliteVendorPayablesRepo } from '../src/main/infrastructure/adapters/SqliteVendorPayablesRepo';
+import { VendorPayablesService } from '../src/main/application/services/VendorPayablesService';
+import { VendorPayablesUseCases } from '../src/main/application/useCases/VendorPayablesUseCases';
+import { registerFinanceIPC } from '../src/main/ipc/finance.ipc';
+import { SqliteCurrencyRepo } from '../src/main/infrastructure/adapters/SqliteCurrencyRepo';
+import { SqliteCostCenterRepo } from '../src/main/infrastructure/adapters/SqliteCostCenterRepo';
+import { SqliteTaxGroupRepo } from '../src/main/infrastructure/adapters/SqliteTaxGroupRepo';
+import { FinanceUseCases } from '../src/main/application/useCases/FinanceUseCases';
+import { SqliteExpenseDimensionsRepo } from '../src/main/infrastructure/adapters/SqliteExpenseDimensionsRepo';
+import { ExpenseDimensionsUseCases } from '../src/main/application/useCases/ExpenseDimensionsUseCases';
+import { registerExpenseDimensionsIPC } from '../src/main/ipc/expenseDimensions.ipc';
+import { SqliteAccountingFoundationRepo } from '../src/main/infrastructure/adapters/SqliteAccountingFoundationRepo';
+import { AccountingFoundationUseCases } from '../src/main/application/useCases/AccountingFoundationUseCases';
+import { registerAccountingFoundationIPC } from '../src/main/ipc/accountingFoundation.ipc';
+import { SqliteChartOfAccountsRepo } from '../src/main/infrastructure/adapters/SqliteChartOfAccountsRepo';
+import { ChartOfAccountsSeedService } from '../src/main/infrastructure/services/ChartOfAccountsSeedService';
+import { ChartOfAccountsUseCases } from '../src/main/application/useCases/ChartOfAccountsUseCases';
+import { registerChartOfAccountsIPC } from '../src/main/ipc/chartOfAccounts.ipc';
+import { SqliteAccountingResolutionRepo } from '../src/main/infrastructure/adapters/SqliteAccountingResolutionRepo';
+import { AccountingResolutionUseCases } from '../src/main/application/useCases/AccountingResolutionUseCases';
+import { registerAccountingResolutionIPC } from '../src/main/ipc/accountingResolution.ipc';
+import { SqliteJournalHeaderRepo } from '../src/main/infrastructure/adapters/SqliteJournalHeaderRepo';
+import { SqliteJournalLineRepo } from '../src/main/infrastructure/adapters/SqliteJournalLineRepo';
+import { SqlitePostingRegistryRepo } from '../src/main/infrastructure/adapters/SqlitePostingRegistryRepo';
+import { SqliteJournalFiscalPeriodRepo } from '../src/main/infrastructure/adapters/SqliteJournalFiscalPeriodRepo';
+import { SqliteJournalAccountLookupRepo } from '../src/main/infrastructure/adapters/SqliteJournalAccountLookupRepo';
+import { JournalEngineService } from '../src/main/application/services/JournalEngineService';
+import { JournalEngineUseCases } from '../src/main/application/useCases/JournalEngineUseCases';
+import { registerAccountingJournalsIPC } from '../src/main/ipc/accountingJournals.ipc';
+import { SqliteSalesInvoiceAccountingRepo } from '../src/main/infrastructure/adapters/SqliteSalesInvoiceAccountingRepo';
+import { SalesInvoicePostingBuilder } from '../src/main/application/services/SalesInvoicePostingBuilder';
+import { SalesInvoiceAccountingService } from '../src/main/application/services/SalesInvoiceAccountingService';
+import { SalesInvoiceAccountingUseCases } from '../src/main/application/useCases/SalesInvoiceAccountingUseCases';
+import { registerSalesInvoiceAccountingIPC } from '../src/main/ipc/salesInvoiceAccounting.ipc';
+import { SqlitePurchaseInvoiceAccountingRepo } from '../src/main/infrastructure/adapters/SqlitePurchaseInvoiceAccountingRepo';
+import { PurchaseInvoicePostingBuilder } from '../src/main/application/services/PurchaseInvoicePostingBuilder';
+import { PurchaseInvoiceAccountingService } from '../src/main/application/services/PurchaseInvoiceAccountingService';
+import { PurchaseInvoiceAccountingUseCases } from '../src/main/application/useCases/PurchaseInvoiceAccountingUseCases';
+import { registerPurchaseInvoiceAccountingIPC } from '../src/main/ipc/purchaseInvoiceAccounting.ipc';
+import { SqliteInventoryDocumentRepo } from '../src/main/infrastructure/adapters/SqliteInventoryDocumentRepo';
+import { InventoryPostingBuilder } from '../src/main/application/services/InventoryPostingBuilder';
+import { InventoryDocumentService } from '../src/main/application/services/InventoryDocumentService';
+import { InventoryDocumentUseCases } from '../src/main/application/useCases/InventoryDocumentUseCases';
+import { registerInventoryDocumentIPC } from '../src/main/ipc/inventoryDocument.ipc';
+import { SqliteTreasuryRepo } from '../src/main/infrastructure/adapters/SqliteTreasuryRepo';
+import { TreasuryPostingBuilder } from '../src/main/application/services/TreasuryPostingBuilder';
+import { TreasuryChequeLifecycleService } from '../src/main/application/services/TreasuryChequeLifecycleService';
+import { TreasuryDocumentService } from '../src/main/application/services/TreasuryDocumentService';
+import { TreasuryDocumentUseCases } from '../src/main/application/useCases/TreasuryDocumentUseCases';
+import { TreasuryChequeUseCases } from '../src/main/application/useCases/TreasuryChequeUseCases';
+import { registerTreasuryDocumentIPC } from '../src/main/ipc/treasuryDocument.ipc';
+import { registerTreasuryChequeIPC } from '../src/main/ipc/treasuryCheque.ipc';
+import { SqliteSalesOperationsRepo } from '../src/main/infrastructure/adapters/SqliteSalesOperationsRepo';
+import { SalesOperationsAccountingBuilder } from '../src/main/application/services/SalesOperationsAccountingBuilder';
+import { SalesStockLedgerService } from '../src/main/application/services/SalesStockLedgerService';
+import { SalesOperationsService } from '../src/main/application/services/SalesOperationsService';
+import { SalesOperationsUseCases } from '../src/main/application/useCases/SalesOperationsUseCases';
+import { registerSalesQuotationIPC } from '../src/main/ipc/salesQuotation.ipc';
+import { registerSalesOrderIPC } from '../src/main/ipc/salesOrder.ipc';
+import { registerDeliveryNoteIPC } from '../src/main/ipc/deliveryNote.ipc';
+import { registerSalesReturnIPC } from '../src/main/ipc/salesReturn.ipc';
+import { SqlitePurchaseOperationsRepo } from '../src/main/infrastructure/adapters/SqlitePurchaseOperationsRepo';
+import { PurchaseOperationsAccountingBuilder } from '../src/main/application/services/PurchaseOperationsAccountingBuilder';
+import { PurchaseStockLedgerService } from '../src/main/application/services/PurchaseStockLedgerService';
+import { PurchaseOperationsService } from '../src/main/application/services/PurchaseOperationsService';
+import { PurchaseOperationsUseCases } from '../src/main/application/useCases/PurchaseOperationsUseCases';
+import { registerPurchaseRequestIPC } from '../src/main/ipc/purchaseRequest.ipc';
+import { registerPurchaseRfqIPC } from '../src/main/ipc/purchaseRfq.ipc';
+import { registerPurchaseOrderIPC } from '../src/main/ipc/purchaseOrder.ipc';
+import { registerGoodsReceiptNoteIPC } from '../src/main/ipc/goodsReceiptNote.ipc';
+import { registerPurchaseReturnIPC } from '../src/main/ipc/purchaseReturn.ipc';
+import { CapabilityRegistry } from '../src/main/application/services/CapabilityRegistry';
+import { PermissionSnapshotService } from '../src/main/application/services/PermissionSnapshotService';
+import { SqlitePermissionEngineRepo } from '../src/main/infrastructure/adapters/SqlitePermissionEngineRepo';
+import { registerSecurityIPC } from '../src/main/ipc/security.ipc';
+import { ScreenRegistry } from '../src/main/application/services/ScreenRegistry';
+import { ScreenQueryBuilder } from '../src/main/application/services/ScreenQueryBuilder';
+import { ScreenViewsService } from '../src/main/application/services/ScreenViewsService';
+import { SqliteScreenViewsRepo } from '../src/main/infrastructure/adapters/SqliteScreenViewsRepo';
+import { registerScreenViewsIPC } from '../src/main/ipc/screenViews.ipc';
+import { registerPrintingIPC } from '../src/main/ipc/printing.ipc';
+import { AuditService, configureGlobalAuditService, getGlobalAuditService } from '../src/main/application/services/AuditService';
+import { SqliteAuditRepo } from '../src/main/infrastructure/adapters/SqliteAuditRepo';
+import { registerAuditIPC } from '../src/main/ipc/audit.ipc';
+import { bindAuthSession, clearAuthSession, clearAuthSessionByWebContentsId, configureAuthContext, getContext } from '../src/main/ipc/AuthContext';
+import { SqliteFinancialPlatformRepo } from '../src/main/infrastructure/adapters/SqliteFinancialPlatformRepo';
+import { FinancialPlatformUseCases } from '../src/main/application/useCases/FinancialPlatformUseCases';
+import { registerFinancialPlatformIPC } from '../src/main/ipc/financialPlatform.ipc';
+import { SqliteRuntimeGovernanceRepo } from '../src/main/infrastructure/adapters/SqliteRuntimeGovernanceRepo';
+import { ConcurrentLicenseService } from '../src/main/application/services/ConcurrentLicenseService';
+import { AttachmentStorageService } from '../src/main/application/services/AttachmentStorageService';
+import { registerRuntimeGovernanceIPC } from '../src/main/ipc/runtimeGovernance.ipc';
+import { diffPlainObjects } from '../src/main/application/services/AuditDiffService';
 
 let db: any;
+let permissionSnapshotService: PermissionSnapshotService | null = null;
+let auditService: AuditService | null = null;
+let concurrentLicenseService: ConcurrentLicenseService | null = null;
+let attachmentStorageService: AttachmentStorageService | null = null;
+const DEFAULT_RENDERER_URL = 'http://localhost:4600';
 
 // Services will be initialized after DB is ready in app.on('ready')
 let importService: ImportService;
+
+/**
+ * Safe ipcMain.handle wrapper — prevents "Attempted to register a second handler" crash.
+ * Duplicate channel registrations are silently skipped with a console warning.
+ * This is needed because main.ts has grown large and some handlers were registered twice.
+ */
+function safeHandle(channel: string, handler: (...args: any[]) => any) {
+  try {
+    ipcMain.handle(channel, handler);
+  } catch (e: any) {
+    if (e.message?.includes('register a second handler')) {
+      console.warn(`[IPC] Skipped duplicate handler for: '${channel}'`);
+    } else {
+      throw e;
+    }
+  }
+}
+
+safeHandle('email:send', async (payload: any) => {
+  const {
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    to,
+    cc,
+    subject,
+    text,
+    html,
+  } = payload;
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port: Number(port || 587),
+    secure: secure ?? Number(port) === 465,
+    auth: {
+      user,
+      pass,
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+  });
+
+  const info = await transporter.sendMail({
+    from: user,
+    to,
+    cc,
+    subject,
+    text,
+    html,
+  });
+
+  return {
+    ok: true,
+    data: {
+      messageId: info.messageId,
+      response: info.response,
+    },
+  };
+});
 
 // Register protocol for local images
 // Register protocol for local images
@@ -158,7 +352,7 @@ app.whenReady().then(() => {
 const registerIPCHandlers = (db: any) => {
 
   // Reseed Accounts (Fix Data)
-  ipcMain.handle('reseed-accounts', () => {
+  safeHandle('reseed-accounts', () => {
     try {
       seedCOA();
       return { success: true };
@@ -168,14 +362,22 @@ const registerIPCHandlers = (db: any) => {
     }
   });
 
+  // --- Budgets ---
+  safeHandle('budgets:list', () => BudgetService.getAllBudgets());
+  safeHandle('budgets:get', (_, id: string) => BudgetService.getBudgetById(id));
+  safeHandle('budgets:create', (_, data: any) => BudgetService.createBudget(data));
+  safeHandle('budgets:updateStatus', (_, id: string, status: string, userId: string) => BudgetService.updateBudgetStatus(id, status, userId));
+  safeHandle('budgets:getVsActual', (_, id: string, period?: number) => BudgetService.getBudgetVsActual(id, period));
+
+
   // Get Accounts
-  ipcMain.handle('get-account', (event, id) => {
+  safeHandle('get-account', (event, id) => {
     return db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
   });
 
 
   // Get Transactional Accounts Only (for dropdowns in vouchers)
-  ipcMain.handle('get-transactional-accounts', () => {
+  safeHandle('get-transactional-accounts', () => {
     return db.prepare('SELECT * FROM accounts WHERE is_transactional = 1 ORDER BY code').all();
   });
 
@@ -183,12 +385,12 @@ const registerIPCHandlers = (db: any) => {
 
 
   // Get Account Children
-  ipcMain.handle('get-account-children', (event, parentId) => {
+  safeHandle('get-account-children', (event, parentId) => {
     return db.prepare('SELECT * FROM accounts WHERE parent_id = ? ORDER BY code').all(parentId);
   });
 
   // Get Account Path (breadcrumb from root to account)
-  ipcMain.handle('get-account-path', (event, accountId) => {
+  safeHandle('get-account-path', (event, accountId) => {
     const path = [];
     let currentId = accountId;
 
@@ -203,7 +405,7 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // Add Account
-  ipcMain.handle('add-account', (event, account) => {
+  safeHandle('add-account', (event, account) => {
     // Note: This needs refactoring to use UUID if we want consistency, 
     // but for now relying on database.ts helper or simple logic. 
     // Since we didn't export a generic insert with UUID in db, we might fail here if we don't gen UUID.
@@ -233,7 +435,7 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // Update Account
-  ipcMain.handle('update-account', (event, account) => {
+  safeHandle('update-account', (event, account) => {
     const stmt = db.prepare(`
       UPDATE accounts 
       SET name = @name, type = @type, is_transactional = @is_transactional, is_active = @is_active
@@ -262,7 +464,7 @@ const registerIPCHandlers = (db: any) => {
 
 
   // --- Generic CRUD Handler ---
-  ipcMain.handle('crud-operation', (event, { operation, table, data, id }) => {
+  safeHandle('crud-operation', (event, { operation, table, data, id }) => {
     const allowedTables = [
       'units', 'brands', 'countries', 'asset_families', 'item_families',
       'item_groups', 'item_categories', 'cost_centers', 'manual_books',
@@ -306,7 +508,7 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // Save Transaction (Refactored to use Service)
-  ipcMain.handle('save-transaction', async (event, data) => {
+  safeHandle('save-transaction', async (event, data) => {
     try {
       const {
         type, voucher_type, ref_no, date,
@@ -346,7 +548,7 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // Save Receipt Voucher
-  ipcMain.handle('save-receipt-voucher', (event, data) => {
+  safeHandle('save-receipt-voucher', (event, data) => {
     const { header, details, checks } = data;
 
     const saveRvTransaction = db.transaction(() => {
@@ -505,466 +707,711 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // --- Inventory Handlers (New) ---
-  ipcMain.handle('inventory:get-brands', () => InventoryService.getBrands());
-  ipcMain.handle('inventory:create-brand', (event, brand) => InventoryService.createBrand(brand));
-  ipcMain.handle('inventory:update-brand', (event, brand) => InventoryService.updateBrand(brand));
-  ipcMain.handle('inventory:delete-brand', (event, id) => InventoryService.deleteBrand(id));
-  ipcMain.handle('inventory:delete-unit', (event, id) => InventoryService.deleteUnit(id));
+  safeHandle('inventory:get-brands', () => InventoryService.getBrands());
+  safeHandle('inventory:create-brand', (event, brand) => InventoryService.createBrand(brand));
+  safeHandle('inventory:update-brand', (event, brand) => InventoryService.updateBrand(brand));
+  safeHandle('inventory:delete-brand', (event, id) => InventoryService.deleteBrand(id));
+  safeHandle('inventory:delete-unit', (event, id) => InventoryService.deleteUnit(id));
+  safeHandle('inventory:seed-default-units', () => InventoryService.seedDefaultUnits());
 
-  ipcMain.handle('inventory:get-items-v2', () => InventoryService.getItems());
-  ipcMain.handle('inventory:get-item-details', (event, id) => InventoryService.getItemDetails(id));
-  ipcMain.handle('inventory:create-item', (event, item) => InventoryService.createItem(item));
-  ipcMain.handle('inventory:update-item', (event, item) => InventoryService.updateItem(item));
-  ipcMain.handle('inventory:bulk-update-items', (event, updates) => InventoryService.bulkUpdateItems(updates));
-  ipcMain.handle('save-item', (event, item) => InventoryService.updateItem(item)); // Alias for legacy calls
+  safeHandle('inventory:get-items-v2', () => InventoryService.getItems());
+  safeHandle('inventory:get-item-details', (event, id) => InventoryService.getItemDetails(id));
+  safeHandle('inventory:create-item', (event, item) => InventoryService.createItem(item));
+  safeHandle('inventory:update-item', (event, item) => InventoryService.updateItem(item));
+  safeHandle('inventory:bulk-update-items', (event, updates) => InventoryService.bulkUpdateItems(updates));
+  safeHandle('save-item', (event, item) => InventoryService.updateItem(item)); // Alias for legacy calls
+
+  // --- Item Service (Suggestions/Lists) ---
+  safeHandle('inventory:suggest-items', (event, q, limit) => ItemService.suggest(q, limit));
+  safeHandle('inventory:list-items', (event, q, limit, offset) => ItemService.list(q, limit, offset));
+  safeHandle('inventory:quick-create-item', (event, item) => ItemService.quickCreate(item));
 
   // Stock Take
-  ipcMain.handle('inventory:get-stock-takes', () => InventoryService.getStockTakes());
-  ipcMain.handle('inventory:get-stock-take', (event, id) => InventoryService.getStockTake(id));
-  ipcMain.handle('inventory:create-stock-take', (event, data) => InventoryService.createStockTake(data));
-  ipcMain.handle('inventory:update-stock-take-item', (event, id, qty) => InventoryService.updateStockTakeItem(id, qty));
-  ipcMain.handle('inventory:approve-stock-take', (event, id) => InventoryService.approveStockTake(id));
+  safeHandle('inventory:get-stock-takes', () => InventoryService.getStockTakes());
+  safeHandle('inventory:get-stock-take', (event, id) => InventoryService.getStockTake(id));
+  safeHandle('inventory:create-stock-take', (event, data) => InventoryService.createStockTake(data));
+  safeHandle('inventory:update-stock-take-item', (event, id, qty) => InventoryService.updateStockTakeItem(id, qty));
+  safeHandle('inventory:approve-stock-take', (event, id) => InventoryService.approveStockTake(id));
 
   // Period Closing
-  ipcMain.handle('inventory:get-last-closing-date', () => InventoryService.getLastClosingDate());
-  ipcMain.handle('inventory:close-period', (event, date) => InventoryService.closePeriod(date));
+  safeHandle('inventory:get-last-closing-date', () => InventoryService.getLastClosingDate());
+  safeHandle('inventory:close-period', (event, date) => InventoryService.closePeriod(date));
 
-  ipcMain.handle('inventory:get-batches', (event, itemId) => InventoryService.getBatches(itemId));
-  ipcMain.handle('inventory:create-batch', (event, batch) => InventoryService.createBatch(batch));
+  safeHandle('inventory:get-batches', (event, itemId) => InventoryService.getBatches(itemId));
+  safeHandle('inventory:create-batch', (event, batch) => InventoryService.createBatch(batch));
 
-  ipcMain.handle('inventory:transfer-request', (event, data) => InventoryService.createTransferRequest(data));
+  safeHandle('inventory:transfer-request', (event, data) => InventoryService.createTransferRequest(data));
+  safeHandle('inventory:get-transfer-requests', (event, filters) => InventoryService.getTransferRequests(filters));
+  safeHandle('inventory:get-transfer-request', (event, id) => InventoryService.getTransferRequest(id));
 
   // Attributes
-  ipcMain.handle('inventory:get-attributes', () => InventoryService.getAttributeDefinitions());
-  ipcMain.handle('inventory:save-attribute', (_, attr) => InventoryService.saveAttributeDefinition(attr));
-  ipcMain.handle('inventory:delete-attribute', (_, id) => InventoryService.deleteAttribute(id));
+  safeHandle('inventory:get-attributes', () => InventoryService.getAttributeDefinitions());
+  safeHandle('inventory:save-attribute', (_, attr) => InventoryService.saveAttributeDefinition(attr));
+  safeHandle('inventory:delete-attribute', (_, id) => InventoryService.deleteAttribute(id));
 
   // Attribute Values
-  ipcMain.handle('inventory:get-attribute-values', (_, attrId) => InventoryService.getAttributeValues(attrId));
-  ipcMain.handle('inventory:save-attribute-value', (_, data) => InventoryService.saveAttributeValue(data));
-  ipcMain.handle('inventory:delete-attribute-value', (_, id) => InventoryService.deleteAttributeValue(id));
+  safeHandle('inventory:get-attribute-values', (_, attrId) => InventoryService.getAttributeValues(attrId));
+  safeHandle('inventory:save-attribute-value', (_, data) => InventoryService.saveAttributeValue(data));
+  safeHandle('inventory:delete-attribute-value', (_, id) => InventoryService.deleteAttributeValue(id));
 
 
 
 
   // --- Partner Handlers (New Master Data) ---
-  ipcMain.handle('partner:get-customer-types', () => PartnerService.getCustomerTypes());
-  ipcMain.handle('partner:save-customer-type', (event, data) => PartnerService.saveCustomerType(data));
-  ipcMain.handle('partner:delete-customer-type', (event, id) => PartnerService.deleteCustomerType(id));
+  safeHandle('partner:get-customer-types', () => PartnerService.getCustomerTypes());
+  safeHandle('partner:save-customer-type', (event, data) => PartnerService.saveCustomerType(data));
+  safeHandle('partner:delete-customer-type', (event, id) => PartnerService.deleteCustomerType(id));
 
-  ipcMain.handle('partner:get-vendor-types', () => PartnerService.getVendorTypes());
-  ipcMain.handle('partner:save-vendor-type', (event, data) => PartnerService.saveVendorType(data));
-  ipcMain.handle('partner:delete-vendor-type', (event, id) => PartnerService.deleteVendorType(id));
+  safeHandle('partner:get-vendor-types', () => PartnerService.getVendorTypes());
+  safeHandle('partner:save-vendor-type', (event, data) => PartnerService.saveVendorType(data));
+  safeHandle('partner:delete-vendor-type', (event, id) => PartnerService.deleteVendorType(id));
 
-  ipcMain.handle('partner:get-regions', () => PartnerService.getRegions());
-  ipcMain.handle('partner:save-region', (event, data) => PartnerService.saveRegion(data)); // Handles create/update
+  safeHandle('partner:get-contact-types', () => PartnerService.getContactTypes());
+
+  safeHandle('partner:get-memberships', () => PartnerService.getMemberships());
+  safeHandle('partner:save-membership', (event, data) => PartnerService.saveMembership(data));
+  safeHandle('partner:delete-membership', (event, id) => PartnerService.deleteMembership(id));
+
+  safeHandle('partner:get-sectors', () => PartnerService.getSectors());
+  safeHandle('partner:save-sector', (event, data) => PartnerService.saveSector(data));
+  safeHandle('partner:delete-sector', (event, id) => PartnerService.deleteSector(id));
+
+  safeHandle('partner:get-credit-policies', () => PartnerService.getCreditPolicies());
+  safeHandle('partner:save-credit-policy', (event, data) => PartnerService.saveCreditPolicy(data));
+  safeHandle('partner:delete-credit-policy', (event, id) => PartnerService.deleteCreditPolicy(id));
+
+  safeHandle('partner:get-regions', () => PartnerService.getRegions());
+  safeHandle('partner:save-region', (event, data) => PartnerService.saveRegion(data)); // Handles create/update
   // Explicit create/update if needed by frontend, but saveRegion wraps them
-  ipcMain.handle('partner:create-region', (event, data) => PartnerService.createRegion(data));
-  ipcMain.handle('partner:update-region', (event, data) => PartnerService.updateRegion(data));
-  ipcMain.handle('partner:delete-region', (event, id) => PartnerService.deleteRegion(id));
+  safeHandle('partner:create-region', (event, data) => PartnerService.createRegion(data));
+  safeHandle('partner:update-region', (event, data) => PartnerService.updateRegion(data));
+  safeHandle('partner:delete-region', (event, id) => PartnerService.deleteRegion(id));
 
-  ipcMain.handle('partner:get-groups', () => PartnerService.getGroups());
-  ipcMain.handle('partner:save-group', (event, data) => PartnerService.saveGroup(data));
-  ipcMain.handle('partner:delete-group', (event, id) => PartnerService.deleteGroup(id));
+  safeHandle('partner:get-groups', () => PartnerService.getGroups());
+  safeHandle('partner:save-group', (event, data) => PartnerService.saveGroup(data));
+  safeHandle('partner:delete-group', (event, id) => PartnerService.deleteGroup(id));
 
-  ipcMain.handle('partner:get-sales-reps', () => PartnerService.getSalesReps());
-  ipcMain.handle('partner:save-sales-rep', (event, data) => PartnerService.saveSalesRep(data));
-  ipcMain.handle('partner:delete-sales-rep', (event, id) => PartnerService.deleteSalesRep(id));
+  safeHandle('partner:get-sales-reps', () => PartnerService.getSalesReps());
+  safeHandle('partner:save-sales-rep', (event, data) => PartnerService.saveSalesRep(data));
+  safeHandle('partner:delete-sales-rep', (event, id) => PartnerService.deleteSalesRep(id));
 
-  ipcMain.handle('partner:get-price-lists', () => PartnerService.getPriceLists());
-  ipcMain.handle('partner:save-price-list', (event, data) => PartnerService.savePriceList(data));
-  ipcMain.handle('partner:delete-price-list', (event, id) => PartnerService.deletePriceList(id));
-  ipcMain.handle('partner:get-price-list-items', (event, id) => PartnerService.getPriceListItems(id));
-  ipcMain.handle('partner:save-price-list-item', (event, data) => PartnerService.savePriceListItem(data));
-  ipcMain.handle('partner:delete-price-list-item', (event, id) => PartnerService.deletePriceListItem(id));
+  safeHandle('partner:get-price-lists', () => PartnerService.getPriceLists());
+  safeHandle('partner:save-price-list', (event, data) => PartnerService.savePriceList(data));
+  safeHandle('partner:delete-price-list', (event, id) => PartnerService.deletePriceList(id));
+  safeHandle('partner:get-price-list-items', (event, id) => PartnerService.getPriceListItems(id));
+  safeHandle('partner:save-price-list-item', (event, data) => PartnerService.savePriceListItem(data));
+  safeHandle('partner:delete-price-list-item', (event, id) => PartnerService.deletePriceListItem(id));
 
   // --- Warehouse Handlers ---
-  ipcMain.handle('get-warehouses', () => InventoryService.getWarehouses());
-  ipcMain.handle('create-warehouse', (event, wh) => InventoryService.createWarehouse(wh));
-  ipcMain.handle('update-warehouse', (event, wh) => InventoryService.updateWarehouse(wh));
-  ipcMain.handle('delete-warehouse', (event, id) => InventoryService.deleteWarehouse(id));
+  safeHandle('get-warehouses', () => InventoryService.getWarehouses());
+  safeHandle('create-warehouse', (event, wh) => InventoryService.createWarehouse(wh));
+  safeHandle('update-warehouse', (event, wh) => InventoryService.updateWarehouse(wh));
+  safeHandle('delete-warehouse', (event, id) => InventoryService.deleteWarehouse(id));
   // Map inventory: names too for consistency if needed
-  ipcMain.handle('inventory:get-warehouses', () => InventoryService.getWarehouses());
-  ipcMain.handle('inventory:create-warehouse', (event, wh) => InventoryService.createWarehouse(wh));
-  ipcMain.handle('inventory:update-warehouse', (event, wh) => InventoryService.updateWarehouse(wh));
-  ipcMain.handle('inventory:delete-warehouse', (event, id) => InventoryService.deleteWarehouse(id));
+  safeHandle('inventory:get-warehouses', () => InventoryService.getWarehouses());
+  safeHandle('inventory:create-warehouse', (event, wh) => InventoryService.createWarehouse(wh));
+  safeHandle('inventory:update-warehouse', (event, wh) => InventoryService.updateWarehouse(wh));
+  safeHandle('inventory:delete-warehouse', (event, id) => InventoryService.deleteWarehouse(id));
 
   // --- Stock Handlers ---
-  ipcMain.handle('get-stock', (event, { itemId, warehouseId }) => {
+  safeHandle('get-stock', (event, { itemId, warehouseId }) => {
     return InventoryService.getStock(itemId, warehouseId);
   });
 
-  ipcMain.handle('inventory:get-valuation', (event, filters) => InventoryService.getInventoryValuation(filters));
+  safeHandle('inventory:get-valuation', (event, filters) => InventoryService.getInventoryValuation(filters));
 
-  ipcMain.handle('add-stock-transaction', (event, trx) => {
+  safeHandle('add-stock-transaction', (event, trx) => {
     return InventoryService.addStockTransaction(trx);
   });
   // --- Bins ---
-  ipcMain.handle('get-warehouse-bins', (event, warehouseId) => InventoryService.getBins(warehouseId));
-  ipcMain.handle('create-warehouse-bin', (event, bin) => InventoryService.createBin(bin));
-  ipcMain.handle('delete-warehouse-bin', (event, id) => InventoryService.deleteBin(id));
+  safeHandle('get-warehouse-bins', (event, warehouseId) => InventoryService.getBins(warehouseId));
+  safeHandle('create-warehouse-bin', (event, bin) => InventoryService.createBin(bin));
+  safeHandle('delete-warehouse-bin', (event, id) => InventoryService.deleteBin(id));
 
   // --- Stock Documents ---
-  ipcMain.handle('inventory-get-grns', () => InventoryService.getGoodsReceipts());
-  ipcMain.handle('inventory-get-dispatches', () => InventoryService.getDispatches());
-  ipcMain.handle('create-stock-document', (event, doc) => InventoryService.createStockDocument(doc));
+  safeHandle('inventory-get-grns', () => InventoryService.getGoodsReceipts());
+  safeHandle('inventory-get-dispatches', () => InventoryService.getDispatches());
+
+  // -- Dispatch Service --
+  safeHandle('dispatch:update', (_, id, payload) => DispatchService.update(id, payload));
+  safeHandle('dispatch:post-to-pending', (_, id) => DispatchService.postToPending(id));
+  safeHandle('dispatch:invoice-from-dispatch', (_, dispatchId) => DispatchService.invoiceFromDispatch(dispatchId));
+  safeHandle('dispatch:getAll', () => DispatchService.getAll());
+  safeHandle('dispatch:getById', (_, id) => DispatchService.getById(id));
+
+  safeHandle('inventory-get-stock-document', (event, id) => InventoryService.getStockDocument(id));
+  safeHandle('create-stock-document', (event, doc) => InventoryService.createStockDocument(doc));
+  safeHandle('update-stock-document', (event, doc) => InventoryService.updateStockDocument(doc));
 
   // --- Logistics ---
-  ipcMain.handle('logistics-get-drivers', () => LogisticsService.getDrivers());
-  ipcMain.handle('logistics-save-driver', (event, data) => LogisticsService.saveDriver(data));
-  ipcMain.handle('logistics-delete-driver', (event, id) => LogisticsService.deleteDriver(id));
-  ipcMain.handle('logistics-get-vehicles', () => LogisticsService.getVehicles());
-  ipcMain.handle('logistics-save-vehicle', (event, data) => LogisticsService.saveVehicle(data));
-  ipcMain.handle('logistics-delete-vehicle', (event, id) => LogisticsService.deleteVehicle(id));
+  safeHandle('logistics-get-drivers', () => LogisticsService.getDrivers());
+  safeHandle('logistics-save-driver', (event, data) => LogisticsService.saveDriver(data));
+  safeHandle('logistics-delete-driver', (event, id) => LogisticsService.deleteDriver(id));
+  safeHandle('logistics-get-vehicles', () => LogisticsService.getVehicles());
+  safeHandle('logistics-save-vehicle', (event, data) => LogisticsService.saveVehicle(data));
+  safeHandle('logistics-delete-vehicle', (event, id) => LogisticsService.deleteVehicle(id));
 
   // --- Stock Taking Handlers ---
   // Handlers registered above with 'inventory:' prefix. Legacy handlers below removed.
-  // ipcMain.handle('get-stock-takes', (event) => InventoryService.getStockTakes());
-  // ipcMain.handle('get-stock-take', (event, id) => InventoryService.getStockTake(id));  // ipcMain.handle('get-inventory-dashboard', () => InventoryService.getInventoryDashboard());
+  // safeHandle('get-stock-takes', (event) => InventoryService.getStockTakes());
+  // safeHandle('get-stock-take', (event, id) => InventoryService.getStockTake(id));  // safeHandle('get-inventory-dashboard', () => InventoryService.getInventoryDashboard());
 
-  ipcMain.handle('inventory:receive-transfer', (event, data) => InventoryService.receiveTransfer(data));
+  safeHandle('inventory:receive-transfer', (event, data) => InventoryService.receiveTransfer(data));
 
   // --- Assembly ---
-  ipcMain.handle('inventory:get-kit', (event, itemId) => InventoryService.getKit(itemId));
-  ipcMain.handle('inventory:create-assembly', (event, data) => InventoryService.createAssembly(data));
+  safeHandle('inventory:get-kit', (event, itemId) => InventoryService.getKit(itemId));
+  safeHandle('inventory:create-assembly', (event, data) => InventoryService.createAssembly(data));
 
   // --- Reports Handlers ---
-  ipcMain.handle('reports-get-item-movement', (event, filters) => ReportService.getItemMovement(filters));
-  ipcMain.handle('reports-get-top-customers', (event) => ReportService.getTopCustomers());
-  ipcMain.handle('get-report-pnl', (event, range) => ReportService.getReportPnL(range));
-  ipcMain.handle('get-trial-balance', (event, params) => ReportService.getTrialBalance()); // Modified signature match
+  safeHandle('reports-get-item-movement', (event, filters) => ReportService.getItemMovement(filters));
+  safeHandle('reports-get-top-customers', (event) => ReportService.getTopCustomers());
+  safeHandle('get-report-pnl', (event, range) => ReportService.getReportPnL(range));
+  safeHandle('get-trial-balance', (event, params) => ReportService.getTrialBalance()); // Modified signature match
 
   // Register ALL other reports
-  ipcMain.handle('reports-get-partner-ledger', (event, filters) => ReportService.getPartnerLedger(filters));
-  ipcMain.handle('reports-get-inventory-status', () => ReportService.getInventoryStatus());
-  ipcMain.handle('reports-get-sales-analytics', (event, range) => ReportService.getSalesAnalytics(range));
-  ipcMain.handle('reports-get-profitability', (event, range) => ReportService.getProfitabilityReport(range));
-  ipcMain.handle('reports-get-purchasing-analysis', (event, range) => ReportService.getPurchasingAnalysis(range));
-  ipcMain.handle('reports-get-purchases-by-vendor', (event, range) => ReportService.getPurchasesByVendor(range));
-  ipcMain.handle('reports-get-import-reports', () => ReportService.getImportReports());
-  ipcMain.handle('reports-get-cheques', (event, filters) => ReportService.getChequesReport(filters));
-  ipcMain.handle('reports-get-account-statement', (event, filters) => ReportService.getAccountStatement(filters));
-  ipcMain.handle('reports-get-aging', () => ReportService.getAgingReport());
-  ipcMain.handle('reports-get-tax', (event, range) => ReportService.getTaxReport(range));
-  ipcMain.handle('get-dashboard-kpis', () => ReportService.getDashboardKPIs());
-  ipcMain.handle('get-dashboard-charts', () => ReportService.getDashboardCharts());
+  safeHandle('reports-get-partner-ledger', (event, filters) => ReportService.getPartnerLedger(filters));
+  safeHandle('reports-get-inventory-status', () => ReportService.getInventoryStatus());
+  safeHandle('reports-get-sales-analytics', (event, range) => ReportService.getSalesAnalytics(range));
+  safeHandle('reports-get-profitability', (event, range) => ReportService.getProfitabilityReport(range));
+  safeHandle('reports-get-purchasing-analysis', (event, range) => ReportService.getPurchasingAnalysis(range));
+  safeHandle('reports-get-purchases-by-vendor', (event, range) => ReportService.getPurchasesByVendor(range));
+  safeHandle('reports-get-import-reports', () => ReportService.getImportReports());
+  safeHandle('reports-get-cheques', (event, filters) => ReportService.getChequesReport(filters));
+  safeHandle('reports-get-account-statement', (event, filters) => ReportService.getAccountStatement(filters));
+  safeHandle('reports-get-aging', () => ReportService.getAgingReport());
+  safeHandle('reports-get-tax', (event, range) => ReportService.getTaxReport(range));
+  safeHandle('get-dashboard-kpis', () => ReportService.getDashboardKPIs());
+  safeHandle('get-dashboard-charts', () => ReportService.getDashboardCharts());
 
-  ipcMain.handle('reports-get-slow-moving', (event, days) => ReportService.getSlowMovingItems(days));
-  ipcMain.handle('reports-get-expiry', (event, days) => ReportService.getExpiryReport(days));
+  safeHandle('reports-get-slow-moving', (event, days) => ReportService.getSlowMovingItems(days));
+  safeHandle('reports-get-expiry', (event, days) => ReportService.getExpiryReport(days));
 
-  ipcMain.handle('save-invoice', (event, data) => SalesService.createInvoice(data));
-  ipcMain.handle('get-next-invoice-no', (event) => SalesService.getNextInvoiceNumber());
+  safeHandle('save-invoice', (event, data) => {
+    const ctx = getContext(event as any);
+    return SalesService.createInvoice(data, {
+      companyId: ctx?.companyId,
+      branchId: ctx?.branchId,
+      userId: ctx?.userId,
+    });
+  });
+  safeHandle('sales-create-invoice', (event, data) => {
+    const ctx = getContext(event as any);
+    return SalesService.createInvoice(data, {
+      companyId: ctx?.companyId,
+      branchId: ctx?.branchId,
+      userId: ctx?.userId,
+    });
+  });
+  safeHandle('get-next-invoice-no', (event) => SalesService.getNextInvoiceNumber());
+  safeHandle('sales-get-invoice', (event, id) => SalesService.getInvoice(id));
+  safeHandle('sales-post-invoice', (event, id, userId) => {
+    const ctx = getContext(event as any);
+    const granted = new Set<string>([
+      ...(Array.isArray(ctx?.permissions) ? ctx.permissions : []),
+      ...(Array.isArray(ctx?.capabilities) ? ctx.capabilities : []),
+    ]);
+
+    const canPost =
+      granted.has('ALL') ||
+      granted.has('*.*') ||
+      granted.has('ti.sales.invoice.post') ||
+      granted.has('sales.invoice.post') ||
+      granted.has('sales.post') ||
+      granted.has('DOC.POST');
+
+    if (!canPost) {
+      console.warn('[IPC_GUARD_DENIED]', {
+        eventName: 'sales.post.invoice',
+        code: 'PERMISSION_DENIED',
+        userId: ctx?.userId,
+        companyId: ctx?.companyId,
+        branchId: ctx?.branchId,
+        capabilityKey: 'ti.sales.invoice.post',
+        timestamp: new Date().toISOString()
+      });
+      const err: any = new Error('PERMISSION_DENIED');
+      err.code = 'PERMISSION_DENIED';
+      err.messageKey = 'error.permission_denied.ti.sales.invoice.post';
+      throw err;
+    }
+
+    return SalesService.postInvoice(id, userId);
+  });
+  safeHandle('sales-submit-invoice-approval', (event, id, userId) => SalesService.submitInvoiceForApproval(id, userId));
+
+  // Sales Orders
+  safeHandle('sales-get-pending-orders', () => SalesService.getPendingOrders());
 
   // 4. Check Management Handlers
-  ipcMain.handle('get-checks', (event, status) => CheckService.getChecks(status));
-  ipcMain.handle('register-check', (event, { data, customerId, reference, userId }) => CheckService.registerCheck(data, customerId, reference, userId));
-  ipcMain.handle('update-check-status', (event, data) => CheckService.updateStatus(data));
+  safeHandle('get-checks', (event, status) => CheckService.getChecks(status));
+  safeHandle('register-check', (event, { data, customerId, reference, userId }) => CheckService.registerCheck(data, customerId, reference, userId));
+  safeHandle('update-check-status', (event, data) => CheckService.updateStatus(data));
 
 
 
   // 5. HR & Payroll Handlers
   // Organization
-  ipcMain.handle('hr-get-departments', () => HRService.getDepartments());
-  ipcMain.handle('hr-save-department', (event, data) => HRService.saveDepartment(data));
-  ipcMain.handle('hr-delete-department', (event, id) => HRService.deleteDepartment(id));
+  safeHandle('hr-get-departments', () => HRService.getDepartments());
+  safeHandle('hr-save-department', (event, data) => HRService.saveDepartment(data));
+  safeHandle('hr-delete-department', (event, id) => HRService.deleteDepartment(id));
 
-  ipcMain.handle('hr-get-job-titles', () => HRService.getJobTitles());
-  ipcMain.handle('hr-get-titles', () => HRService.getJobTitles()); // Alias for hr.getTitles
-  ipcMain.handle('hr-save-job-title', (event, data) => HRService.saveJobTitle(data));
-  ipcMain.handle('hr-save-title', (event, data) => HRService.saveJobTitle(data)); // Alias
-  ipcMain.handle('hr-delete-job-title', (event, id) => HRService.deleteJobTitle(id));
-  ipcMain.handle('hr-delete-title', (event, id) => HRService.deleteJobTitle(id)); // Alias
+  safeHandle('hr-get-job-titles', () => HRService.getJobTitles());
+  safeHandle('hr-get-titles', () => HRService.getJobTitles()); // Alias for hr.getTitles
+  safeHandle('hr-save-job-title', (event, data) => HRService.saveJobTitle(data));
+  safeHandle('hr-save-title', (event, data) => HRService.saveJobTitle(data)); // Alias
+  safeHandle('hr-delete-job-title', (event, id) => HRService.deleteJobTitle(id));
+  safeHandle('hr-delete-title', (event, id) => HRService.deleteJobTitle(id)); // Alias
 
   // Employees
-  ipcMain.handle('hr-get-employees', () => HRService.getEmployees());
-  ipcMain.handle('hr-get-employee', (event, id) => HRService.getEmployee(id));
-  ipcMain.handle('hr-save-employee', (event, data) => HRService.saveEmployee(data));
-  ipcMain.handle('hr-get-next-code', () => HRService.getNextEmployeeCode());
-  ipcMain.handle('hr-save-photo', (event, { buffer, name }) => HRService.saveEmployeePhoto(buffer, name));
+  safeHandle('hr-get-employees', () => HRService.getEmployees());
+  safeHandle('hr-get-employee', (event, id) => HRService.getEmployee(id));
+  safeHandle('hr-save-employee', (event, data) => HRService.saveEmployee(data));
+  safeHandle('hr-get-next-code', () => HRService.getNextEmployeeCode());
+  safeHandle('hr-save-photo', (event, { buffer, name }) => HRService.saveEmployeePhoto(buffer, name));
 
   // Attendance
-  ipcMain.handle('hr-get-shifts', () => AttendanceService.getShifts());
-  ipcMain.handle('hr-save-shift', (event, data) => AttendanceService.saveShift(data));
-  ipcMain.handle('hr-import-attendance', (event, records) => AttendanceService.importAttendanceRaw(records));
-  ipcMain.handle('hr-process-daily-attendance', (event, date) => AttendanceService.processDayAttendance(date));
-  ipcMain.handle('hr-process-attendance', (event, date) => AttendanceService.processDayAttendance(date)); // Alias
-  ipcMain.handle('hr-get-daily-attendance', (event, date) => AttendanceService.getDailyAttendance(date));
+  safeHandle('hr-get-shifts', () => AttendanceService.getShifts());
+  safeHandle('hr-save-shift', (event, data) => AttendanceService.saveShift(data));
+  safeHandle('hr-import-attendance', (event, records) => AttendanceService.importAttendanceRaw(records));
+  safeHandle('hr-process-daily-attendance', (event, date) => AttendanceService.processDayAttendance(date));
+  safeHandle('hr-process-attendance', (event, date) => AttendanceService.processDayAttendance(date)); // Alias
+  safeHandle('hr-get-daily-attendance', (event, date) => AttendanceService.getDailyAttendance(date));
 
   // Leaves
-  ipcMain.handle('hr-get-leave-types', () => LeaveService.getLeaveTypes());
-  ipcMain.handle('hr-save-leave-type', (event, data) => LeaveService.saveLeaveType(data));
-  ipcMain.handle('hr-delete-leave-type', (event, id) => LeaveService.deleteLeaveType(id));
-  ipcMain.handle('hr-get-leave-requests', (event, filter) => LeaveService.getLeaveRequests(filter));
-  ipcMain.handle('hr-save-leave-request', (event, data) => LeaveService.saveLeaveRequest(data));
-  ipcMain.handle('hr-update-leave-status', (event, { id, status, reason }) => LeaveService.updateRequestStatus(id, status, reason));
-  ipcMain.handle('hr-get-employee-balances', (event, { employeeId, year }) => LeaveService.getEmployeeBalances(employeeId, year));
+  safeHandle('hr-get-leave-types', () => LeaveService.getLeaveTypes());
+  safeHandle('hr-save-leave-type', (event, data) => LeaveService.saveLeaveType(data));
+  safeHandle('hr-delete-leave-type', (event, id) => LeaveService.deleteLeaveType(id));
+  safeHandle('hr-get-leave-requests', (event, filter) => LeaveService.getLeaveRequests(filter));
+  safeHandle('hr-save-leave-request', (event, data) => LeaveService.saveLeaveRequest(data));
+  safeHandle('hr-update-leave-status', (event, { id, status, reason }) => LeaveService.updateRequestStatus(id, status, reason));
+  safeHandle('hr-get-employee-balances', (event, { employeeId, year }) => LeaveService.getEmployeeBalances(employeeId, year));
 
   // Payroll
-  ipcMain.handle('hr-get-payroll-preview', (event, { month, year }) => PayrollService.generatePayrollPreview(month, year));
-  ipcMain.handle('hr-post-payroll', (event, { month, year, slips }) => PayrollService.postPayroll(month, year, slips));
-  ipcMain.handle('hr-save-advance', (event, data) => PayrollService.saveAdvance(data));
-  ipcMain.handle('hr-get-slips', (event, { month, year }) => PayrollService.getSlips(month, year));
-  ipcMain.handle('hr-calc-eos', (event, { employeeId, endDate }) => PayrollService.calculateEOS(employeeId, endDate));
+  safeHandle('hr-get-payroll-preview', (event, { month, year }) => PayrollService.generatePayrollPreview(month, year));
+  safeHandle('hr-post-payroll', (event, { month, year, slips }) => PayrollService.postPayroll(month, year, slips));
+  safeHandle('hr-save-advance', (event, data) => PayrollService.saveAdvance(data));
+  safeHandle('hr-get-slips', (event, { month, year }) => PayrollService.getSlips(month, year));
+  safeHandle('hr-calc-eos', (event, { employeeId, endDate }) => PayrollService.calculateEOS(employeeId, endDate));
 
 
   // HR - Production & Commission
-  ipcMain.handle('hr-get-production-logs', (event, date) => ProductionService.getLogs(date));
-  ipcMain.handle('hr-save-production-log', (event, data) => ProductionService.saveLog(data));
-  ipcMain.handle('hr-delete-production-log', (event, id) => ProductionService.deleteLog(id));
+  safeHandle('hr-get-production-logs', (event, date) => ProductionService.getLogs(date));
+  safeHandle('hr-save-production-log', (event, data) => ProductionService.saveLog(data));
+  safeHandle('hr-delete-production-log', (event, id) => ProductionService.deleteLog(id));
 
-  ipcMain.handle('hr-get-commissions', (event, { month, year }) => CommissionService.getCommissions(month, year));
-  ipcMain.handle('hr-save-commissions', (event, data) => CommissionService.saveCommissions(data));
+  safeHandle('hr-get-commissions', (event, { month, year }) => CommissionService.getCommissions(month, year));
+  safeHandle('hr-save-commissions', (event, data) => CommissionService.saveCommissions(data));
 
-  ipcMain.handle('hr-generate-salary-entry', (event, { month, year }) => PayrollService.generateSalaryEntry(month, year));
+  safeHandle('hr-generate-salary-entry', (event, { month, year }) => PayrollService.generateSalaryEntry(month, year));
 
 
 
 
 
   // 6. Fixed Assets Handlers
-  ipcMain.handle('get-assets', () => AssetService.getAssets());
-  ipcMain.handle('save-asset', (event, data) => AssetService.saveAsset(data));
-  ipcMain.handle('calc-depreciation', (event, assetId) => AssetService.calculateDepreciation(assetId));
-  ipcMain.handle('post-depreciation', (event, { assetId, amount, date }) => AssetService.postDepreciation(assetId, amount, date));
-  ipcMain.handle('get-asset-categories', () => AssetService.getCategories());
-  ipcMain.handle('save-asset-category', (event, data) => AssetService.saveCategory(data));
-  ipcMain.handle('get-next-asset-code', () => AssetService.getNextCode());
+  safeHandle('get-assets', () => AssetService.getAssets());
+  safeHandle('save-asset', (event, data) => AssetService.saveAsset(data));
+  safeHandle('calc-depreciation', (event, assetId) => AssetService.calculateDepreciation(assetId));
+  safeHandle('post-depreciation', (event, { assetId, amount, date }) => AssetService.postDepreciation(assetId, amount, date));
+  safeHandle('get-asset-categories', () => AssetService.getCategories());
+  safeHandle('save-asset-category', (event, data) => AssetService.saveCategory(data));
+  safeHandle('get-next-asset-code', () => AssetService.getNextCode());
 
   // 7. System & Auth Handlers
-  ipcMain.handle('auth-login', (event, { username, password }) => AuthService.login(username, password));
-  ipcMain.handle('auth-change-password', (event, { userId, oldPass, newPass }) => AuthService.changePassword(userId, oldPass, newPass));
+  safeHandle('auth-login', (event, { username, password }) => {
+    const user = AuthService.login(username, password);
+    bindAuthSession(event as any, user);
+    if (concurrentLicenseService) {
+      try {
+        concurrentLicenseService.acquireSessionOrThrow({
+          userId: String(user?.id || user?.userId || ''),
+          companyId: String(user?.company_id || user?.companyId || 'COMP_01'),
+          branchId: String(user?.branch_id || user?.branchId || 'BR_01'),
+          webContentsId: Number((event as any)?.sender?.id),
+        });
+      } catch (error) {
+        clearAuthSession(event as any);
+        throw error;
+      }
+    }
+    return user;
+  });
+  safeHandle('auth-logout', (event) => {
+    const ctx = getContext(event as any);
+    concurrentLicenseService?.releaseSession(Number((event as any)?.sender?.id), {
+      userId: String(ctx?.userId || ''),
+      companyId: String(ctx?.companyId || 'COMP_01'),
+      branchId: String(ctx?.branchId || 'BR_01'),
+    });
+    clearAuthSession(event as any);
+    return { success: true };
+  });
+  safeHandle('auth-change-password', (event, { userId, oldPass, newPass }) => AuthService.changePassword(userId, oldPass, newPass));
 
-  ipcMain.handle('get-users', () => AuthService.getUsers());
-  ipcMain.handle('save-user', (event, user) => user.id ? AuthService.updateUser(user) : AuthService.createUser(user));
-  ipcMain.handle('delete-user', (event, id) => AuthService.deleteUser(id));
+  safeHandle('get-users', () => AuthService.getUsers());
+  safeHandle('save-user', (event, user) => {
+    const result = user.id ? AuthService.updateUser(user) : AuthService.createUser(user);
+    permissionSnapshotService?.onLegacyPermissionsChanged('COMP_01');
+    if (user?.id) permissionSnapshotService?.invalidateUser(String(user.id));
+    return result;
+  });
+  safeHandle('delete-user', (event, id) => {
+    const result = AuthService.deleteUser(id);
+    permissionSnapshotService?.onLegacyPermissionsChanged('COMP_01');
+    if (id) permissionSnapshotService?.invalidateUser(String(id));
+    return result;
+  });
 
-  ipcMain.handle('get-roles', () => AuthService.getRoles());
-  ipcMain.handle('save-role', (event, role) => role.id ? AuthService.updateRole(role) : AuthService.createRole(role));
-  ipcMain.handle('delete-role', (event, id) => AuthService.deleteRole(id));
+  safeHandle('get-roles', () => AuthService.getRoles());
+  safeHandle('save-role', (event, role) => {
+    const result = role.id ? AuthService.updateRole(role) : AuthService.createRole(role);
+    permissionSnapshotService?.onLegacyPermissionsChanged('COMP_01');
+    return result;
+  });
+  safeHandle('delete-role', (event, id) => {
+    const result = AuthService.deleteRole(id);
+    permissionSnapshotService?.onLegacyPermissionsChanged('COMP_01');
+    return result;
+  });
 
-  ipcMain.handle('get-permissions', (event, roleId) => AuthService.getPermissions(roleId));
-  ipcMain.handle('save-permissions', (event, { roleId, permissions }) => AuthService.savePermissions(roleId, permissions));
+  safeHandle('get-permissions', (event, roleId) => AuthService.getPermissions(roleId));
+  safeHandle('save-permissions', (event, { roleId, permissions, companyId }) => {
+    const result = AuthService.savePermissions(roleId, permissions);
+    permissionSnapshotService?.onLegacyPermissionsChanged(companyId || 'COMP_01');
+    return result;
+  });
 
 
 
   // 8. System Maintenance
-  ipcMain.handle('backup-database', () => SystemService.backupDatabase());
-  ipcMain.handle('restore-database', () => SystemService.restoreDatabase());
-  ipcMain.handle('check-integrity', () => SystemService.checkIntegrity());
-  ipcMain.handle('get-audit-logs', (event, filters) => SystemService.getAuditLogs(filters));
+  safeHandle('backup-database', () => SystemService.backupDatabase());
+  safeHandle('restore-database', () => SystemService.restoreDatabase());
+  safeHandle('check-integrity', () => SystemService.checkIntegrity());
+  safeHandle('get-audit-logs', (event, filters) => SystemService.getAuditLogs(filters));
   // --- Purchase Handlers ---
-  ipcMain.handle('purchase-create-invoice', (event, data) => PurchaseService.createInvoice(data));
-  ipcMain.handle('purchase-get-invoices', () => PurchaseService.getInvoices());
-  ipcMain.handle('purchase-get-invoice', (event, id) => PurchaseService.getInvoice(id));
-  ipcMain.handle('purchase-get-next-no', () => PurchaseService.getNextInvoiceNo());
+  safeHandle('purchase-create-invoice', (event, data) => PurchaseService.createInvoice(data));
+  safeHandle('purchase-get-invoices', () => PurchaseService.getInvoices());
+  safeHandle('purchase-get-invoice', (event, id) => PurchaseService.getInvoice(id));
+  safeHandle('purchase-get-next-no', () => PurchaseService.getNextInvoiceNo());
 
-  ipcMain.handle('purchase-create-order', (event, data) => PurchaseService.createOrder(data));
-  ipcMain.handle('purchase-get-orders', () => PurchaseService.getOrders());
-  ipcMain.handle('purchase-get-order', (event, id) => PurchaseService.getOrder(id));
-  ipcMain.handle('purchase-update-order', (event, data) => PurchaseService.updateOrder(data));
-  ipcMain.handle('purchase-delete-order', (event, id) => PurchaseService.deleteOrder(id));
+  safeHandle('purchase-create-order', (event, data) => PurchaseService.createOrder(data));
+  safeHandle('purchase-get-orders', () => PurchaseService.getOrders());
+  safeHandle('purchase-get-order', (event, id) => PurchaseService.getOrder(id));
+  safeHandle('purchase-update-order', (event, data) => PurchaseService.updateOrder(data));
+  safeHandle('purchase-delete-order', (event, id) => PurchaseService.deleteOrder(id));
+  safeHandle('purchase-post-order', (event, id, userId) => PurchaseService.postOrder(id, userId));
+  safeHandle('purchase-approve-order', (event, id, userId) => PurchaseService.approveOrder(id, userId));
+  safeHandle('purchase-reject-order', (event, id, userId, reason) => PurchaseService.rejectOrder(id, userId, reason));
 
-  ipcMain.handle('purchase-create-request', (event, data) => PurchaseService.createRequest(data));
-  ipcMain.handle('purchase-get-requests', () => PurchaseService.getRequests());
-  ipcMain.handle('purchase-get-request', (event, id) => PurchaseService.getRequest(id));
-  ipcMain.handle('purchase-update-request', (event, data) => PurchaseService.updateRequest(data));
-  ipcMain.handle('purchase-delete-request', (event, id) => PurchaseService.deleteRequest(id));
+  safeHandle('purchase-create-request', (event, data) => PurchaseService.createRequest(data));
+  safeHandle('purchase-get-requests', () => PurchaseService.getRequests());
+  safeHandle('purchase-get-request', (event, id) => PurchaseService.getRequest(id));
+  safeHandle('purchase-update-request', (event, data) => PurchaseService.updateRequest(data));
+  safeHandle('purchase-delete-request', (event, id) => PurchaseService.deleteRequest(id));
+  safeHandle('purchase-post-request', (event, id, userId) => PurchaseService.postRequest(id, userId));
+  safeHandle('purchase-approve-request', (event, id, userId) => PurchaseService.approveRequest(id, userId));
+  safeHandle('purchase-reject-request', (event, id, userId, reason) => PurchaseService.rejectRequest(id, userId, reason));
 
   // RFQ
-  ipcMain.handle('purchase-create-rfq', (event, data) => PurchaseService.createRFQ(data));
-  ipcMain.handle('purchase-get-rfqs', () => PurchaseService.getRFQs());
-  ipcMain.handle('purchase-get-rfq', (event, id) => PurchaseService.getRFQ(id));
-  ipcMain.handle('purchase-update-rfq', (event, data) => PurchaseService.updateRFQ(data));
+  safeHandle('purchase-create-rfq', (event, data) => PurchaseService.createRFQ(data));
+  safeHandle('purchase-get-rfqs', () => PurchaseService.getRFQs());
+  safeHandle('purchase-get-rfq', (event, id) => PurchaseService.getRFQ(id));
+  safeHandle('purchase-update-rfq', (event, data) => PurchaseService.updateRFQ(data));
 
 
-  ipcMain.handle('purchase-create-return', (event, data) => PurchaseService.createReturn(data));
-  ipcMain.handle('purchase-get-returns', () => PurchaseService.getReturns());
-  ipcMain.handle('purchase-get-return', (event, id) => PurchaseService.getReturn(id));
-  ipcMain.handle('get-settings', () => SystemService.getSettings());
-  ipcMain.handle('save-settings', (event, data) => SystemService.saveSettings(data));
-  ipcMain.handle('save-logo', (event, { buffer, name }) => SystemService.saveLogo(buffer, name));
-  ipcMain.handle('system:save-image', (event, { buffer, name }) => SystemService.saveImage(buffer, name));
+  safeHandle('purchase-create-return', (event, data) => PurchaseService.createReturn(data));
+  safeHandle('purchase-get-returns', () => PurchaseService.getReturns());
+  safeHandle('purchase-get-return', (event, id) => PurchaseService.getReturn(id));
+  safeHandle('get-settings', () => SystemService.getSettings());
+  safeHandle('save-settings', (event, data) => SystemService.saveSettings(data));
+  safeHandle('save-logo', (event, { buffer, name }) => SystemService.saveLogo(buffer, name));
+  safeHandle('system:save-image', (event, { buffer, name }) => SystemService.saveImage(buffer, name));
 
-  ipcMain.handle('dialog:open-file', async (event, options) => {
+  safeHandle('dialog:open-file', async (event, options) => {
     const { canceled, filePaths } = await dialog.showOpenDialog(options);
     if (canceled) return { canceled: true, filePaths: [] };
     return { canceled: false, filePaths };
   });
 
   // --- Currency Handlers ---
-  ipcMain.handle('get-currencies', () => CurrencyService.getCurrencies());
-  ipcMain.handle('get-base-currency', () => CurrencyService.getBaseCurrency());
-  ipcMain.handle('create-currency', (event, currency) => CurrencyService.createCurrency(currency));
-  ipcMain.handle('update-currency', (event, currency) => CurrencyService.updateCurrency(currency));
-  ipcMain.handle('delete-currency', (event, id) => CurrencyService.deleteCurrency(id));
+  safeHandle('get-currencies', (event, companyId) => CurrencyService.getCurrencies(companyId || '1'));
+  safeHandle('get-base-currency', (event, companyId) => CurrencyService.getBaseCurrency(companyId || '1'));
+  safeHandle('create-currency', (event, currency) => CurrencyService.createCurrency(currency));
+  safeHandle('update-currency', (event, id, companyId, updates) => CurrencyService.updateCurrency(id, companyId || '1', updates));
+  safeHandle('delete-currency', (event, id, companyId) => CurrencyService.deleteCurrency(id, companyId || '1'));
+
+  // --- Cost Center Handlers ---
+  safeHandle('get-cost-centers', (event, companyId) => CostCenterService.getCostCenters(companyId || '1'));
+  safeHandle('get-cost-center', (event, id, companyId) => CostCenterService.getCostCenter(id, companyId || '1'));
+  safeHandle('create-cost-center', (event, data) => CostCenterService.createCostCenter({ ...data, companyId: data.companyId || '1' }));
+  safeHandle('update-cost-center', (event, id, companyId, updates) => CostCenterService.updateCostCenter(id, companyId || '1', updates));
+  safeHandle('delete-cost-center', (event, id, companyId) => CostCenterService.deleteCostCenter(id, companyId || '1'));
+
+  // --- Tax Group Handlers ---
+  safeHandle('get-tax-groups', (event, companyId) => TaxGroupService.getTaxGroups(companyId || '1'));
+  safeHandle('get-tax-group', (event, id, companyId) => TaxGroupService.getTaxGroup(id, companyId || '1'));
+  safeHandle('create-tax-group', (event, data) => TaxGroupService.createTaxGroup({ ...data, companyId: data.companyId || '1' }));
+  safeHandle('update-tax-group', (event, id, companyId, updates) => TaxGroupService.updateTaxGroup(id, companyId || '1', updates));
+  safeHandle('delete-tax-group', (event, id, companyId) => TaxGroupService.deleteTaxGroup(id, companyId || '1'));
+
+  // --- Warehouse Handlers ---
+  safeHandle('get-warehouses', (event, companyId) => WarehouseService.getWarehouses(companyId || '1'));
+  safeHandle('get-warehouse', (event, id, companyId) => WarehouseService.getWarehouse(id, companyId || '1'));
+  safeHandle('create-warehouse', (event, data) => WarehouseService.createWarehouse({ ...data, companyId: data.companyId || '1' }));
+  safeHandle('update-warehouse', (event, id, companyId, updates) => WarehouseService.updateWarehouse(id, companyId || '1', updates));
+  safeHandle('delete-warehouse', (event, id, companyId) => WarehouseService.deleteWarehouse(id, companyId || '1'));
+
+  safeHandle('get-bin-locations', (event, warehouseId) => WarehouseService.getBinLocations(warehouseId));
+  safeHandle('get-bin-location', (event, id) => WarehouseService.getBinLocation(id));
+  safeHandle('create-bin-location', (event, data) => WarehouseService.createBinLocation(data));
+  safeHandle('update-bin-location', (event, id, updates) => WarehouseService.updateBinLocation(id, updates));
+  safeHandle('delete-bin-location', (event, id) => WarehouseService.deleteBinLocation(id));
+
+  // --- Item Tracking Handlers (Batches & Serials) ---
+  safeHandle('get-item-batches', (event, itemId) => ItemTrackingService.getBatches(itemId));
+  safeHandle('get-item-batch', (event, id) => ItemTrackingService.getBatch(id));
+  safeHandle('create-item-batch', (event, data) => ItemTrackingService.createBatch(data));
+  safeHandle('update-item-batch', (event, id, updates) => ItemTrackingService.updateBatch(id, updates));
+  safeHandle('delete-item-batch', (event, id) => ItemTrackingService.deleteBatch(id));
+
+  safeHandle('get-item-serials', (event, itemId) => ItemTrackingService.getSerials(itemId));
+  safeHandle('get-item-serial', (event, id) => ItemTrackingService.getSerial(id));
+  safeHandle('create-item-serial', (event, data) => ItemTrackingService.createSerial(data));
+  safeHandle('update-item-serial-status', (event, id, status) => ItemTrackingService.updateSerialStatus(id, status));
+  safeHandle('delete-item-serial', (event, id) => ItemTrackingService.deleteSerial(id));
 
   // Manual Trigger for Scraper
-  ipcMain.handle('currency-scraper-trigger', async () => {
+  safeHandle('currency-scraper-trigger', async () => {
     const service = new CurrencyScraperService(); // Or use singleton if exported
     return await service.updateRates();
   });
 
-  ipcMain.handle('currency-get-history', (event, { code, days }) => CurrencyService.getCurrencyHistory(code, days));
+  safeHandle('currency-get-history', (event, { code, days }) => CurrencyService.getCurrencyHistory(code, days));
 
   // --- Branch Handlers ---
-  ipcMain.handle('get-branches', () => BranchService.getBranches());
-  ipcMain.handle('save-branch', (event, branch) => branch.id ? BranchService.updateBranch(branch) : BranchService.createBranch(branch));
-  ipcMain.handle('delete-branch', (event, id) => BranchService.deleteBranch(id));
+  safeHandle('get-branches', () => BranchService.getBranches());
+  safeHandle('save-branch', (event, branch) => branch.id ? BranchService.updateBranch(branch) : BranchService.createBranch(branch));
+  safeHandle('delete-branch', (event, id) => BranchService.deleteBranch(id));
 
   // --- Account Handlers ---
-  ipcMain.handle('get-accounts', () => AccountService.getAccounts());
-  ipcMain.handle('get-account-tree', () => AccountService.getAccountTree());
-  ipcMain.handle('save-account', (event, account) => account.id ? AccountService.updateAccount(account) : AccountService.createAccount(account));
-  ipcMain.handle('delete-account', (event, id) => AccountService.deleteAccount(id));
-  ipcMain.handle('get-account-by-id', (event, id) => {
+  safeHandle('get-accounts', () => AccountService.getAccounts());
+  safeHandle('get-account-tree', () => AccountService.getAccountTree());
+  safeHandle('save-account', (event, account) => {
+    const before = account?.id
+      ? db.prepare(`SELECT * FROM gl_chart_of_accounts WHERE id = ?`).get(account.id)
+      : null;
+
+    const result = account?.id
+      ? AccountService.updateAccount(account)
+      : AccountService.createAccount(account);
+
+    const entityId = String(account?.id || result || '').trim();
+    if (entityId) {
+      const after = db.prepare(`SELECT * FROM gl_chart_of_accounts WHERE id = ?`).get(entityId);
+      const ctx = getContext(event as any);
+      const ipcid = String((event as any)?.sender?.id || '');
+
+      try {
+        getGlobalAuditService()?.recordEvent(
+          {
+            companyId: String(ctx?.companyId || 'COMP_01'),
+            branchId: String(ctx?.branchId || 'BR_01'),
+            userId: String(ctx?.userId || 'SYSTEM'),
+            sessionId: String((ctx as any)?.sessionId || ipcid || ''),
+            correlationId: String(
+              account?.correlationId ||
+              (ctx as any)?.correlationId ||
+              `acc_${Date.now()}_${Math.floor(Math.random() * 1000000)}`
+            ),
+            ipcid,
+          },
+          {
+            entityType: 'gl_account',
+            entityId,
+            docType: 'chart_of_accounts',
+            docId: entityId,
+            eventType: account?.id ? 'definition.update' : 'definition.create',
+            summaryI18nKey: account?.id ? 'audit.event.definition.update' : 'audit.event.definition.create',
+            meta: {
+              action: account?.id ? 'update' : 'create',
+              module: 'chart_of_accounts',
+            },
+          },
+          diffPlainObjects(before || {}, after || {}, {
+            basePath: 'account',
+            ignoreKeys: ['id', 'created_at', 'updated_at'],
+            maxChanges: 150,
+          }),
+        );
+      } catch (auditError) {
+        console.warn('[AccountHandlers] audit record failed:', auditError);
+      }
+    }
+
+    return result;
+  });
+  safeHandle('delete-account', (event, id) => AccountService.deleteAccount(id));
+  safeHandle('get-account-by-id', (event, id) => {
     const acc = db.prepare("SELECT * FROM gl_chart_of_accounts WHERE id = ?").get(id);
     return acc;
   });
 
   // --- Inventory (Items) ---
-  ipcMain.handle('get-items', () => ItemService.getItems());
-  // ipcMain.handle('save-item', (event, item) => ItemService.saveItem(item)); // DUPLICATE REMOVED
-  ipcMain.handle('delete-item', (event, id) => ItemService.deleteItem(id));
-  ipcMain.handle('get-units', () => ItemService.getUnits());
-  ipcMain.handle('inventory:get-units', () => InventoryService.getUnits()); // Add this handler for frontend compatibility
-  ipcMain.handle('create-unit', (event, unit) => ItemService.createUnit(unit));
-  ipcMain.handle('delete-unit', (event, id) => ItemService.deleteUnit(id));
-  ipcMain.handle('get-categories', () => ItemService.getCategories());
-  ipcMain.handle('create-category', (event, cat) => ItemService.createCategory(cat));
-  ipcMain.handle('update-category', (event, cat) => ItemService.updateCategory(cat));
-  ipcMain.handle('delete-category', (event, id) => ItemService.deleteCategory(id));
+  safeHandle('get-items', () => ItemService.getItems());
+  // safeHandle('save-item', (event, item) => ItemService.saveItem(item)); // DUPLICATE REMOVED
+  safeHandle('delete-item', (event, id) => ItemService.deleteItem(id));
+  safeHandle('get-units', () => ItemService.getUnits());
+  safeHandle('inventory:get-units', () => InventoryService.getUnits()); // Add this handler for frontend compatibility
+  safeHandle('create-unit', (event, unit) => ItemService.createUnit(unit));
+  safeHandle('delete-unit', (event, id) => ItemService.deleteUnit(id));
+  safeHandle('get-categories', () => ItemService.getCategories());
+  safeHandle('create-category', (event, cat) => ItemService.createCategory(cat));
+  safeHandle('update-category', (event, cat) => ItemService.updateCategory(cat));
+  safeHandle('delete-category', (event, id) => ItemService.deleteCategory(id));
 
   // --- Inventory V2 Handlers ---
   // Moved to top of file to avoid duplicate registration errors.
 
 
   // Inventory Attributes
-  ipcMain.handle('inventory:getAttributes', () => ItemService.getAttributesDefinitions());
-  ipcMain.handle('inventory:saveAttribute', (event, data) => ItemService.saveAttributeDefinition(data));
-  ipcMain.handle('inventory:saveAttributeValue', (event, data) => ItemService.saveAttributeValue(data));
-  ipcMain.handle('inventory:deleteAttribute', (event, id) => ItemService.deleteAttributeDefinition(id));
-  ipcMain.handle('inventory:deleteAttributeValue', (event, id) => ItemService.deleteAttributeValue(id));
+  safeHandle('inventory:getAttributes', () => ItemService.getAttributesDefinitions());
+  safeHandle('inventory:saveAttribute', (event, data) => ItemService.saveAttributeDefinition(data));
+  safeHandle('inventory:saveAttributeValue', (event, data) => ItemService.saveAttributeValue(data));
+  safeHandle('inventory:deleteAttribute', (event, id) => ItemService.deleteAttributeDefinition(id));
+  safeHandle('inventory:deleteAttributeValue', (event, id) => ItemService.deleteAttributeValue(id));
 
   // --- Partners (Customers/Suppliers) ---
-  ipcMain.handle('get-partners', (event, type) => PartnerService.getPartners(type));
-  ipcMain.handle('get-partner', (event, id) => PartnerService.getPartner(id));
-  ipcMain.handle('save-partner', (event, partner) => partner.id ? PartnerService.updatePartner(partner) : PartnerService.createPartner(partner));
-  ipcMain.handle('delete-partner', (event, id) => PartnerService.deletePartner(id));
+  safeHandle('get-partners', (event, type) => PartnerService.getPartners(type));
+  safeHandle('get-partner', (event, id) => PartnerService.getPartner(id));
+  safeHandle('save-partner', (event, partner) => PartnerService.savePartner(partner));
+  safeHandle('delete-partner', (event, id) => PartnerService.deletePartner(id));
 
 
 
   // Price Lists
-  ipcMain.handle('partner:getPriceLists', () => PartnerService.getPriceLists());
-  ipcMain.handle('partner:savePriceList', (event, data) => PartnerService.savePriceList(data));
-  ipcMain.handle('partner:deletePriceList', (event, id) => PartnerService.deletePriceList(id));
-  ipcMain.handle('partner:getPriceListItems', (event, listId) => PartnerService.getPriceListItems(listId));
-  ipcMain.handle('partner:savePriceListItem', (event, data) => PartnerService.savePriceListItem(data));
-  ipcMain.handle('partner:deletePriceListItem', (event, id) => PartnerService.deletePriceListItem(id));
+  safeHandle('partner:getPriceLists', () => PartnerService.getPriceLists());
+  safeHandle('partner:savePriceList', (event, data) => PartnerService.savePriceList(data));
+  safeHandle('partner:deletePriceList', (event, id) => PartnerService.deletePriceList(id));
+  safeHandle('partner:getPriceListItems', (event, listId) => PartnerService.getPriceListItems(listId));
+  safeHandle('partner:savePriceListItem', (event, data) => PartnerService.savePriceListItem(data));
+  safeHandle('partner:deletePriceListItem', (event, id) => PartnerService.deletePriceListItem(id));
 
   // --- Financial Definitions ---
-  ipcMain.handle('finance:getTaxes', () => FinancialDefinitionService.getTaxes());
-  ipcMain.handle('finance:saveTax', (event, data) => FinancialDefinitionService.saveTax(data));
-  ipcMain.handle('finance:deleteTax', (event, id) => FinancialDefinitionService.deleteTax(id));
+  safeHandle('finance:getTaxes', () => FinancialDefinitionService.getTaxes());
+  safeHandle('finance:saveTax', (event, data) => FinancialDefinitionService.saveTax(data));
+  safeHandle('finance:deleteTax', (event, id) => FinancialDefinitionService.deleteTax(id));
 
-  ipcMain.handle('finance:getAnalysisCodes', () => FinancialDefinitionService.getAnalysisCodes());
-  ipcMain.handle('finance:getAnalysisCodesFlat', () => FinancialDefinitionService.getAnalysisCodesFlat());
-  ipcMain.handle('finance:saveAnalysisCode', (event, data) => FinancialDefinitionService.saveAnalysisCode(data));
-  ipcMain.handle('finance:deleteAnalysisCode', (event, id) => FinancialDefinitionService.deleteAnalysisCode(id));
+  safeHandle('finance:getAnalysisCodes', () => FinancialDefinitionService.getAnalysisCodes());
+  safeHandle('finance:getAnalysisCodesFlat', () => FinancialDefinitionService.getAnalysisCodesFlat());
+  safeHandle('finance:saveAnalysisCode', (event, data) => FinancialDefinitionService.saveAnalysisCode(data));
+  safeHandle('finance:deleteAnalysisCode', (event, id) => FinancialDefinitionService.deleteAnalysisCode(id));
 
   // --- Financial Core (Journals) ---
-  ipcMain.handle('get-next-voucher-no', (event, prefix) => JournalService.getNextVoucherNo(prefix));
-  ipcMain.handle('create-journal-entry', (event, { header, lines }) => JournalService.createJournalEntry(header, lines));
-  ipcMain.handle('get-journal-entry', (event, id) => JournalService.getJournalEntry(id));
-  ipcMain.handle('get-journal-entries', (event, filters) => JournalService.getJournalEntries(filters));
+  safeHandle('get-next-voucher-no', (event, prefix) => JournalService.getNextVoucherNo(prefix));
+  safeHandle('create-journal-entry', (event, { header, lines }) => JournalService.createJournalEntry(header, lines));
+  safeHandle('get-journal-entry', (event, id) => JournalService.getJournalEntry(id));
+  safeHandle('get-journal-entries', (event, filters) => JournalService.getJournalEntries(filters));
+
+  // --- Financial Core (Accounting Engine V66) ---
+  safeHandle('ae:list-sub-accounts', (event, accountId) => AccountingEngineService.listSubAccounts(accountId));
+  safeHandle('ae:create-sub-account', (event, data) => AccountingEngineService.createSubAccount(data));
+  safeHandle('ae:list-references', (event, refType) => AccountingEngineService.listReferences(refType));
+  safeHandle('ae:create-reference', (event, data) => AccountingEngineService.createReference(data));
+  safeHandle('ae:save-draft-voucher', (event, payload) => AccountingEngineService.saveDraftVoucher(payload));
+  safeHandle('ae:post-voucher', (event, payload) => AccountingEngineService.postVoucher(payload));
+  safeHandle('ae:post-draft-voucher', (event, voucherId) => AccountingEngineService.postDraftVoucher(voucherId));
+  safeHandle('ae:get-voucher', (event, id) => AccountingEngineService.getVoucher(id));
+  safeHandle('ae:get-vouchers', (event, filters) => AccountingEngineService.getVouchers(filters));
+  safeHandle('ae:get-trial-balance', (event, params) => AccountingEngineService.getTrialBalance(params));
 
   // 9. Reports (Legacy - Removed, handled above)
-  // ipcMain.handle('get-trial-balance', (event, params) => ReportsService.getTrialBalance(params));
+  // safeHandle('get-trial-balance', (event, params) => ReportsService.getTrialBalance(params));
 
 
   // 10. Manufacturing
   // Work Centers
-  ipcMain.handle('mfg-get-work-centers', () => ManufacturingService.getWorkCenters());
-  ipcMain.handle('mfg-save-work-center', (event, data) => ManufacturingService.saveWorkCenter(data));
-  ipcMain.handle('mfg-delete-work-center', (event, id) => ManufacturingService.deleteWorkCenter(id));
+  safeHandle('mfg-get-work-centers', () => ManufacturingService.getWorkCenters());
+  safeHandle('mfg-save-work-center', (event, data) => ManufacturingService.saveWorkCenter(data));
+  safeHandle('mfg-delete-work-center', (event, id) => ManufacturingService.deleteWorkCenter(id));
 
   // Machines
-  ipcMain.handle('mfg-get-machines', () => ManufacturingService.getMachines());
-  ipcMain.handle('mfg-save-machine', (event, data) => ManufacturingService.saveMachine(data));
-  ipcMain.handle('mfg-delete-machine', (event, id) => ManufacturingService.deleteMachine(id));
+  safeHandle('mfg-get-machines', () => ManufacturingService.getMachines());
+  safeHandle('mfg-save-machine', (event, data) => ManufacturingService.saveMachine(data));
+  safeHandle('mfg-delete-machine', (event, id) => ManufacturingService.deleteMachine(id));
 
   // BOM & Routing
-  ipcMain.handle('mfg-create-bom', (event, header, lines) => ManufacturingService.createBOM(header, lines));
-  ipcMain.handle('mfg-get-boms', () => ManufacturingService.getBOMs());
-  ipcMain.handle('mfg-get-bom', (event, id) => ManufacturingService.getBOM(id));
+  safeHandle('mfg-create-bom', (event, header, lines) => ManufacturingService.createBOM(header, lines));
+  safeHandle('mfg-get-boms', () => ManufacturingService.getBOMs());
+  safeHandle('mfg-get-bom', (event, id) => ManufacturingService.getBOM(id));
 
-  ipcMain.handle('mfg-save-routing', (event, header, ops) => ManufacturingService.saveRouting(header, ops));
-  ipcMain.handle('mfg-get-routings', (event, bomId) => ManufacturingService.getRoutings(bomId));
+  safeHandle('mfg-save-routing', (event, header, ops) => ManufacturingService.saveRouting(header, ops));
+  safeHandle('mfg-get-routings', (event, bomId) => ManufacturingService.getRoutings(bomId));
 
   // Orders
-  ipcMain.handle('mfg-create-order', (event, order) => ManufacturingService.createProductionOrder(order));
-  ipcMain.handle('mfg-get-orders', () => ManufacturingService.getProductionOrders());
-  ipcMain.handle('mfg-update-order-status', (event, { id, status }) => ManufacturingService.updateOrderStatus(id, status));
-  ipcMain.handle('mfg-execute-order', (event, id, qty, date) => ManufacturingService.executeProductionOrder(id, qty, date));
+  safeHandle('mfg-create-order', (event, order) => ManufacturingService.createProductionOrder(order));
+  safeHandle('mfg-get-orders', () => ManufacturingService.getProductionOrders());
+  safeHandle('mfg-update-order-status', (event, { id, status }) => ManufacturingService.updateOrderStatus(id, status));
+  safeHandle('mfg-execute-order', (event, id, qty, date) => ManufacturingService.executeProductionOrder(id, qty, date));
 
   // Job Cards
-  ipcMain.handle('mfg-get-job-cards', (event, filters) => ManufacturingService.getJobCards(filters));
-  ipcMain.handle('mfg-start-job', (event, data) => ManufacturingService.createJobCard(data));
-  ipcMain.handle('mfg-stop-job', (event, { id, data }) => ManufacturingService.stopJobCard(id, data));
+  safeHandle('mfg-get-job-cards', (event, filters) => ManufacturingService.getJobCards(filters));
+  safeHandle('mfg-start-job', (event, data) => ManufacturingService.createJobCard(data));
+  safeHandle('mfg-stop-job', (event, { id, data }) => ManufacturingService.stopJobCard(id, data));
 
   // QC
-  ipcMain.handle('mfg-get-qc-tests', () => ManufacturingService.getQCTests());
-  ipcMain.handle('mfg-save-qc-test', (event, data) => ManufacturingService.saveQCTest(data));
-  ipcMain.handle('mfg-get-inspections', (event, filters) => ManufacturingService.getInspections(filters));
-  ipcMain.handle('mfg-save-inspection', (event, data) => ManufacturingService.saveInspection(data));
+  safeHandle('mfg-get-qc-tests', () => ManufacturingService.getQCTests());
+  safeHandle('mfg-save-qc-test', (event, data) => ManufacturingService.saveQCTest(data));
+  safeHandle('mfg-get-inspections', (event, filters) => ManufacturingService.getInspections(filters));
+  safeHandle('mfg-save-inspection', (event, data) => ManufacturingService.saveInspection(data));
 
   // Maintenance
-  ipcMain.handle('mfg-get-maintenance-requests', (event, filters) => ManufacturingService.getMaintenanceRequests(filters));
-  ipcMain.handle('mfg-save-maintenance-request', (event, data) => ManufacturingService.saveMaintenanceRequest(data));
+  safeHandle('mfg-get-maintenance-requests', (event, filters) => ManufacturingService.getMaintenanceRequests(filters));
+  safeHandle('mfg-save-maintenance-request', (event, data) => ManufacturingService.saveMaintenanceRequest(data));
 
   // TEST WORKFLOW
-  ipcMain.handle('test:run-full-workflow', () => WorkflowTestService.runFullWorkflow());
+  safeHandle('test:run-full-workflow', () => WorkflowTestService.runFullWorkflow());
 
-  ipcMain.handle('mfg-get-wip-report', () => ManufacturingService.getWIPReport());
+  safeHandle('mfg-get-wip-report', () => ManufacturingService.getWIPReport());
 
   // 11. Master Data Definitions (Financials)
   // Banks
-  ipcMain.handle('md-get-banks', () => MasterDataService.getBanks());
-  ipcMain.handle('md-save-bank', (event, data) => MasterDataService.saveBank(data));
-  ipcMain.handle('md-delete-bank', (event, id) => MasterDataService.deleteBank(id));
+  safeHandle('md-get-banks', () => MasterDataService.getBanks());
+  safeHandle('md-save-bank', (event, data) => MasterDataService.saveBank(data));
+  safeHandle('md-delete-bank', (event, id) => MasterDataService.deleteBank(id));
 
-  ipcMain.handle('md-import-banks-html', async (event, filePath) => {
+  safeHandle('md-import-banks-html', async (event, filePath) => {
     return MasterDataService.importBanksFromHTML(filePath);
   });
 
   // Note: dialog:open-file is already registered at line 788, so we don't need to re-register it if it works.
   // Let's check line 788 in the file content I saw earlier.
-  // Line 788: ipcMain.handle('dialog:open-file', async (event, options) => { ...
+  // Line 788: safeHandle('dialog:open-file', async (event, options) => { ...
   // So I can just use 'dialog:open-file' from frontend.
 
 
   // Bank Accounts
-  ipcMain.handle('md-get-bank-accounts', () => MasterDataService.getBankAccounts());
-  ipcMain.handle('md-save-bank-account', (event, data) => MasterDataService.saveBankAccount(data));
-  ipcMain.handle('md-delete-bank-account', (event, id) => MasterDataService.deleteBankAccount(id));
+  safeHandle('md-get-bank-accounts', () => MasterDataService.getBankAccounts());
+  safeHandle('md-save-bank-account', (event, data) => MasterDataService.saveBankAccount(data));
+  safeHandle('md-delete-bank-account', (event, id) => MasterDataService.deleteBankAccount(id));
 
   // Cost Centers
-  ipcMain.handle('md-get-cost-centers', () => MasterDataService.getCostCenters());
-  ipcMain.handle('md-save-cost-center', (event, data) => MasterDataService.saveCostCenter(data));
-  ipcMain.handle('md-delete-cost-center', (event, id) => MasterDataService.deleteCostCenter(id));
+  safeHandle('md-get-cost-centers', () => MasterDataService.getCostCenters());
+  safeHandle('md-save-cost-center', (event, data) => MasterDataService.saveCostCenter(data));
+  safeHandle('md-delete-cost-center', (event, id) => MasterDataService.deleteCostCenter(id));
 
   // Payment Methods
-  ipcMain.handle('md-get-payment-methods', () => MasterDataService.getPaymentMethods());
-  ipcMain.handle('md-save-payment-method', (event, data) => MasterDataService.savePaymentMethod(data));
+  safeHandle('md-get-payment-methods', () => MasterDataService.getPaymentMethods());
+  safeHandle('md-save-payment-method', (event, data) => MasterDataService.savePaymentMethod(data));
 
   // Branches
-  ipcMain.handle('md-get-branches', () => MasterDataService.getBranches());
-  ipcMain.handle('md-save-branch', (event, data) => MasterDataService.saveBranch(data));
-  ipcMain.handle('md-delete-branch', (event, id) => MasterDataService.deleteBranch(id));
+  safeHandle('md-get-branches', () => MasterDataService.getBranches());
+  safeHandle('md-save-branch', (event, data) => MasterDataService.saveBranch(data));
+  safeHandle('md-delete-branch', (event, id) => MasterDataService.deleteBranch(id));
 
   // 11. Master Data Definitions (Financials)
 
 
-  ipcMain.handle('get-products', (event, search) => {
+  safeHandle('get-products', (event, search) => {
     if (!search) return db.prepare('SELECT * FROM products LIMIT 50').all();
     return db.prepare(`
     SELECT * FROM products 
@@ -973,39 +1420,41 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // --- Sales Handlers (New Service) ---
-  ipcMain.handle('sales-create-invoice', (event, data) => SalesService.createInvoice(data));
+  // NOTE: All sales-* IPC handlers below are already registered in the early handlers block
+  // (around lines 689-697). Duplicate registrations cause Electron to throw on startup.
+  // Keeping these as comments for documentation only.
 
   // Quotations
-  ipcMain.handle('sales-create-quotation', (event, data) => SalesService.createQuotation(data));
-  ipcMain.handle('sales-get-quotations', (event) => SalesService.getQuotations());
-  ipcMain.handle('sales-get-quotation', (event, id) => SalesService.getQuotation(id));
-  ipcMain.handle('sales-get-invoice', (event, id) => SalesService.getInvoice(id)); // Added
-  ipcMain.handle('sales-update-quotation-status', (event, { id, status }) => SalesService.updateQuotationStatus(id, status));
+  safeHandle('sales-create-quotation', (event, data) => SalesService.createQuotation(data));
+  safeHandle('sales-get-quotations', (event) => SalesService.getQuotations());
+  safeHandle('sales-get-quotation', (event, id) => SalesService.getQuotation(id));
+  // sales-get-invoice → already registered at line ~692
+  safeHandle('sales-update-quotation-status', (event, { id, status }) => SalesService.updateQuotationStatus(id, status));
 
   // Orders
-  ipcMain.handle('sales-create-order', (event, data) => SalesService.createOrder(data));
-  ipcMain.handle('sales-get-orders', (event) => SalesService.getOrders());
-  ipcMain.handle('sales-get-order', (event, id) => SalesService.getOrder(id));
+  safeHandle('sales-create-order', (event, data) => SalesService.createOrder(data));
+  safeHandle('sales-get-orders', (event) => SalesService.getOrders());
+  safeHandle('sales-get-order', (event, id) => SalesService.getOrder(id));
 
-  ipcMain.handle('sales-update-order-status', (event, { id, status }) => SalesService.updateOrderStatus(id, status));
+  safeHandle('sales-update-order-status', (event, { id, status }) => SalesService.updateOrderStatus(id, status));
 
   // Returns
-  ipcMain.handle('sales-create-return', (event, data) => SalesService.createReturn(data));
-  ipcMain.handle('sales-get-returns', (event) => SalesService.getReturns());
-  ipcMain.handle('sales-get-return', (event, id) => SalesService.getReturn(id));
+  safeHandle('sales-create-return', (event, data) => SalesService.createReturn(data));
+  safeHandle('sales-get-returns', (event) => SalesService.getReturns());
+  safeHandle('sales-get-return', (event, id) => SalesService.getReturn(id));
 
   // Sales Lists & Deletes
-  ipcMain.handle('sales-get-invoices', (event) => SalesService.getInvoices());
-  ipcMain.handle('sales-delete-quotation', (event, id) => SalesService.deleteQuotation(id));
-  ipcMain.handle('sales-delete-order', (event, id) => SalesService.deleteOrder(id));
+  safeHandle('sales-get-invoices', (event) => SalesService.getInvoices());
+  safeHandle('sales-delete-quotation', (event, id) => SalesService.deleteQuotation(id));
+  safeHandle('sales-delete-order', (event, id) => SalesService.deleteOrder(id));
 
   // Legacy Handler Removal (or keep alias if needed, but switching to new name 'sales-create-invoice' is cleaner)
   // Converting old calls to new service if signature matches, but for now we are building new UI.
-  // ipcMain.handle('save-invoice', ...); // Removed in favor of SalesService
+  // safeHandle('save-invoice', ...); // Removed in favor of SalesService
 
   /*
   // Save Sales Invoice (Deprecated)
-  ipcMain.handle('save-invoice', (event, data) => {
+  safeHandle('save-invoice', (event, data) => {
     const { header, items, customerId, totalAmount } = data;
   
     // Validation
@@ -1051,36 +1500,36 @@ const registerIPCHandlers = (db: any) => {
 
 
   // --- Treasury & Cheques Handlers (New) ---
-  ipcMain.handle('treasury-create-receipt', (event, data) => TreasuryService.createReceiptVoucher(data));
-  ipcMain.handle('treasury-create-payment', (event, data) => TreasuryService.createPaymentVoucher(data));
-  ipcMain.handle('treasury-get-receipt', (event, id) => TreasuryService.getReceipt(id)); // Existing mapping, now exposed.
-  ipcMain.handle('treasury-get-payment', (event, id) => TreasuryService.getPaymentVoucher(id));
-  ipcMain.handle('treasury-get-payments', (event, filters) => TreasuryService.getPaymentVouchers(filters));
-  ipcMain.handle('treasury-get-receipts', (event, filters) => TreasuryService.getReceiptVouchers(filters));
-  ipcMain.handle('treasury-get-book-balance', (event, { accountId, date }) => TreasuryService.getBookBalance(accountId, date));
+  safeHandle('treasury-create-receipt', (event, data) => TreasuryService.createReceiptVoucher(data));
+  safeHandle('treasury-create-payment', (event, data) => TreasuryService.createPaymentVoucher(data));
+  safeHandle('treasury-get-receipt', (event, id) => TreasuryService.getReceipt(id)); // Existing mapping, now exposed.
+  safeHandle('treasury-get-payment', (event, id) => TreasuryService.getPaymentVoucher(id));
+  safeHandle('treasury-get-payments', (event, filters) => TreasuryService.getPaymentVouchers(filters));
+  safeHandle('treasury-get-receipts', (event, filters) => TreasuryService.getReceiptVouchers(filters));
+  safeHandle('treasury-get-book-balance', (event, { accountId, date }) => TreasuryService.getBookBalance(accountId, date));
 
-  ipcMain.handle('cheques-get', async (_, filters) => {
+  safeHandle('cheques-get', async (_, filters) => {
     return ChequeService.getCheques(filters);
   });
-  ipcMain.handle('cheques-update-status', async (_, data) => {
+  safeHandle('cheques-update-status', async (_, data) => {
     return ChequeService.updateStatus(data.id, data.status, data.date, data.options);
   });
 
   // 10. Report Engine Handlers (New)
-  // ipcMain.handle('reports-get-partner-ledger', (event, filters) => ReportService.getPartnerLedger(filters)); // DUPLICATE REMOVED
-  // ipcMain.handle('reports-get-item-movement', (event, filters) => ReportService.getItemMovement(filters)); // DUPLICATE REMOVED
-  ipcMain.handle('reports-get-trial-balance', (event) => ReportService.getTrialBalance());
-  // ipcMain.handle('reports-get-top-customers', () => ReportsService.getTopCustomers()); // Duplicate removed
+  // safeHandle('reports-get-partner-ledger', (event, filters) => ReportService.getPartnerLedger(filters)); // DUPLICATE REMOVED
+  // safeHandle('reports-get-item-movement', (event, filters) => ReportService.getItemMovement(filters)); // DUPLICATE REMOVED
+  safeHandle('reports-get-trial-balance', (event) => ReportService.getTrialBalance());
+  // safeHandle('reports-get-top-customers', () => ReportsService.getTopCustomers()); // Duplicate removed
 
   // 11. Budgeting Module
-  ipcMain.handle('budget-get-all', () => BudgetService.getAllBudgets());
-  ipcMain.handle('budget-get-by-id', (event, id) => BudgetService.getBudgetById(id));
-  ipcMain.handle('budget-create', (event, data) => BudgetService.createBudget(data));
-  ipcMain.handle('budget-update-status', (event, { id, status }) => BudgetService.updateBudgetStatus(id, status, 'Admin')); // TODO: userId
-  ipcMain.handle('budget-get-report', (event, { id, period }) => BudgetService.getBudgetVsActual(id, period));
+  safeHandle('budget-get-all', () => BudgetService.getAllBudgets());
+  safeHandle('budget-get-by-id', (event, id) => BudgetService.getBudgetById(id));
+  safeHandle('budget-create', (event, data) => BudgetService.createBudget(data));
+  safeHandle('budget-update-status', (event, { id, status }) => BudgetService.updateBudgetStatus(id, status, 'Admin')); // TODO: userId
+  safeHandle('budget-get-report', (event, { id, period }) => BudgetService.getBudgetVsActual(id, period));
 
   // 12. P&L Report Handler
-  // ipcMain.handle('get-report-pnl', (event, range) => ReportsService.getReportPnL(range)); // Duplicate removed
+  // safeHandle('get-report-pnl', (event, range) => ReportsService.getReportPnL(range)); // Duplicate removed
 
   // 13. Import Module Handlers (Managed via ImportService instance)
 
@@ -1094,7 +1543,7 @@ const registerIPCHandlers = (db: any) => {
 
   // --- Account Statement Handlers ---
 
-  ipcMain.handle('get-account-statement', (event, { accountId, fromDate, toDate }) => {
+  safeHandle('get-account-statement', (event, { accountId, fromDate, toDate }) => {
     // 1. Opening Balance
     const opening = db.prepare(`
   SELECT SUM(debit - credit) as balance 
@@ -1130,7 +1579,7 @@ const registerIPCHandlers = (db: any) => {
   // --- Manufacturing Handlers ---
 
   // 1. Save BOM
-  ipcMain.handle('save-bom', (event, { finishedProductId, name, items }) => {
+  safeHandle('save-bom', (event, { finishedProductId, name, items }) => {
     const run = db.transaction(() => {
       const stmt = db.prepare('INSERT INTO boms (finished_product_id, name) VALUES (?, ?)');
       const info = stmt.run(finishedProductId, name);
@@ -1146,7 +1595,7 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // 2. Get BOMs
-  ipcMain.handle('get-boms', () => {
+  safeHandle('get-boms', () => {
     return db.prepare(`
   SELECT b.id, b.name, p.name as product_name 
   FROM boms b
@@ -1155,7 +1604,7 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // 3. Execute Production (The Industrial Engine)
-  ipcMain.handle('execute-production', (event, { bomId, quantity, date, refNo }) => {
+  safeHandle('execute-production', (event, { bomId, quantity, date, refNo }) => {
     const runProduction = db.transaction(() => {
       // A. Get BOM Details
       const bom = db.prepare('SELECT * FROM boms WHERE id = ?').get(bomId);
@@ -1214,12 +1663,12 @@ const registerIPCHandlers = (db: any) => {
   // --- Dashboard Handlers ---
 
   // 1. Get KPIs (The Cockpit Data)
-  // ipcMain.handle('get-dashboard-kpis', async () => {
+  // safeHandle('get-dashboard-kpis', async () => {
   //   return SystemService.getDashboardKPIs();
   // });
 
   // 2. Get Charts Data
-  // ipcMain.handle('get-dashboard-charts', async () => {
+  // safeHandle('get-dashboard-charts', async () => {
   //   return ReportService.getDashboardCharts(); 
   // });
 
@@ -1228,30 +1677,30 @@ const registerIPCHandlers = (db: any) => {
   // 1. Profit & Loss (Income Statement) - MOVED TO SERVICE (See line 663)
 
   // 2. Balance Sheet
-  ipcMain.handle('get-report-balance-sheet', () => ReportService.getBalanceSheet());
+  safeHandle('get-report-balance-sheet', () => ReportService.getBalanceSheet());
 
   // 3. Inventory Status
-  // ipcMain.handle('reports-get-inventory-status', () => ReportService.getInventoryStatus()); // DUPLICATE REMOVED
+  // safeHandle('reports-get-inventory-status', () => ReportService.getInventoryStatus()); // DUPLICATE REMOVED
 
   // 4. Sales Reports
-  // ipcMain.handle('reports-get-sales-analytics', (event, range) => ReportService.getSalesAnalytics(range)); // DUPLICATE REMOVED
-  // ipcMain.handle('reports-get-profitability', (event, range) => ReportService.getProfitabilityReport(range)); // DUPLICATE REMOVED
+  // safeHandle('reports-get-sales-analytics', (event, range) => ReportService.getSalesAnalytics(range)); // DUPLICATE REMOVED
+  // safeHandle('reports-get-profitability', (event, range) => ReportService.getProfitabilityReport(range)); // DUPLICATE REMOVED
 
   // 5. Purchasing Reports
-  // ipcMain.handle('reports-get-purchasing-analysis', (event, range) => ReportService.getPurchasingAnalysis(range)); // DUPLICATE REMOVED
-  // ipcMain.handle('reports-get-import-reports', () => ReportService.getImportReports()); // DUPLICATE REMOVED
+  // safeHandle('reports-get-purchasing-analysis', (event, range) => ReportService.getPurchasingAnalysis(range)); // DUPLICATE REMOVED
+  // safeHandle('reports-get-import-reports', () => ReportService.getImportReports()); // DUPLICATE REMOVED
 
   // 6. Cheque Reports
-  // ipcMain.handle('reports-get-cheques', (event, filters) => ReportService.getChequesReport(filters)); // DUPLICATE REMOVED
+  // safeHandle('reports-get-cheques', (event, filters) => ReportService.getChequesReport(filters)); // DUPLICATE REMOVED
 
   // 7. General Financial Reports (Account Statement & Aging)
-  // ipcMain.handle('reports-get-account-statement', (event, filters) => ReportService.getAccountStatement(filters)); // DUPLICATE REMOVED
-  // ipcMain.handle('reports-get-aging', () => ReportService.getAgingReport()); // DUPLICATE REMOVED
-  // ipcMain.handle('reports-get-tax', (event, range) => ReportService.getTaxReport(range)); // DUPLICATE REMOVED
+  // safeHandle('reports-get-account-statement', (event, filters) => ReportService.getAccountStatement(filters)); // DUPLICATE REMOVED
+  // safeHandle('reports-get-aging', () => ReportService.getAgingReport()); // DUPLICATE REMOVED
+  // safeHandle('reports-get-tax', (event, range) => ReportService.getTaxReport(range)); // DUPLICATE REMOVED
 
   // 3. Debt Aging Report (The Collection List) - REMOVING OLD PLACEHOLDER IF EXISTS or INTEGRATING
   // (Assuming 'get-report-aging' was the old one, but we are standardizing on 'reports-*')
-  ipcMain.handle('get-report-aging', () => {
+  safeHandle('get-report-aging', () => {
     // Find all customers with negative balance (Debtors)
     // In our system, Debit is positive balance for assets. Wait. 
     // If Customer is Asset: Debit increases balance. So Positive Balance = Debt.
@@ -1308,7 +1757,7 @@ const registerIPCHandlers = (db: any) => {
   // --- Licensing & Security Handlers ---
 
   // 1. Get Machine Fingerprint
-  ipcMain.handle('get-machine-id', async () => {
+  safeHandle('get-machine-id', async () => {
     return new Promise((resolve) => {
       // Windows command to get UUID
       require('child_process').exec('wmic csproduct get uuid', (err: any, stdout: any) => {
@@ -1325,7 +1774,7 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // 2. Validate License
-  ipcMain.handle('validate-license', () => {
+  safeHandle('validate-license', () => {
     const license = db.prepare("SELECT value FROM settings WHERE key = 'license_key'").get();
     if (!license) return { status: 'unlicensed' };
 
@@ -1334,7 +1783,7 @@ const registerIPCHandlers = (db: any) => {
   });
 
   // 3. Activate Product
-  ipcMain.handle('activate-product', (event, key) => {
+  safeHandle('activate-product', (event, key) => {
     // Simple check: Key must start with "WAFI-"
     if (!key.startsWith("WAFI-")) throw new Error("مفتاح غير صالح");
 
@@ -1348,7 +1797,7 @@ const registerIPCHandlers = (db: any) => {
   // --- Data Migration Handlers ---
 
   // 1. Bulk Import (The Bridge)
-  ipcMain.handle('import-data', (event, { type, data }) => {
+  safeHandle('import-data', (event, { type, data }) => {
     // data is an array of objects from Excel/CSV
     const runImport = db.transaction(() => {
       if (type === 'products') {
@@ -1389,10 +1838,137 @@ const registerIPCHandlers = (db: any) => {
   });
 
 
+  // ============================================
+  // GRN (Goods Receipt Note) Handlers
+  // ============================================
+  safeHandle('grn:save', (_, data) => {
+    try { return GRNService.save(data); }
+    catch (e: any) { console.error('[GRN:save]', e); throw e; }
+  });
+
+  safeHandle('grn:post-to-pending', (_, id) => {
+    try { return GRNService.postToPending(id); }
+    catch (e: any) { console.error('[GRN:postToPending]', e); throw e; }
+  });
+
+  safeHandle('grn:invoice', (_, id) => {
+    try { return GRNService.invoiceFromGRN(id); }
+    catch (e: any) { console.error('[GRN:invoice]', e); throw e; }
+  });
+
+  safeHandle('grn:get', (_, id) => {
+    try { return GRNService.get(id); }
+    catch (e: any) { console.error('[GRN:get]', e); throw e; }
+  });
+
+  safeHandle('grn:list', () => {
+    try { return GRNService.list(); }
+    catch (e: any) { console.error('[GRN:list]', e); throw e; }
+  });
+
+  WorkflowService.register();
+  SalesInvoiceService.register();
+  PurchaseInvoiceService.register();
+  StockTransferService.register();
+  JournalVoucherService.register();
+
+  // ----- Procurement Generic Document Services -----
+  const PurchaseRequestService = DocumentServiceFactory.createService({
+    docType: 'purchase_request',
+    tableName: 'purchase_requests',
+    lineTableName: 'purchase_request_lines',
+    foreignKey: 'request_id',
+    headerPrefix: 'PRQ',
+    partnerField: 'requester_id',
+    hasTotals: false
+  });
+  PurchaseRequestService.register('purchaseRequests');
+
+  const PurchaseQuotationService = DocumentServiceFactory.createService({
+    docType: 'purchase_rfq',
+    tableName: 'purchase_rfqs',
+    lineTableName: 'purchase_rfq_lines',
+    foreignKey: 'rfq_id',
+    headerPrefix: 'RFQ',
+    partnerField: 'supplier_id',
+    hasTotals: false // Usually just QTY & expected terms mapping
+  });
+  PurchaseQuotationService.register('purchaseQuotations');
+
+  const PurchaseOrderService = DocumentServiceFactory.createService({
+    docType: 'purchase_order',
+    tableName: 'purchase_orders',
+    lineTableName: 'purchase_order_lines',
+    foreignKey: 'order_id',
+    headerPrefix: 'PO',
+    partnerField: 'supplier_id',
+    hasTotals: true
+  });
+  PurchaseOrderService.register('purchaseOrders');
+
+  // ----- Sales Generic Document Services -----
+  const SalesQuotationService = DocumentServiceFactory.createService({
+    docType: 'sales_quotation',
+    tableName: 'sales_quotations',
+    lineTableName: 'sales_quotation_lines',
+    foreignKey: 'quotation_id',
+    headerPrefix: 'SQ',
+    partnerField: 'customer_id',
+    hasTotals: true
+  });
+  SalesQuotationService.register('salesQuotations');
+
+  const SalesOrderService = DocumentServiceFactory.createService({
+    docType: 'sales_order',
+    tableName: 'sales_orders',
+    lineTableName: 'sales_order_lines',
+    foreignKey: 'order_id',
+    headerPrefix: 'SO',
+    partnerField: 'customer_id',
+    hasTotals: true
+  });
+  SalesOrderService.register('salesOrders');
 
 }; // End of registerIPCHandlers
 
-const createWindow = () => {
+const getBundledRendererPath = () =>
+  path.resolve(__dirname, '../../dist/index.html');
+
+const loadRenderer = async (mainWindow: BrowserWindow) => {
+  const rendererUrl =
+    process.env.VITE_DEV_SERVER_URL ||
+    process.env.ELECTRON_RENDERER_URL ||
+    DEFAULT_RENDERER_URL;
+  const bundledRendererPath = getBundledRendererPath();
+
+  if (!app.isPackaged) {
+    try {
+      console.log(`[Renderer] Trying dev server: ${rendererUrl}`);
+      await mainWindow.loadURL(rendererUrl);
+      console.log(`[Renderer] Loaded dev server: ${mainWindow.webContents.getURL()}`);
+      return;
+    } catch (error) {
+      console.warn(`[Renderer] Dev server unavailable, falling back to bundled UI: ${rendererUrl}`);
+      console.warn(error);
+    }
+  }
+
+  if (!fs.existsSync(bundledRendererPath)) {
+    throw new Error(`[Renderer] Bundled UI not found at ${bundledRendererPath}`);
+  }
+
+  const bundledRendererUrl = pathToFileURL(bundledRendererPath).toString();
+  console.log(`[Renderer] Loading bundled UI: ${bundledRendererPath}`);
+  await mainWindow.loadURL(bundledRendererUrl);
+  console.log(`[Renderer] Loaded bundled UI: ${mainWindow.webContents.getURL()}`);
+};
+
+const reportWindowCreationFailure = (error: any) => {
+  console.error('[Startup] Failed to create the main window:', error);
+  dialog.showErrorBox('WAFI ERP', error?.message || 'Failed to load the application UI.');
+};
+
+const createWindow = async () => {
 
   // Calculate Inverse Scaling to neutralize Windows Scale
   // If Windows is 125% (1.25), we zoom to 80% (0.8) so 1.25 * 0.8 = 1.0 visual scale
@@ -1421,12 +1997,17 @@ const createWindow = () => {
     title: 'WAFI ERP', // Enforce App Name
     focusable: true, // Ensure window can receive focus
   });
+  const webContentsId = mainWindow.webContents.id;
+  const heartbeatTimer = setInterval(() => {
+    concurrentLicenseService?.heartbeat(webContentsId);
+  }, 60_000);
 
   // Enforce the inverse zoom
   mainWindow.webContents.setZoomFactor(inverseZoom);
 
   // Enable visual zoom still (Ctrl+/Ctrl-) but starting from our calculated base
   mainWindow.webContents.on('did-finish-load', () => {
+    console.log(`[Renderer] did-finish-load: ${mainWindow.webContents.getURL()}`);
     // Allow zooming but keep our base
     mainWindow.webContents.setVisualZoomLevelLimits(1, 3);
 
@@ -1439,6 +2020,11 @@ const createWindow = () => {
   // Show window when ready to prevent flickering
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    console.error(`[Renderer] Failed to load (${errorCode}): ${errorDescription} -> ${validatedURL}`);
   });
 
   // Fix for input focus issues
@@ -1471,10 +2057,15 @@ const createWindow = () => {
   });
 
   // Load the app
-  mainWindow.loadURL('http://localhost:4600');
+  await loadRenderer(mainWindow);
+  mainWindow.on('closed', () => {
+    clearInterval(heartbeatTimer);
+    concurrentLicenseService?.releaseSession(webContentsId);
+    clearAuthSessionByWebContentsId(webContentsId);
+  });
 };
 
-app.on('ready', () => {
+app.on('ready', async () => {
   // Initialize DB schema
   const dbPath = path.join(app.getPath('userData'), 'wafi.db');
   console.log('Initializing Database at:', dbPath);
@@ -1517,13 +2108,265 @@ app.on('ready', () => {
   importService = new ImportService(db);
   seedSystem();
 
+  // --- Security Capability Engine (registry + scoped snapshot) ---
+  const capabilityRegistry = new CapabilityRegistry();
+  const permissionEngineRepo = new SqlitePermissionEngineRepo(db);
+  permissionEngineRepo.seedCatalog(
+    capabilityRegistry.getCatalog(),
+    capabilityRegistry.getVersion()
+  );
+  permissionEngineRepo.seedCapabilityRegistry(capabilityRegistry.getCapabilityRegistryRows());
+  permissionSnapshotService = new PermissionSnapshotService(permissionEngineRepo);
+  configureAuthContext({
+    database: db,
+    permissionSnapshotService,
+  });
+
+  // --- Global Audit Engine (field-level + IPC guard audit) ---
+  const auditRepo = new SqliteAuditRepo(db);
+  auditService = new AuditService(auditRepo);
+  configureGlobalAuditService(auditService);
+  registerAuditIPC(auditService);
+
+  registerSecurityIPC(permissionSnapshotService);
+
+  // --- Dynamic Filters + Saved Views (screen registry + whitelisted query builder) ---
+  const screenRegistry = new ScreenRegistry();
+  const screenViewsRepo = new SqliteScreenViewsRepo(db);
+  const screenQueryBuilder = new ScreenQueryBuilder();
+  const screenViewsService = new ScreenViewsService(
+    screenViewsRepo,
+    screenRegistry,
+    screenQueryBuilder,
+    auditService
+  );
+  registerScreenViewsIPC(screenViewsService);
+
+  // --- Printing IPC ---
+  registerPrintingIPC();
+
+  // --- Fixed Assets (domain-driven IPC) ---
+  const fixedAssetRepo = new SqliteFixedAssetRepo(db);
+  const fixedAssetUseCases = new FixedAssetUseCases(fixedAssetRepo);
+  registerFixedAssetIPC(fixedAssetUseCases);
+
+  // --- Finance (domain-driven IPC) ---
+  const currencyRepo = new SqliteCurrencyRepo(db);
+  const costCenterRepo = new SqliteCostCenterRepo(db);
+  const taxGroupRepo = new SqliteTaxGroupRepo(db);
+  const financeUseCases = new FinanceUseCases(currencyRepo, costCenterRepo, taxGroupRepo);
+  registerFinanceIPC(financeUseCases);
+
+  // --- Expense Dimensions (expense types + cost centers + vehicles + reports) ---
+  const expenseDimensionsRepo = new SqliteExpenseDimensionsRepo(db);
+  const expenseDimensionsUseCases = new ExpenseDimensionsUseCases(expenseDimensionsRepo);
+  registerExpenseDimensionsIPC(expenseDimensionsUseCases);
+
+  // --- Accounting Foundation (CoA + Financial Definitions + Account Resolution) ---
+  const accountingFoundationRepo = new SqliteAccountingFoundationRepo(db);
+  const accountingFoundationUseCases = new AccountingFoundationUseCases(
+    accountingFoundationRepo,
+    accountingFoundationRepo,
+  );
+  registerAccountingFoundationIPC(accountingFoundationUseCases);
+
+  // --- Fixed-Width Chart of Accounts Foundation ---
+  const chartOfAccountsRepo = new SqliteChartOfAccountsRepo(db);
+  const chartOfAccountsSeedService = new ChartOfAccountsSeedService(chartOfAccountsRepo);
+  const chartOfAccountsUseCases = new ChartOfAccountsUseCases(
+    chartOfAccountsRepo,
+    chartOfAccountsSeedService,
+  );
+  registerChartOfAccountsIPC(chartOfAccountsUseCases);
+
+  // --- Financial Definitions + Account Resolution Engine ---
+  const accountingResolutionRepo = new SqliteAccountingResolutionRepo(db);
+  const accountingResolutionUseCases = new AccountingResolutionUseCases(accountingResolutionRepo);
+  SalesService.configureAccountResolutionUseCases(accountingResolutionUseCases);
+  registerAccountingResolutionIPC(accountingResolutionUseCases);
+
+  // --- Central Journal Engine (posting + reversal + source query) ---
+  const journalHeaderRepo = new SqliteJournalHeaderRepo(db);
+  const journalLineRepo = new SqliteJournalLineRepo(db);
+  const postingRegistryRepo = new SqlitePostingRegistryRepo(db);
+  const journalFiscalPeriodRepo = new SqliteJournalFiscalPeriodRepo(db);
+  const journalAccountLookupRepo = new SqliteJournalAccountLookupRepo(db);
+  const journalEngineService = new JournalEngineService({
+    database: db,
+    journalsRepo: journalHeaderRepo,
+    journalLinesRepo: journalLineRepo,
+    postingRegistryRepo,
+    fiscalPeriodRepo: journalFiscalPeriodRepo,
+    accountLookupRepo: journalAccountLookupRepo,
+  });
+  const journalEngineUseCases = new JournalEngineUseCases(journalEngineService);
+  SalesInvoiceService.configurePostingPipeline({
+    accountResolutionUseCases: accountingResolutionUseCases,
+    journalEngineUseCases,
+  });
+  PurchaseInvoiceService.configurePostingPipeline({
+    accountResolutionUseCases: accountingResolutionUseCases,
+    journalEngineUseCases,
+  });
+  registerAccountingJournalsIPC(journalEngineUseCases);
+
+  // --- Sales Invoice Accounting Pipeline (Account Resolution -> Journal Engine) ---
+  const salesInvoiceAccountingRepo = new SqliteSalesInvoiceAccountingRepo(db);
+  const salesInvoicePostingBuilder = new SalesInvoicePostingBuilder(
+    accountingResolutionUseCases,
+    salesInvoiceAccountingRepo,
+  );
+  const salesInvoiceAccountingService = new SalesInvoiceAccountingService(
+    salesInvoiceAccountingRepo,
+    salesInvoicePostingBuilder,
+    journalEngineUseCases,
+  );
+  const salesInvoiceAccountingUseCases = new SalesInvoiceAccountingUseCases(salesInvoiceAccountingService);
+  registerSalesInvoiceAccountingIPC(salesInvoiceAccountingUseCases);
+
+  // --- Purchase Invoice Accounting Pipeline (Account Resolution -> Journal Engine) ---
+  const purchaseInvoiceAccountingRepo = new SqlitePurchaseInvoiceAccountingRepo(db);
+  const purchaseInvoicePostingBuilder = new PurchaseInvoicePostingBuilder(
+    accountingResolutionUseCases,
+    purchaseInvoiceAccountingRepo,
+  );
+  const purchaseInvoiceAccountingService = new PurchaseInvoiceAccountingService(
+    purchaseInvoiceAccountingRepo,
+    purchaseInvoicePostingBuilder,
+    journalEngineUseCases,
+  );
+  const purchaseInvoiceAccountingUseCases = new PurchaseInvoiceAccountingUseCases(purchaseInvoiceAccountingService);
+  PurchaseInvoiceService.configureAccountingUseCases(purchaseInvoiceAccountingUseCases);
+  registerPurchaseInvoiceAccountingIPC(purchaseInvoiceAccountingUseCases);
+
+  // --- Inventory Documents Posting Pipeline (Inventory -> Account Resolution -> Journal Engine) ---
+  const inventoryDocumentRepo = new SqliteInventoryDocumentRepo(db);
+  const inventoryPostingBuilder = new InventoryPostingBuilder(
+    accountingResolutionUseCases,
+    inventoryDocumentRepo,
+  );
+  const inventoryDocumentService = new InventoryDocumentService(
+    inventoryDocumentRepo,
+    inventoryPostingBuilder,
+    journalEngineUseCases,
+  );
+  const inventoryDocumentUseCases = new InventoryDocumentUseCases(inventoryDocumentService);
+  registerInventoryDocumentIPC(inventoryDocumentUseCases);
+
+  // --- Treasury Documents + Cheque Lifecycle (Treasury -> Account Resolution -> Journal Engine) ---
+  const treasuryRepo = new SqliteTreasuryRepo(db);
+  const treasuryPostingBuilder = new TreasuryPostingBuilder(
+    accountingResolutionUseCases,
+    treasuryRepo,
+  );
+  const treasuryChequeLifecycleService = new TreasuryChequeLifecycleService(
+    treasuryRepo,
+    accountingResolutionUseCases,
+    journalEngineUseCases,
+  );
+  const treasuryDocumentService = new TreasuryDocumentService(
+    treasuryRepo,
+    treasuryPostingBuilder,
+    treasuryChequeLifecycleService,
+    journalEngineUseCases,
+  );
+  const treasuryDocumentUseCases = new TreasuryDocumentUseCases(treasuryDocumentService);
+  const treasuryChequeUseCases = new TreasuryChequeUseCases(treasuryChequeLifecycleService);
+  registerTreasuryDocumentIPC(treasuryDocumentUseCases);
+  registerTreasuryChequeIPC(treasuryChequeUseCases);
+
+  // --- Sales Operations Foundation (Quotation -> Order -> Delivery -> Return) ---
+  const salesOperationsRepo = new SqliteSalesOperationsRepo(db);
+  const salesStockLedgerService = new SalesStockLedgerService(salesOperationsRepo);
+  const salesOperationsAccountingBuilder = new SalesOperationsAccountingBuilder(
+    accountingResolutionUseCases,
+    salesOperationsRepo,
+  );
+  const salesOperationsService = new SalesOperationsService(
+    salesOperationsRepo,
+    salesStockLedgerService,
+    salesOperationsAccountingBuilder,
+    journalEngineUseCases,
+  );
+  const salesOperationsUseCases = new SalesOperationsUseCases(salesOperationsService);
+  registerSalesQuotationIPC(salesOperationsUseCases);
+  registerSalesOrderIPC(salesOperationsUseCases);
+  registerDeliveryNoteIPC(salesOperationsUseCases);
+  registerSalesReturnIPC(salesOperationsUseCases);
+
+  // --- Purchase Operations Foundation (Request -> RFQ -> Order -> GRN -> Return) ---
+  const purchaseOperationsRepo = new SqlitePurchaseOperationsRepo(db);
+  const purchaseStockLedgerService = new PurchaseStockLedgerService(purchaseOperationsRepo);
+  const purchaseOperationsAccountingBuilder = new PurchaseOperationsAccountingBuilder(
+    accountingResolutionUseCases,
+    purchaseOperationsRepo,
+  );
+  const purchaseOperationsService = new PurchaseOperationsService(
+    purchaseOperationsRepo,
+    purchaseStockLedgerService,
+    purchaseOperationsAccountingBuilder,
+    journalEngineUseCases,
+  );
+  const purchaseOperationsUseCases = new PurchaseOperationsUseCases(purchaseOperationsService);
+  registerPurchaseRequestIPC(purchaseOperationsUseCases);
+  registerPurchaseRfqIPC(purchaseOperationsUseCases);
+  registerPurchaseOrderIPC(purchaseOperationsUseCases);
+  registerGoodsReceiptNoteIPC(purchaseOperationsUseCases);
+  registerPurchaseReturnIPC(purchaseOperationsUseCases);
+
+  // --- Manufacturing Foundation (BOM -> Routing -> Production Order -> Issue/Receipt) ---
+  const manufacturingRepo = new SqliteManufacturingRepo(db);
+  const manufacturingStockLedgerService = new ManufacturingStockLedgerService(manufacturingRepo);
+  const manufacturingAccountingBuilder = new ManufacturingAccountingBuilder(
+    accountingResolutionUseCases,
+    manufacturingRepo,
+  );
+  const manufacturingDomainService = new ManufacturingDomainService(
+    manufacturingRepo,
+    manufacturingStockLedgerService,
+    manufacturingAccountingBuilder,
+    journalEngineUseCases,
+  );
+  const manufacturingUseCases = new ManufacturingUseCases(manufacturingDomainService);
+  registerManufacturingIPC(manufacturingUseCases);
+
+  // --- CRM + Receivables Foundation (Customer Master -> Credit Control -> Statement/Aging/Timeline) ---
+  const customerReceivablesRepo = new SqliteCustomerReceivablesRepo(db);
+  const customerReceivablesService = new CustomerReceivablesService(customerReceivablesRepo);
+  const customerReceivablesUseCases = new CustomerReceivablesUseCases(customerReceivablesService);
+  registerCustomerReceivablesIPC(customerReceivablesUseCases);
+
+  // --- Vendor + Payables Foundation (Vendor Master -> Payment Control -> Statement/Aging/Timeline) ---
+  const vendorPayablesRepo = new SqliteVendorPayablesRepo(db);
+  const vendorPayablesService = new VendorPayablesService(vendorPayablesRepo);
+  const vendorPayablesUseCases = new VendorPayablesUseCases(vendorPayablesService);
+  registerVendorPayablesIPC(vendorPayablesUseCases);
+
+  // --- Financial Platform (Accounting/Treasury/Risk/Revenue/Carbon/Analytics) ---
+  const financialPlatformRepo = new SqliteFinancialPlatformRepo(db);
+  const financialPlatformUseCases = new FinancialPlatformUseCases(financialPlatformRepo);
+  registerFinancialPlatformIPC(financialPlatformUseCases);
+
+  // --- Runtime Governance (Concurrent seats + Attachments quota/chunking) ---
+  const runtimeGovernanceRepo = new SqliteRuntimeGovernanceRepo(db);
+  concurrentLicenseService = new ConcurrentLicenseService(runtimeGovernanceRepo);
+  attachmentStorageService = new AttachmentStorageService(runtimeGovernanceRepo);
+  registerRuntimeGovernanceIPC({
+    concurrentLicenseService,
+    attachmentStorageService,
+  });
 
   // Register IPC handlers
   registerIPCHandlers(db);
 
   // Note: wafi:// protocol handler is registered in app.whenReady() above
 
-  createWindow();
+  try {
+    await createWindow();
+  } catch (error: any) {
+    reportWindowCreationFailure(error);
+    app.quit();
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -1532,8 +2375,16 @@ app.on('window-all-closed', () => {
   }
 });
 
+app.on('before-quit', () => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    const wcId = win.webContents.id;
+    concurrentLicenseService?.releaseSession(wcId);
+    clearAuthSessionByWebContentsId(wcId);
+  }
+});
+
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    void createWindow().catch(reportWindowCreationFailure);
   }
 });

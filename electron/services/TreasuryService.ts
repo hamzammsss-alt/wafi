@@ -3,6 +3,242 @@ import { v4 as uuidv4 } from 'uuid';
 import { JournalService } from './JournalService';
 
 export class TreasuryService {
+    private static safeConsole(method: 'log' | 'warn' | 'error', ...args: any[]) {
+        try {
+            const writer = console[method] || console.log;
+            writer(...args);
+        } catch {
+            // Ignore stdout/stderr pipe failures in desktop runs.
+        }
+    }
+
+    private static getApprovalInboxViewSql() {
+        return `
+DROP VIEW IF EXISTS view_approval_inbox;
+
+CREATE VIEW view_approval_inbox AS
+SELECT
+    'sales_invoice' as doc_type,
+    id as doc_id,
+    COALESCE(invoice_no, id) as ref_no,
+    date as doc_date,
+    COALESCE(created_by, submitted_by, '') as created_by,
+    COALESCE(submitted_at, updated_at, created_at) as submitted_at,
+    COALESCE(grand_total, 0) as amount,
+    status
+FROM sales_invoices
+WHERE status LIKE 'PENDING_APPROVAL%'
+
+UNION ALL
+
+SELECT
+    'purchase_order' as doc_type,
+    id as doc_id,
+    COALESCE(order_no, id) as ref_no,
+    date as doc_date,
+    COALESCE(created_by, submitted_by, '') as created_by,
+    COALESCE(submitted_at, created_at) as submitted_at,
+    COALESCE(grand_total, 0) as amount,
+    status
+FROM purchase_orders
+WHERE status LIKE 'PENDING_APPROVAL%'
+
+UNION ALL
+
+SELECT
+    'purchase_request' as doc_type,
+    id as doc_id,
+    COALESCE(request_no, id) as ref_no,
+    date as doc_date,
+    COALESCE(submitted_by, requester_id, '') as created_by,
+    COALESCE(submitted_at, created_at) as submitted_at,
+    0 as amount,
+    status
+FROM purchase_requests
+WHERE status LIKE 'PENDING_APPROVAL%';
+        `;
+    }
+
+    private static refreshApprovalInboxView() {
+        db.exec(TreasuryService.getApprovalInboxViewSql());
+        TreasuryService.safeConsole('log', '[TreasuryService] Refreshed approval inbox view.');
+    }
+
+    private static cleanupBrokenTreasuryObjects() {
+        TreasuryService.refreshApprovalInboxView();
+
+        const broken = db.prepare(`
+            SELECT type, name FROM sqlite_master
+            WHERE (type = 'trigger' OR type = 'view')
+              AND sql IS NOT NULL
+              AND (
+                sql LIKE '%business_partners_backup_fix_fk%'
+                OR sql LIKE '%backup_fix%'
+                OR sql LIKE '%gl_journal_header%'
+              )
+        `).all();
+
+        for (const obj of broken) {
+            TreasuryService.safeConsole('log', `[TreasuryService] Dropping broken ${obj.type}: ${obj.name}`);
+            try {
+                if (obj.type === 'trigger') {
+                    db.prepare(`DROP TRIGGER IF EXISTS "${obj.name}"`).run();
+                } else {
+                    db.prepare(`DROP VIEW IF EXISTS "${obj.name}"`).run();
+                }
+            } catch (innerErr) {
+                TreasuryService.safeConsole('error', `[TreasuryService] Failed to drop ${obj.name}`, innerErr);
+            }
+        }
+
+        const tvTriggers = db.prepare(`
+            SELECT name, sql FROM sqlite_master
+            WHERE type = 'trigger' AND tbl_name = 'treasury_vouchers'
+        `).all();
+
+        for (const trig of tvTriggers) {
+            if (trig.sql && (trig.sql.includes('backup') || trig.sql.includes('gl_journal_header'))) {
+                try {
+                    db.prepare(`DROP TRIGGER IF EXISTS "${trig.name}"`).run();
+                    TreasuryService.safeConsole('log', `[TreasuryService] Dropped broken trigger on treasury_vouchers: ${trig.name}`);
+                } catch {
+                    // Ignore cleanup failures and continue.
+                }
+            }
+        }
+
+        const orphanedTables = db.prepare(`
+            SELECT name FROM sqlite_master
+            WHERE type = 'table' AND (name LIKE '%backup_fix%' OR name LIKE '%_old_bad%')
+        `).all();
+
+        for (const tbl of orphanedTables) {
+            try {
+                db.prepare(`DROP TABLE IF EXISTS "${tbl.name}"`).run();
+                TreasuryService.safeConsole('log', `[TreasuryService] Dropped orphaned table: ${tbl.name}`);
+            } catch {
+                // Ignore orphaned table cleanup failures and continue.
+            }
+        }
+    }
+
+    private static ensureTreasuryVoucherColumns() {
+        const cols = db.prepare("PRAGMA table_info(treasury_vouchers)").all();
+        if (!cols.some((c: any) => c.name === 'manual_ref')) {
+            db.prepare("ALTER TABLE treasury_vouchers ADD COLUMN manual_ref TEXT").run();
+        }
+        if (!cols.some((c: any) => c.name === 'cost_center_id')) {
+            db.prepare("ALTER TABLE treasury_vouchers ADD COLUMN cost_center_id TEXT").run();
+        }
+        if (!cols.some((c: any) => c.name === 'sales_rep_code')) {
+            db.prepare("ALTER TABLE treasury_vouchers ADD COLUMN sales_rep_code TEXT").run();
+        }
+        if (!cols.some((c: any) => c.name === 'extra_data')) {
+            db.prepare("ALTER TABLE treasury_vouchers ADD COLUMN extra_data TEXT").run();
+        }
+    }
+
+    private static ensureChequesColumns() {
+        const chkCols = db.prepare("PRAGMA table_info(cheques)").all();
+        if (!chkCols.some((c: any) => c.name === 'bank_id')) {
+            db.prepare("ALTER TABLE cheques ADD COLUMN bank_id TEXT").run();
+        }
+        if (!chkCols.some((c: any) => c.name === 'endorser')) {
+            db.prepare("ALTER TABLE cheques ADD COLUMN endorser TEXT").run();
+        }
+    }
+
+    private static ensureJournalEntryLineColumns() {
+        const jelCols = db.prepare("PRAGMA table_info(journal_entry_lines)").all();
+        if (!jelCols.some((c: any) => c.name === 'bank_account_id')) {
+            db.prepare("ALTER TABLE journal_entry_lines ADD COLUMN bank_account_id TEXT").run();
+            TreasuryService.safeConsole('log', "[TreasuryService] Added bank_account_id to journal_entry_lines");
+        }
+    }
+
+    private static prepareTreasuryPersistence() {
+        try {
+            TreasuryService.cleanupBrokenTreasuryObjects();
+        } catch (e) {
+            TreasuryService.safeConsole('error', "[TreasuryService] Trigger/view cleanup failed", e);
+        }
+
+        try {
+            TreasuryService.repairTreasurySchema();
+            TreasuryService.repairChequesSchema();
+        } catch (e) {
+            TreasuryService.safeConsole('error', "[TreasuryService] Schema Repair Failed", e);
+        }
+
+        try {
+            TreasuryService.ensureTreasuryVoucherColumns();
+            TreasuryService.ensureChequesColumns();
+            TreasuryService.ensureJournalEntryLineColumns();
+        } catch (e) {
+            TreasuryService.safeConsole('error', "[TreasuryService] Column Self-Heal Failed", e);
+        }
+    }
+
+    private static resolveReferenceLink(reference: unknown, payeeType?: string) {
+        const rawReference = String(reference || '').trim();
+        if (!rawReference) {
+            return { partnerId: null as string | null, linkedAccountId: null as string | null };
+        }
+
+        const normalized = rawReference.toLowerCase();
+        const codeCandidate = rawReference.split('-')[0]?.trim();
+
+        const matchPartnerByType = (type: string) => {
+            if (type === 'EMPLOYEE') {
+                const byCode = codeCandidate
+                    ? db.prepare('SELECT id, linked_account_id FROM hr_employees WHERE employee_code = ? LIMIT 1').get(codeCandidate)
+                    : null;
+                if (byCode?.id) return byCode;
+
+                return db.prepare("SELECT id, linked_account_id FROM hr_employees WHERE LOWER(COALESCE(name_ar, name_en, full_name, '')) = ? LIMIT 1").get(normalized);
+            }
+
+            const byCode = codeCandidate
+                ? db.prepare('SELECT id, linked_account_id FROM business_partners WHERE code = ? LIMIT 1').get(codeCandidate)
+                : null;
+            if (byCode?.id) return byCode;
+
+            return db.prepare("SELECT id, linked_account_id FROM business_partners WHERE LOWER(COALESCE(name_ar, name_en, name, '')) = ? LIMIT 1").get(normalized);
+        };
+
+        const typed = String(payeeType || '').toUpperCase();
+        if (typed === 'EMPLOYEE') {
+            const row = matchPartnerByType('EMPLOYEE');
+            return { partnerId: row?.id || null, linkedAccountId: row?.linked_account_id || null };
+        }
+
+        if (typed === 'CUSTOMER' || typed === 'SUPPLIER') {
+            const row = matchPartnerByType(typed);
+            return { partnerId: row?.id || null, linkedAccountId: row?.linked_account_id || null };
+        }
+
+        const genericPartner = matchPartnerByType('CUSTOMER');
+        if (genericPartner?.id) {
+            return { partnerId: genericPartner.id, linkedAccountId: genericPartner.linked_account_id || null };
+        }
+
+        const genericEmployee = matchPartnerByType('EMPLOYEE');
+        return { partnerId: genericEmployee?.id || null, linkedAccountId: genericEmployee?.linked_account_id || null };
+    }
+
+    private static reserveTreasuryVoucherNo(prefix: string, dateValue?: string): string {
+        const year = dateValue ? new Date(dateValue).getFullYear() : new Date().getFullYear();
+        for (let i = 0; i < 50; i++) {
+            const candidate = JournalService.getNextVoucherNo(prefix, year);
+            const exists = db.prepare('SELECT 1 FROM treasury_vouchers WHERE voucher_no = ? LIMIT 1').get(candidate);
+            if (!exists) {
+                JournalService.incrementVoucherNo(prefix, year);
+                return candidate;
+            }
+            JournalService.incrementVoucherNo(prefix, year);
+        }
+        throw new Error('تعذر توليد رقم سند فريد');
+    }
 
     // Create Receipt Voucher (قبض)
     static createReceiptVoucher(data: any) {
@@ -14,7 +250,10 @@ export class TreasuryService {
         // Generate Auto Number
         let voucherNo = header.voucher_no;
         if (voucherNo === 'NEW' || !voucherNo) {
-            voucherNo = JournalService.getNextVoucherNo('REC');
+            voucherNo = this.reserveTreasuryVoucherNo('REC', header.date);
+        } else {
+            const duplicate = db.prepare('SELECT 1 FROM treasury_vouchers WHERE voucher_no = ? LIMIT 1').get(voucherNo);
+            if (duplicate) throw new Error('رقم السند مستخدم مسبقاً');
         }
 
         // EMERGENCY FIX: Drop broken triggers/views/tables if they exist (Run outside transaction)
@@ -30,7 +269,7 @@ export class TreasuryService {
                 )
             `).all();
             for (const obj of broken) {
-                console.log(`[TreasuryService] Dropping broken ${obj.type}: ${obj.name}`);
+                TreasuryService.safeConsole('log', `[TreasuryService] Dropping broken ${obj.type}: ${obj.name}`);
                 try {
                     if (obj.type === 'trigger') {
                         db.prepare(`DROP TRIGGER IF EXISTS "${obj.name}"`).run();
@@ -38,7 +277,7 @@ export class TreasuryService {
                         db.prepare(`DROP VIEW IF EXISTS "${obj.name}"`).run();
                     }
                 } catch (innerErr) {
-                    console.error(`[TreasuryService] Failed to drop ${obj.name}`, innerErr);
+                    TreasuryService.safeConsole('error', `[TreasuryService] Failed to drop ${obj.name}`, innerErr);
                 }
             }
 
@@ -51,7 +290,7 @@ export class TreasuryService {
                 if (trig.sql && (trig.sql.includes('backup') || trig.sql.includes('gl_journal_header'))) {
                     try {
                         db.prepare(`DROP TRIGGER IF EXISTS "${trig.name}"`).run();
-                        console.log(`[TreasuryService] Dropped broken trigger on treasury_vouchers: ${trig.name}`);
+                        TreasuryService.safeConsole('log', `[TreasuryService] Dropped broken trigger on treasury_vouchers: ${trig.name}`);
                     } catch (e2) { /* ignore */ }
                 }
             }
@@ -64,11 +303,11 @@ export class TreasuryService {
             for (const tbl of orphanedTables) {
                 try {
                     db.prepare(`DROP TABLE IF EXISTS "${tbl.name}"`).run();
-                    console.log(`[TreasuryService] Dropped orphaned table: ${tbl.name}`);
+                    TreasuryService.safeConsole('log', `[TreasuryService] Dropped orphaned table: ${tbl.name}`);
                 } catch (e3) { /* ignore */ }
             }
         } catch (e) {
-            console.error("[TreasuryService] Trigger cleanup failed", e);
+            TreasuryService.safeConsole('error', "[TreasuryService] Trigger cleanup failed", e);
         }
 
         // EMERGENCY SCHEMA FIX: Repair Treasury Vouchers Table (Bad FK)
@@ -77,7 +316,7 @@ export class TreasuryService {
             TreasuryService.repairTreasurySchema();
             TreasuryService.repairChequesSchema();
         } catch (e) {
-            console.error("[TreasuryService] Schema Repair Failed", e);
+            TreasuryService.safeConsole('error', "[TreasuryService] Schema Repair Failed", e);
         }
 
         try {
@@ -106,11 +345,13 @@ export class TreasuryService {
             const jelCols = db.prepare("PRAGMA table_info(journal_entry_lines)").all();
             if (!jelCols.some((c: any) => c.name === 'bank_account_id')) {
                 db.prepare("ALTER TABLE journal_entry_lines ADD COLUMN bank_account_id TEXT").run();
-                console.log("[TreasuryService] Added bank_account_id to journal_entry_lines");
+                TreasuryService.safeConsole('log', "[TreasuryService] Added bank_account_id to journal_entry_lines");
             }
         } catch (e) {
-            console.error("[TreasuryService] Column Self-Heal Failed", e);
+            TreasuryService.safeConsole('error', "[TreasuryService] Column Self-Heal Failed", e);
         }
+
+        TreasuryService.prepareTreasuryPersistence();
 
         // SAFETY: Disable FK checks for the main transaction (broken FK to business_partners_backup_fix_fk)
         db.exec("PRAGMA foreign_keys = OFF");
@@ -179,12 +420,19 @@ export class TreasuryService {
                 // Bisan-style: Use explicit against lines from frontend
                 for (const ag of against) {
                     if (ag.credit > 0) {
+                        const referenceLink = TreasuryService.resolveReferenceLink(ag.reference, ag.reference_type || header.payee_type);
+                        const linkedSubAccountId = ag.sub_account_id || referenceLink.linkedAccountId || null;
                         journalLines.push({
                             account_id: ag.account_id,
                             debit: ag.debit || 0,
                             credit: ag.credit,
                             line_description: `سند قبض ${voucherNo} - مقابل ${ag.reference || ''}`,
-                            cost_center: ag.sub_account_id || header.cost_center_id
+                            cost_center_id: ag.cost_center_id || header.cost_center_id || null,
+                            sub_account_id: linkedSubAccountId,
+                            invoice_ref: ag.reference || null,
+                            tax_ref: ag.tax_ref || null,
+                            due_date: ag.invoice_date || null,
+                            customer_id: referenceLink.partnerId || null
                         });
                     }
                 }
@@ -224,7 +472,7 @@ export class TreasuryService {
                     debit: 0,
                     credit: header.amount, // Reducing AR (Credit Customer)
                     line_description: `سند قبض ${voucherNo} - ${header.description}`,
-                    cost_center: header.cost_center_id // Use Header CC for the Client side? Or leaves empty? Usually empty for Balance Sheet.
+                    cost_center_id: header.cost_center_id || null
                 });
             }
 
@@ -239,7 +487,9 @@ export class TreasuryService {
                             debit: d.amount,
                             credit: 0,
                             line_description: `قبض نقدي/تحويل - ${voucherNo}`,
-                            cost_center: d.cost_center_id || header.cost_center_id // Line priority > Header
+                            cost_center_id: d.cost_center_id || header.cost_center_id || null,
+                            sub_account_id: d.sub_account_id || d.cost_center_id || null,
+                            invoice_ref: d.reference || d.line_ref || null
                         });
                     }
                 }
@@ -295,7 +545,7 @@ export class TreasuryService {
                         debit: totalCheckAmount,
                         credit: 0,
                         line_description: `شيكات واردة - سند ${voucherNo}`,
-                        cost_center: header.cost_center_id
+                        cost_center_id: header.cost_center_id || null
                     });
                 }
             }
@@ -327,7 +577,7 @@ export class TreasuryService {
 
     // Create Payment Voucher (صرف)
     static createPaymentVoucher(data: any) {
-        const { header, details, checks } = data; // details = Cash/Bank Lines (Source), checks = Outgoing Cheques
+        const { header, details, checks, against } = data; // details = Cash/Bank Lines (Source), checks = Outgoing Cheques
 
         // Validation
         if (!header.partner_id) throw new Error("يجب تحديد المستفيد");
@@ -336,26 +586,13 @@ export class TreasuryService {
         const voucherId = uuidv4();
         let voucherNo = header.voucher_no;
         if (voucherNo === 'NEW' || !voucherNo) {
-            voucherNo = JournalService.getNextVoucherNo('PAY');
+            voucherNo = this.reserveTreasuryVoucherNo('PAY', header.date);
+        } else {
+            const duplicate = db.prepare('SELECT 1 FROM treasury_vouchers WHERE voucher_no = ? LIMIT 1').get(voucherNo);
+            if (duplicate) throw new Error('رقم السند مستخدم مسبقاً');
         }
 
-        // Self-Heal: Add missing columns if they don't exist
-        const cols = db.prepare("PRAGMA table_info(treasury_vouchers)").all();
-        if (!cols.some((c: any) => c.name === 'manual_ref')) {
-            db.prepare("ALTER TABLE treasury_vouchers ADD COLUMN manual_ref TEXT").run();
-        }
-        if (!cols.some((c: any) => c.name === 'cost_center_id')) {
-            db.prepare("ALTER TABLE treasury_vouchers ADD COLUMN cost_center_id TEXT").run();
-        }
-
-        // Cheques bank_id
-        const chkCols = db.prepare("PRAGMA table_info(cheques)").all();
-        if (!chkCols.some((c: any) => c.name === 'bank_id')) {
-            db.prepare("ALTER TABLE cheques ADD COLUMN bank_id TEXT").run();
-        }
-
-        TreasuryService.repairTreasurySchema();
-        TreasuryService.repairChequesSchema();
+        TreasuryService.prepareTreasuryPersistence();
 
         const runTransaction = db.transaction(() => {
 
@@ -364,11 +601,11 @@ export class TreasuryService {
                 INSERT INTO treasury_vouchers (
                     id, voucher_no, voucher_type, date, partner_id, branch_id,
                     amount, currency_id, exchange_rate, description, status, created_by,
-                    manual_ref, cost_center_id
+                    manual_ref, cost_center_id, sales_rep_code, extra_data
                 ) VALUES (
                     @id, @voucher_no, 'PAYMENT', @date, @partner_id, @branch_id,
                     @amount, @currency_id, @exchange_rate, @description, 'POSTED', 'System',
-                    @manual_ref, @cost_center_id
+                    @manual_ref, @cost_center_id, @sales_rep_code, @extra_data
                 )
             `).run({
                 id: voucherId,
@@ -381,42 +618,58 @@ export class TreasuryService {
                 exchange_rate: header.exchange_rate || 1,
                 description: header.description,
                 manual_ref: header.manual_ref || null,
-                cost_center_id: header.cost_center_id || null
+                cost_center_id: header.cost_center_id || null,
+                sales_rep_code: header.sales_rep_code || null,
+                extra_data: header.extra_data || null
             });
 
             // 2. Prepare Journal Lines
             const journalLines: any[] = [];
 
-            // A. Debit Side: The Payee (Partner/Expense)
-            // We need to find the Account ID for the Payee.
-            let payeeAccountId = null;
-
-            // Try to find linked account for partner
-            const partner = db.prepare('SELECT linked_account_id FROM business_partners WHERE id = ?').get(header.partner_id);
-            if (partner && partner.linked_account_id) {
-                payeeAccountId = partner.linked_account_id;
-            } else {
-                // Try Employee
-                const emp = db.prepare('SELECT linked_account_id FROM hr_employees WHERE id = ?').get(header.partner_id);
-                if (emp && emp.linked_account_id) {
-                    payeeAccountId = emp.linked_account_id;
-                } else {
-                    // Fallback/Direct Account ID? 
-                    // If header.partner_id is actually an Account ID (some edge cases), verify it.
-                    const acc = db.prepare('SELECT id FROM accounts WHERE id = ?').get(header.partner_id);
-                    if (acc) payeeAccountId = acc.id;
+            if (against && against.length > 0) {
+                for (const ag of against) {
+                    if (Number(ag.debit || 0) <= 0) continue;
+                    const referenceLink = TreasuryService.resolveReferenceLink(ag.reference, ag.reference_type || header.payee_type);
+                    const linkedSubAccountId = ag.sub_account_id || referenceLink.linkedAccountId || null;
+                    journalLines.push({
+                        account_id: ag.account_id,
+                        debit: ag.debit,
+                        credit: 0,
+                        line_description: ag.reference ? `سند صرف ${voucherNo} - ${ag.reference}` : `سند صرف ${voucherNo} - ${header.description}`,
+                        cost_center_id: ag.cost_center_id || header.cost_center_id || null,
+                        sub_account_id: linkedSubAccountId,
+                        invoice_ref: ag.reference || null,
+                        tax_ref: ag.tax_ref || null,
+                        due_date: ag.invoice_date || null,
+                        customer_id: referenceLink.partnerId || null
+                    });
                 }
+            } else {
+                let payeeAccountId = null;
+
+                const partner = db.prepare('SELECT linked_account_id FROM business_partners WHERE id = ?').get(header.partner_id);
+                if (partner && partner.linked_account_id) {
+                    payeeAccountId = partner.linked_account_id;
+                } else {
+                    const emp = db.prepare('SELECT linked_account_id FROM hr_employees WHERE id = ?').get(header.partner_id);
+                    if (emp && emp.linked_account_id) {
+                        payeeAccountId = emp.linked_account_id;
+                    } else {
+                        const acc = db.prepare('SELECT id FROM accounts WHERE id = ?').get(header.partner_id);
+                        if (acc) payeeAccountId = acc.id;
+                    }
+                }
+
+                if (!payeeAccountId) throw new Error("المستفيد غير مربوط بحساب محاسبي (Linked Account)");
+
+                journalLines.push({
+                    account_id: payeeAccountId,
+                    debit: header.total_amount,
+                    credit: 0,
+                    line_description: `سند صرف - ${header.description}`,
+                    cost_center_id: header.cost_center_id || null
+                });
             }
-
-            if (!payeeAccountId) throw new Error("المستفيد غير مربوط بحساب محاسبي (Linked Account)");
-
-            journalLines.push({
-                account_id: payeeAccountId,
-                debit: header.total_amount,
-                credit: 0,
-                line_description: `سند صرف - ${header.description}`,
-                cost_center: header.cost_center_id
-            });
 
             // B. Credit Side: Source of Funds (Cash Box / Bank)
             // 2. Add Credit Lines (Payment Means - Cash / Bank Transfer)
@@ -447,6 +700,8 @@ export class TreasuryService {
                         credit: d.amount,
                         line_description: d.description || `سند صرف رقم ${header.voucher_no}`,
                         cost_center_id: d.cost_center_id || header.cost_center_id,
+                        sub_account_id: d.sub_account_id || d.cost_center_id || null,
+                        invoice_ref: d.reference || d.line_ref || null,
                         bank_account_id: bankAccountId // Track specific source
                     });
                 }
@@ -515,7 +770,9 @@ export class TreasuryService {
                         debit: 0,
                         credit: c.amount,
                         line_description: `شيك رقم ${c.cheque_no} - ${c.description || ''}`,
-                        cost_center: header.cost_center_id
+                        cost_center_id: header.cost_center_id || null,
+                        invoice_ref: c.cheque_no || null,
+                        due_date: c.due_date || null
                     });
                 }
             }
@@ -617,7 +874,7 @@ export class TreasuryService {
         if (header.journal_header_id) {
             // Credit Lines (Payment Means - Cash/Bank)
             const credits = db.prepare(`
-                SELECT l.*, a.name_ar as account_name 
+                SELECT l.*, a.name_ar as account_name, a.account_code as account_code 
                 FROM journal_entry_lines l
                 LEFT JOIN accounts a ON l.account_id = a.id
                 WHERE l.header_id = ? AND l.credit > 0
@@ -626,15 +883,13 @@ export class TreasuryService {
 
             // Debit Lines (Expenses/Payees)
             const debits = db.prepare(`
-                SELECT l.*, a.name_ar as account_name 
+                SELECT l.*, a.name_ar as account_name, a.account_code as account_code 
                 FROM journal_entry_lines l
                 LEFT JOIN accounts a ON l.account_id = a.id
                 WHERE l.header_id = ? AND l.debit > 0
             `).all(header.journal_header_id);
             debitLines = debits;
         }
-
-        return { header, lines: creditLines, checks, debits: debitLines };
 
         return { header, lines: creditLines, checks, debits: debitLines };
     }
@@ -791,7 +1046,7 @@ export class TreasuryService {
             );
 
             if (badFk) {
-                console.log(`[TreasuryService] Found bad FK to ${badFk.table}.Repairing treasury_vouchers...`);
+                TreasuryService.safeConsole('log', `[TreasuryService] Found bad FK to ${badFk.table}. Repairing treasury_vouchers...`);
 
                 // CRITICAL: Disable Foreign Keys to prevent cascading delete of checks!
                 db.exec("PRAGMA foreign_keys = OFF");
@@ -820,6 +1075,7 @@ export class TreasuryService {
                                 manual_ref TEXT,
                                 cost_center_id TEXT,
                                 sales_rep_code TEXT,
+                                extra_data TEXT,
                                 FOREIGN KEY(partner_id) REFERENCES business_partners(id),
                                 FOREIGN KEY(branch_id) REFERENCES branches(id),
                                 FOREIGN KEY(journal_header_id) REFERENCES journal_entries(id)
@@ -847,7 +1103,7 @@ export class TreasuryService {
                         INSERT INTO treasury_vouchers(
                                 id, voucher_no, voucher_type, date, partner_id, branch_id,
                                 amount, currency_id, exchange_rate, description, status,
-                                journal_header_id, created_at, created_by, manual_ref, cost_center_id, sales_rep_code
+                                journal_header_id, created_at, created_by, manual_ref, cost_center_id, sales_rep_code, extra_data
                             )
                         SELECT 
                             id, voucher_no, voucher_type, date, partner_id, branch_id,
@@ -855,7 +1111,8 @@ export class TreasuryService {
                             journal_header_id, created_at, created_by,
                             CASE WHEN(SELECT count(*) FROM pragma_table_info('treasury_vouchers_old_bad') WHERE name = 'manual_ref') > 0 THEN manual_ref ELSE NULL END,
                             CASE WHEN(SELECT count(*) FROM pragma_table_info('treasury_vouchers_old_bad') WHERE name = 'cost_center_id') > 0 THEN cost_center_id ELSE NULL END,
-                            CASE WHEN(SELECT count(*) FROM pragma_table_info('treasury_vouchers_old_bad') WHERE name = 'sales_rep_code') > 0 THEN sales_rep_code ELSE NULL END
+                            CASE WHEN(SELECT count(*) FROM pragma_table_info('treasury_vouchers_old_bad') WHERE name = 'sales_rep_code') > 0 THEN sales_rep_code ELSE NULL END,
+                            CASE WHEN(SELECT count(*) FROM pragma_table_info('treasury_vouchers_old_bad') WHERE name = 'extra_data') > 0 THEN extra_data ELSE NULL END
                         FROM treasury_vouchers_old_bad
                             `).run();
 
@@ -864,11 +1121,11 @@ export class TreasuryService {
                 });
 
                 transaction();
-                console.log("[TreasuryService] Schema repair successful.");
+                TreasuryService.safeConsole('log', "[TreasuryService] Schema repair successful.");
 
             }
         } catch (e) {
-            console.error("[TreasuryService] Schema repair failed", e);
+            TreasuryService.safeConsole('error', "[TreasuryService] Schema repair failed", e);
             throw e;
         } finally {
             db.exec("PRAGMA foreign_keys = ON");
@@ -884,7 +1141,7 @@ export class TreasuryService {
             );
 
             if (badFk) {
-                console.log(`[TreasuryService] Found bad FK to ${badFk.table}.Repairing cheques...`);
+                TreasuryService.safeConsole('log', `[TreasuryService] Found bad FK to ${badFk.table}. Repairing cheques...`);
 
                 // CRITICAL: Disable Foreign Keys to prevent cascading delete of checks!
                 db.exec("PRAGMA foreign_keys = OFF");
@@ -909,6 +1166,7 @@ export class TreasuryService {
                                 voucher_id TEXT,
                                 drawer_name TEXT,
                                 bank_id TEXT,
+                                endorser TEXT,
                                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                                 FOREIGN KEY(partner_id) REFERENCES business_partners(id),
                                 FOREIGN KEY(voucher_id) REFERENCES treasury_vouchers(id) ON DELETE CASCADE,
@@ -920,12 +1178,13 @@ export class TreasuryService {
                     db.prepare(`
                         INSERT INTO cheques(
                                 id, cheque_no, bank_name, amount, currency_id, due_date, received_date,
-                                type, status, partner_id, voucher_id, drawer_name, bank_id, created_at
+                                type, status, partner_id, voucher_id, drawer_name, bank_id, endorser, created_at
                             )
                         SELECT 
                             id, cheque_no, bank_name, amount, currency_id, due_date, received_date,
                             type, status, partner_id, voucher_id, drawer_name,
                             CASE WHEN(SELECT count(*) FROM pragma_table_info('cheques_old_bad') WHERE name = 'bank_id') > 0 THEN bank_id ELSE NULL END,
+                            CASE WHEN(SELECT count(*) FROM pragma_table_info('cheques_old_bad') WHERE name = 'endorser') > 0 THEN endorser ELSE NULL END,
                             created_at
                         FROM cheques_old_bad
                             `).run();
@@ -935,11 +1194,11 @@ export class TreasuryService {
                 });
 
                 transaction();
-                console.log("[TreasuryService] Cheques schema repaired.");
+                TreasuryService.safeConsole('log', "[TreasuryService] Cheques schema repaired.");
 
             }
         } catch (e) {
-            console.error("[TreasuryService] Cheques repair failed", e);
+            TreasuryService.safeConsole('error', "[TreasuryService] Cheques repair failed", e);
         } finally {
             db.exec("PRAGMA foreign_keys = ON");
         }

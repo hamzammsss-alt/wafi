@@ -10,6 +10,7 @@ export interface Account {
     account_type: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
     is_transactional: number;
     currency_id?: string;
+    currency_code?: string;
     requires_cost_center: number;
     balance: number;
     system_type?: string;
@@ -17,8 +18,17 @@ export interface Account {
 
 export class AccountService {
 
+    private static normalizeName(value: any): string {
+        return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
     static getAccounts(): Account[] {
-        return db.prepare('SELECT * FROM gl_chart_of_accounts ORDER BY account_code ASC').all() as Account[];
+        return db.prepare(`
+            SELECT a.*, c.code AS currency_code
+            FROM gl_chart_of_accounts a
+            LEFT JOIN currencies c ON c.id = a.currency_id
+            ORDER BY a.account_code ASC
+        `).all() as Account[];
     }
 
     static getAccountTree() {
@@ -50,6 +60,15 @@ export class AccountService {
         // Check duplicate code
         const existing = db.prepare('SELECT id FROM gl_chart_of_accounts WHERE account_code = ?').get(data.account_code);
         if (existing) throw new Error("Account Code already exists");
+
+        const normalizedName = this.normalizeName(data.name_ar);
+        const sameName = db.prepare(`
+            SELECT id
+            FROM gl_chart_of_accounts
+            WHERE UPPER(TRIM(COALESCE(name_ar, ''))) = ?
+            LIMIT 1
+        `).get(normalizedName);
+        if (sameName) throw new Error("اسم الحساب موجود مسبقاً");
 
         let validCurrencyId = data.currency_id || null;
         if (validCurrencyId) {
@@ -89,6 +108,16 @@ export class AccountService {
     }
 
     static updateAccount(data: any) {
+                const normalizedName = this.normalizeName(data.name_ar);
+                const sameName = db.prepare(`
+                        SELECT id
+                        FROM gl_chart_of_accounts
+                        WHERE UPPER(TRIM(COALESCE(name_ar, ''))) = ?
+                            AND id != ?
+                        LIMIT 1
+                `).get(normalizedName, data.id);
+                if (sameName) throw new Error("اسم الحساب موجود مسبقاً");
+
         let validCurrencyId = data.currency_id || null;
 
         if (validCurrencyId) {

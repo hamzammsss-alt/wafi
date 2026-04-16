@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Save, Calculator, Plus, Trash2, Search, Calendar, User, FileText, ArrowRight, Printer } from 'lucide-react';
 import { BusinessPartner, Item, Unit } from '../../types';
 import { useNavigate } from 'react-router-dom';
+import { useTabs } from '../../src/contexts/TabsContext';
+import { findItemByCode } from '../../utils/itemLookup';
+import { ItemCodeInput } from '../items/ItemCodeInput';
 
 interface SalesTransactionFormProps {
     type: 'QUOTATION' | 'ORDER' | 'INVOICE' | 'SALES_RETURN';
@@ -37,6 +40,7 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
 
     const api = (window as any).electronAPI;
     const navigate = useNavigate();
+    const { openTab } = useTabs();
 
     useEffect(() => {
         loadMasterData();
@@ -45,6 +49,14 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
             mapInitialData(initialData);
         }
     }, [initialData]);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            loadMasterData();
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, []);
 
     const loadMasterData = async () => {
         if (!api) return;
@@ -76,9 +88,113 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
     };
 
     const mapInitialData = (data: any) => {
-        // ... mapping logic
-        setDate(data.header?.date || new Date().toISOString().split('T')[0]);
-        // ... set lines
+        const header = data?.header || {};
+        const resolveDate = (value: any, fallback = '') =>
+            String(value || fallback || '').split('T')[0];
+
+        setDate(resolveDate(header.date, new Date().toISOString().split('T')[0]));
+        setDueDate(resolveDate(header.due_date || header.dueDate, ''));
+        setNotes(String(header.notes || ''));
+        setCurrency(String(header.currency_id || header.currency || 'NIS'));
+
+        const resolvedWarehouseId = String(
+            header.warehouse_id ||
+            header.warehouseId ||
+            warehouses?.[0]?.id ||
+            ''
+        );
+        const resolvedBranchId = String(
+            header.branch_id ||
+            header.branchId ||
+            branches?.[0]?.id ||
+            ''
+        );
+        if (resolvedWarehouseId) setWarehouseId(resolvedWarehouseId);
+        if (resolvedBranchId) setBranchId(resolvedBranchId);
+
+        const customerId = String(header.customer_id || header.customerId || '').trim();
+        const customerName = String(
+            header.customer_name ||
+            header.customerName ||
+            header.partner_name ||
+            ''
+        ).trim();
+        const customerPhone = String(
+            header.customer_phone ||
+            header.customerPhone ||
+            header.phone ||
+            ''
+        ).trim();
+
+        if (customerId || customerName) {
+            const matchedCustomer = customers.find((candidate) =>
+                (customerId && String(candidate.id) === customerId) ||
+                (customerName && String(candidate.name_ar || '').trim() === customerName)
+            );
+
+            if (matchedCustomer) {
+                setCustomer(matchedCustomer);
+            } else {
+                setCustomer({
+                    id: customerId || `TEMP-${Date.now()}`,
+                    code: String(header.customer_code || ''),
+                    name_ar: customerName || customerId,
+                    type: 'CUSTOMER',
+                    phone: customerPhone,
+                    is_active: 1
+                } as BusinessPartner);
+            }
+        } else {
+            setCustomer(null);
+        }
+
+        const mappedLines = Array.isArray(data?.lines)
+            ? data.lines
+                .map((line: any) => {
+                    const itemId = String(line?.item_id || line?.itemId || '').trim();
+                    const itemById = itemId ? items.find((item) => String(item.id) === itemId) : null;
+                    const quantity = Number(line?.quantity ?? line?.qty ?? 1) || 0;
+                    const unitPrice = Number(line?.unit_price ?? line?.price ?? 0) || 0;
+                    const taxAmount = Number(line?.tax_amount ?? line?.taxAmount ?? 0) || 0;
+                    const discountAmount = Number(line?.discount_amount ?? line?.discount ?? 0) || 0;
+                    const netTotal = Number(
+                        line?.net_total ??
+                        line?.netTotal ??
+                        (quantity * unitPrice) + taxAmount - discountAmount
+                    ) || 0;
+
+                    return {
+                        id: line?.id || Date.now() + Math.random(),
+                        item_id: itemId,
+                        item_code: String(line?.item_code || line?.itemCode || itemById?.code || ''),
+                        description: String(
+                            line?.description ||
+                            line?.item_name ||
+                            line?.itemName ||
+                            itemById?.name_ar ||
+                            ''
+                        ),
+                        quantity,
+                        unit_id: String(line?.unit_id || line?.unitId || itemById?.base_unit_id || ''),
+                        unit_price: unitPrice,
+                        tax_amount: taxAmount,
+                        discount_amount: discountAmount,
+                        net_total: netTotal
+                    };
+                })
+                .filter((line: any) => !!line.item_id || !!line.item_code || !!line.description)
+            : [];
+
+        setLines(mappedLines.length > 0 ? mappedLines : [createLine()]);
+    };
+
+    const openPortalTab = (path: string, title: string) => {
+        openTab({
+            id: path,
+            path,
+            title,
+            isClosable: true
+        });
     };
 
     // --- Calculations ---
@@ -92,34 +208,88 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
 
     const totals = calculateTotals();
 
+    const createLine = () => ({
+        id: Date.now() + Math.random(),
+        item_id: '',
+        item_code: '',
+        description: '',
+        quantity: 1,
+        unit_id: '',
+        unit_price: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        net_total: 0
+    });
+
     // --- Handlers ---
     const handleAddLine = () => {
-        setLines([...lines, {
-            id: Date.now(),
-            item_id: '',
-            description: '',
-            quantity: 1,
-            unit_id: '',
-            unit_price: 0,
-            tax_amount: 0,
-            discount_amount: 0,
-            net_total: 0
-        }]);
+        setLines((prev) => [...prev, createLine()]);
+    };
+
+    const focusLineField = (rowIndex: number, field: 'item_code' | 'quantity' | 'unit_price') => {
+        const element = document.getElementById(`sales-tx-${field}-${rowIndex}`) as
+            | HTMLInputElement
+            | HTMLSelectElement
+            | null;
+        if (!element) return;
+        element.focus();
+        if (element instanceof HTMLInputElement) {
+            element.select();
+        }
+    };
+
+    const moveNextFromField = (rowIndex: number, field: 'item_code' | 'quantity' | 'unit_price') => {
+        if (field === 'item_code') {
+            window.setTimeout(() => focusLineField(rowIndex, 'quantity'), 0);
+            return;
+        }
+
+        if (field === 'quantity') {
+            window.setTimeout(() => focusLineField(rowIndex, 'unit_price'), 0);
+            return;
+        }
+
+        const nextIndex = rowIndex + 1;
+        if (rowIndex === lines.length - 1) {
+            setLines((prev) => [...prev, createLine()]);
+            window.setTimeout(() => focusLineField(nextIndex, 'item_code'), 40);
+            return;
+        }
+        window.setTimeout(() => focusLineField(nextIndex, 'item_code'), 0);
+    };
+
+    const handleEnterNavigation = (
+        e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>,
+        rowIndex: number,
+        field: 'item_code' | 'quantity' | 'unit_price'
+    ) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        e.stopPropagation();
+        moveNextFromField(rowIndex, field);
     };
 
     const handleLineChange = (index: number, field: string, value: any) => {
         const newLines = [...lines];
         const line = { ...newLines[index], [field]: value };
+        const resolvedByCode = field === 'item_code' ? findItemByCode(items, String(value)) : null;
 
         // Auto-fill item details
-        if (field === 'item_id') {
-            const selectedItem = items.find(i => i.id === value);
+        if (field === 'item_id' || resolvedByCode) {
+            const selectedItem = resolvedByCode || items.find(i => i.id === value);
             if (selectedItem) {
+                line.item_id = selectedItem.id;
+                line.item_code = selectedItem.code || line.item_code || '';
                 line.description = selectedItem.name_ar;
                 line.unit_price = selectedItem.sale_price;
                 line.unit_id = selectedItem.base_unit_id;
-                // Auto Tax?
+            } else if (field === 'item_code') {
+                line.item_id = '';
+                line.description = '';
             }
+        } else if (field === 'item_id' && !value) {
+            line.item_code = '';
+            line.description = '';
         }
 
         // Recalculate usage logic (basic)
@@ -137,6 +307,7 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
     };
 
     const handleRemoveLine = (index: number) => {
+        if (lines.length <= 1) return;
         setLines(lines.filter((_, i) => i !== index));
     };
 
@@ -239,9 +410,25 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
                                 </div>
                             ) : (
                                 <div className="relative">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => openPortalTab('/master/partners', 'بوابة الشركاء')}
+                                            className="px-2.5 py-1 text-xs border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                                        >
+                                            بوابة الشركاء
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => openPortalTab('/master/customer-card', 'بطاقة عميل')}
+                                            className="px-2.5 py-1 text-xs border border-indigo-200 bg-indigo-50 rounded-md text-indigo-700 hover:bg-indigo-100 transition-colors"
+                                        >
+                                            بطاقة عميل
+                                        </button>
+                                    </div>
                                     <input
                                         type="text"
-                                        placeholder="ابحث عن زبون..."
+                                        placeholder="بحث عن عميل..."
                                         className="w-full p-2.5 border border-gray-300 rounded-lg pl-10 focus:ring-2 focus:ring-indigo-500 outline-none"
                                         value={customerSearch}
                                         onChange={(e) => {
@@ -255,7 +442,7 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
                                     {showCustomerSearch && customerSearch && (
                                         <div className="absolute top-full right-0 w-full bg-white shadow-xl rounded-lg mt-1 border border-gray-100 z-50 max-h-60 overflow-auto">
                                             {customers
-                                                .filter(c => c.name_ar.includes(customerSearch) || c.phone?.includes(customerSearch))
+                                                .filter(c => c.name_ar.includes(customerSearch) || c.phone?.includes(customerSearch) || String((c as any).code || '').includes(customerSearch))
                                                 .map(c => (
                                                     <div
                                                         key={c.id}
@@ -305,12 +492,38 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
 
                     {/* Lines Grid */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex-1 flex flex-col overflow-hidden">
-
+                        <div className="p-3 border-b border-gray-100 bg-gray-50/70 flex items-center justify-between">
+                            <div className="text-sm font-bold text-gray-700">الأصناف</div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => openPortalTab('/items', 'بطاقات الأصناف')}
+                                    className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-white transition-colors"
+                                >
+                                    قائمة الأصناف
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => openPortalTab('/items', 'إضافة صنف جديد')}
+                                    className="px-3 py-1.5 border border-indigo-200 bg-indigo-50 rounded-lg text-sm text-indigo-700 hover:bg-indigo-100 transition-colors"
+                                >
+                                    إضافة صنف جديد
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={loadMasterData}
+                                    className="px-3 py-1.5 border border-emerald-200 bg-emerald-50 rounded-lg text-sm text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                >
+                                    تحديث الأصناف
+                                </button>
+                            </div>
+                        </div>
                         <div className="overflow-auto flex-1 p-1">
-                            <table className="w-full text-right" style={{ minWidth: '800px' }}>
+                            <table className="w-full text-right" style={{ minWidth: '980px' }}>
                                 <thead className="bg-gray-50 text-gray-600 font-bold text-xs sticky top-0 z-10">
                                     <tr>
                                         <th className="p-3 w-12 text-center">#</th>
+                                        <th className="p-3 w-28">كود الصنف</th>
                                         <th className="p-3 w-1/4">الصنف</th>
                                         <th className="p-3 w-24">الكمية</th>
                                         <th className="p-3 w-24">الوحدة</th>
@@ -324,6 +537,20 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
                                     {lines.map((line, index) => (
                                         <tr key={line.id} className="group hover:bg-indigo-50/30 transition-colors">
                                             <td className="p-3 text-center text-gray-400 text-xs index-cell">{index + 1}</td>
+                                            <td className="p-2">
+                                                <ItemCodeInput
+                                                    items={items}
+                                                    value={line.item_code || ''}
+                                                    onChange={(nextCode) => handleLineChange(index, 'item_code', nextCode)}
+                                                    onEnter={() => moveNextFromField(index, 'item_code')}
+                                                    inputId={`sales-tx-item_code-${index}`}
+                                                    placeholder="اكتب الكود"
+                                                    className="w-full p-1.5 border border-gray-200 rounded bg-white text-sm font-mono focus:ring-2 focus:ring-indigo-100 outline-none"
+                                                    autoSelectUnique={false}
+                                                    showOnEmpty={true}
+                                                    maxResults={20}
+                                                />
+                                            </td>
                                             <td className="p-2">
                                                 <select
                                                     className="w-full p-1.5 border border-transparent hover:border-gray-200 focus:border-indigo-500 rounded bg-transparent outline-none text-sm font-medium"
@@ -339,10 +566,12 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
                                             <td className="p-2">
                                                 <input
                                                     type="number"
+                                                    id={`sales-tx-quantity-${index}`}
                                                     className="w-full p-1.5 border border-gray-200 rounded text-center font-mono text-sm focus:ring-2 focus:ring-indigo-100 outline-none"
                                                     value={line.quantity}
                                                     min="1"
                                                     onChange={e => handleLineChange(index, 'quantity', e.target.value)}
+                                                    onKeyDown={e => handleEnterNavigation(e, index, 'quantity')}
                                                 />
                                             </td>
                                             <td className="p-2">
@@ -357,9 +586,11 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
                                             <td className="p-2">
                                                 <input
                                                     type="number"
+                                                    id={`sales-tx-unit_price-${index}`}
                                                     className="w-full p-1.5 border border-gray-200 rounded text-center font-mono text-sm focus:ring-2 focus:ring-indigo-100 outline-none"
                                                     value={line.unit_price}
                                                     onChange={e => handleLineChange(index, 'unit_price', e.target.value)}
+                                                    onKeyDown={e => handleEnterNavigation(e, index, 'unit_price')}
                                                 />
                                             </td>
                                             <td className="p-2 text-center text-xs text-gray-400">
@@ -383,7 +614,7 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
                                     {/* Empty State / Add Button */}
                                     {lines.length === 0 && (
                                         <tr>
-                                            <td colSpan={8} className="p-8 text-center text-gray-400">
+                                            <td colSpan={9} className="p-8 text-center text-gray-400">
                                                 <div className="flex flex-col items-center gap-2">
                                                     <div className="p-3 bg-gray-50 rounded-full"><Calculator size={24} /></div>
                                                     <p>لا توجد أصناف في القائمة</p>
@@ -493,3 +724,5 @@ export const SalesTransactionForm: React.FC<SalesTransactionFormProps> = ({ type
         </div>
     );
 };
+
+

@@ -122,10 +122,10 @@ export const UserManagement: React.FC = () => {
     };
 
     return (
-        <div className="h-full bg-gray-50 p-6 font-cairo" dir="rtl">
+        <div className="app-page h-full font-cairo" dir="rtl">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="card p-6 mb-6">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
@@ -147,11 +147,11 @@ export const UserManagement: React.FC = () => {
                 </div>
 
                 {/* Table */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="card overflow-hidden">
                     {loading ? (
                         <div className="p-10 text-center text-gray-500">جاري التحميل...</div>
                     ) : (
-                        <table className="w-full">
+                        <table className="dense-table w-full">
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
                                     <th className="px-6 py-4 text-right text-sm font-bold text-gray-700">المستخدم</th>
@@ -312,4 +312,5 @@ export const UserManagement: React.FC = () => {
         </div>
     );
 };
+
 

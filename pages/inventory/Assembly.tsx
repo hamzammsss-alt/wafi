@@ -8,7 +8,7 @@ export const Assembly = () => {
                 <Boxes className="text-indigo-600" /> تجميع / تفكيك الأصناف
             </h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 max-w-3xl mx-auto p-8">
+            <div className="card max-w-3xl mx-auto p-8">
                 <div className="flex border-b mb-6">
                     <button className="flex-1 pb-4 border-b-2 border-indigo-600 text-indigo-600 font-bold flex justify-center gap-2">
                         <Hammer size={18} /> تجميع (Assembly)

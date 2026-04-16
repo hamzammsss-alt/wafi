@@ -88,7 +88,13 @@ export class JournalService {
         // 2. Generate ID and Voucher No
         const id = uuidv4();
         const year = new Date(header.date).getFullYear();
-        const voucher_no = this.getNextVoucherNo(header.voucher_type, year);
+        let voucher_no = this.getNextVoucherNo(header.voucher_type, year);
+        for (let i = 0; i < 50; i++) {
+            const exists = db.prepare('SELECT 1 FROM journal_entries WHERE voucher_no = ? LIMIT 1').get(voucher_no);
+            if (!exists) break;
+            this.incrementVoucherNo(header.voucher_type, year);
+            voucher_no = this.getNextVoucherNo(header.voucher_type, year);
+        }
 
         // Resolve Branch ID
         let branchId = header.branch_id;

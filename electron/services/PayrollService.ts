@@ -9,20 +9,40 @@ export class PayrollService {
     // =================================================================================================
 
     static saveAdvance(data: any) {
+        const installments = Math.max(1, Number(data.installments_count || 1));
+        const amount = Number(data.amount || 0);
+        const installmentAmount = Number((amount / installments).toFixed(4));
+
+        const payload = {
+            ...data,
+            amount,
+            installments_count: installments,
+            installment_amount: installmentAmount
+        };
+
         if (data.id) {
-            db.prepare('UPDATE hr_advances SET amount = @amount, repayment_start_date = @repayment_start_date, installments_count = @installments_count WHERE id = @id').run(data);
+            db.prepare(`
+                UPDATE hr_advances
+                SET amount = @amount,
+                    repayment_start_date = @repayment_start_date,
+                    installments_count = @installments_count,
+                    installment_amount = @installment_amount
+                WHERE id = @id
+            `).run(payload);
         } else {
             const id = uuidv4();
             db.prepare(`
-                INSERT INTO hr_advances (id, employee_id, amount, currency, repayment_start_date, installments_count, status)
-                VALUES (@id, @employee_id, @amount, @currency, @repayment_start_date, @installments_count, 'APPROVED')
-            `).run({ ...data, id });
+                INSERT INTO hr_advances (id, employee_id, amount, currency, repayment_start_date, installments_count, installment_amount, status)
+                VALUES (@id, @employee_id, @amount, @currency, @repayment_start_date, @installments_count, @installment_amount, 'APPROVED')
+            `).run({ ...payload, id });
         }
         return { success: true };
     }
 
     static getActiveAdvances(employeeId: string) {
-        return db.prepare('SELECT * FROM hr_advances WHERE employee_id = ? AND status = "APPROVED"').all(employeeId);
+        return db
+            .prepare("SELECT * FROM hr_advances WHERE employee_id = ? AND status IN ('APPROVED', 'ACTIVE')")
+            .all(employeeId);
     }
 
     // =================================================================================================
@@ -79,7 +99,7 @@ export class PayrollService {
             if (salaryType === 'COMMISSION' || salaryType === 'PRODUCTION') basic = 0;
 
             const hourlyRate = emp.hourly_rate || 0;
-            const workHours = attendance?.work_hours || 0; // Assuming we have total work hours in daily attendance sum
+            const workHours = attendance?.total_work_hours || 0;
 
             // If HOURLY, calculate Basic based on hours
             if (salaryType === 'HOURLY') {
@@ -87,7 +107,7 @@ export class PayrollService {
                 // The current query for attendance sum fetches 'total_ot_hours'. 
                 // We need to fetch 'sum(work_hours)' as well.
                 // Let's assume we update the query below.
-                basic = (attendance?.total_work_hours || 0) * hourlyRate;
+                basic = workHours * hourlyRate;
             }
 
 
@@ -131,9 +151,9 @@ export class PayrollService {
 
             // Advance Installements
             const advances = db.prepare(`
-                SELECT id, (amount / installments_count) as installment 
+                SELECT id, COALESCE(installment_amount, amount / CASE WHEN COALESCE(installments_count, 0) <= 0 THEN 1 ELSE installments_count END) as installment 
                 FROM hr_advances 
-                WHERE employee_id = ? AND status = 'APPROVED'
+                WHERE employee_id = ? AND status IN ('APPROVED', 'ACTIVE')
                 AND strftime('%Y-%m', repayment_start_date) <= ?
             `).all(emp.id, monthStr);
 
@@ -145,7 +165,7 @@ export class PayrollService {
                 SELECT SUM(amount) as total FROM hr_penalties 
                 WHERE employee_id = ? AND is_deducted = 0 AND strftime('%Y-%m', date) = ?
             `).get(emp.id, monthStr);
-            const penaltyDeduction = penalties.total || 0;
+            const penaltyDeduction = penalties?.total || 0;
 
             const totalDeductions = absentDeduction + advanceDeduction + penaltyDeduction;
 
@@ -172,6 +192,7 @@ export class PayrollService {
     }
 
     static postPayroll(month: number, year: number, slips: any[]) {
+        const monthStr = `${year}-${String(month).padStart(2, '0')}`;
         const tx = db.transaction(() => {
             // 1. Create Period
             const periodId = uuidv4();
@@ -209,7 +230,30 @@ export class PayrollService {
                 });
                 totalNet += slip.net_salary;
 
-                // TODO: Mark penalties & advances as deducted
+                // Mark penalties as deducted for this payroll month.
+                db.prepare(`
+                    UPDATE hr_penalties
+                    SET is_deducted = 1, deduction_payroll_id = ?
+                    WHERE employee_id = ?
+                      AND COALESCE(is_deducted, 0) = 0
+                      AND strftime('%Y-%m', date) = ?
+                `).run(periodId, slip.employee_id, monthStr);
+
+                // Update advance status based on elapsed installment months.
+                db.prepare(`
+                    UPDATE hr_advances
+                    SET status = CASE
+                        WHEN (
+                            ((? * 12 + ?) - (CAST(strftime('%Y', repayment_start_date) AS INTEGER) * 12 + CAST(strftime('%m', repayment_start_date) AS INTEGER)) + 1)
+                        ) >= CASE WHEN COALESCE(installments_count, 0) <= 0 THEN 1 ELSE installments_count END
+                        THEN 'PAID'
+                        ELSE 'ACTIVE'
+                    END
+                    WHERE employee_id = ?
+                      AND status IN ('APPROVED', 'ACTIVE')
+                      AND repayment_start_date IS NOT NULL
+                      AND strftime('%Y-%m', repayment_start_date) <= ?
+                `).run(year, month, slip.employee_id, monthStr);
             }
 
             // 3. GL Entry (Journal)
@@ -230,7 +274,6 @@ export class PayrollService {
                 totalAbsent += s.absent_days_deduction || 0;
                 totalAdvance += s.advance_deduction || 0;
                 totalPenalty += s.penalty_deduction || 0;
-                totalNet += s.net_salary || 0;
             });
 
             const totalEarnings = totalBasic + totalAllowances + totalOT + totalComm + totalProd;
@@ -294,7 +337,7 @@ export class PayrollService {
             LEFT JOIN hr_employee_contracts c ON c.employee_id = e.id AND c.is_active = 1
             LEFT JOIN hr_job_titles j ON c.job_title_id = j.id
             LEFT JOIN hr_departments d ON c.department_id = d.id
-            JOIN hr_payroll_periods p ON s.period_id = p.id
+            JOIN hr_payroll_periods p ON s.payroll_period_id = p.id
             WHERE p.month = ? AND p.year = ?
             ORDER BY e.employee_code
         `).all(month, year);
@@ -337,7 +380,7 @@ export class PayrollService {
                 SUM(advance_deduction) as total_advances,
                 SUM(net_salary) as total_net
             FROM hr_salary_slips s
-            JOIN hr_payroll_periods p ON s.period_id = p.id
+            JOIN hr_payroll_periods p ON s.payroll_period_id = p.id
             WHERE p.month = ? AND p.year = ?
         `).get(month, year);
 

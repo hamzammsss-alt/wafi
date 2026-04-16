@@ -3,7 +3,7 @@ import { FileText, Save, Printer, Plus, Trash2, Calendar, User } from 'lucide-re
 
 export const AppQuotation = () => {
     return (
-        <div className="p-6 bg-gray-50 h-full flex flex-col gap-6" dir="rtl">
+        <div className="app-page h-full flex flex-col gap-4" dir="rtl">
             {/* Header */}
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -20,7 +20,7 @@ export const AppQuotation = () => {
             </div>
 
             {/* Master Data */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="card p-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="col-span-1 md:col-span-2">
                         <label className="block text-sm font-bold text-gray-700 mb-2">العميل</label>
@@ -45,9 +45,9 @@ export const AppQuotation = () => {
             </div>
 
             {/* Items Grid */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 flex flex-col overflow-hidden">
+            <div className="card flex-1 flex flex-col overflow-hidden">
                 <div className="overflow-auto flex-1">
-                    <table className="w-full text-right">
+                    <table className="dense-table w-full text-right">
                         <thead className="bg-gray-50 font-bold text-gray-700 border-b">
                             <tr>
                                 <th className="p-4 w-12 text-center">#</th>
@@ -105,3 +105,4 @@ export const AppQuotation = () => {
         </div>
     );
 };
+

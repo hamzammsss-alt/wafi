@@ -4,6 +4,8 @@ import { Save, ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { PartnerPicker } from '../../components/PartnerPicker';
 import { Card, CardContent } from '../../components/ui/Card';
 import { useTabs } from '../../src/contexts/TabsContext';
+import { findItemByCode } from '../../utils/itemLookup';
+import { ItemCodeInput } from '../../components/items/ItemCodeInput';
 
 // Local UI Helpers
 const Button = ({ children, variant, className, onClick, type, disabled }: any) => {
@@ -88,7 +90,10 @@ const CommercialInvoiceForm = () => {
                     status: data.status,
                     notes: data.notes || ''
                 });
-                setLines(data.lines || []);
+                setLines((data.lines || []).map((l: any) => ({
+                    ...l,
+                    item_code: l.item_code || items.find(i => i.id === l.item_id)?.code || ''
+                })));
             }
         } catch (error) {
             console.error('Error loading invoice:', error);
@@ -130,6 +135,7 @@ const CommercialInvoiceForm = () => {
     const addLine = () => {
         setLines([...lines, {
             item_id: '',
+            item_code: '',
             description: '',
             quantity: 0,
             unit_price: 0,
@@ -146,23 +152,44 @@ const CommercialInvoiceForm = () => {
 
     const updateLine = (index: number, field: string, value: any) => {
         const newLines = [...lines];
-        newLines[index][field] = value;
+        const line = { ...newLines[index], [field]: value };
 
-        // Auto-calculate total
-        if (field === 'quantity' || field === 'unit_price') {
-            newLines[index].total_price = newLines[index].quantity * newLines[index].unit_price;
-        }
-
-        // Auto-fill from item
-        if (field === 'item_id' && value) {
-            const item = items.find(i => i.id === value);
-            if (item) {
-                newLines[index].description = item.name_ar;
-                newLines[index].unit_price = item.cost_price || 0;
-                newLines[index].weight_kg = item.weight_kg || 0;
+        if (field === 'item_code') {
+            const itemByCode = findItemByCode(items, String(value));
+            if (itemByCode) {
+                line.item_id = itemByCode.id;
+                line.item_code = itemByCode.code || '';
+                line.description = itemByCode.name_ar;
+                line.unit_price = itemByCode.cost_price || 0;
+                line.weight_kg = itemByCode.weight_kg || 0;
+            } else {
+                line.item_id = '';
             }
         }
 
+        // Auto-calculate total
+        if (field === 'quantity' || field === 'unit_price') {
+            line.total_price = line.quantity * line.unit_price;
+        }
+
+        // Auto-fill from item
+        if (field === 'item_id') {
+            const item = items.find(i => i.id === value);
+            if (item) {
+                line.item_code = item.code || '';
+                line.description = item.name_ar;
+                line.unit_price = item.cost_price || 0;
+                line.weight_kg = item.weight_kg || 0;
+            } else {
+                line.item_code = '';
+            }
+        }
+
+        if (field === 'item_id' || field === 'item_code' || field === 'quantity' || field === 'unit_price') {
+            line.total_price = line.quantity * line.unit_price;
+        }
+
+        newLines[index] = line;
         setLines(newLines);
     };
 
@@ -325,9 +352,10 @@ const CommercialInvoiceForm = () => {
                     </div>
 
                     <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
+                        <table className="dense-table w-full">
                             <thead>
                                 <tr className="bg-slate-100 border-b">
+                                    <th className="p-2 text-right text-sm font-medium w-32">Item Code</th>
                                     <th className="p-2 text-right text-sm font-medium">الصنف</th>
                                     <th className="p-2 text-right text-sm font-medium">الوصف</th>
                                     <th className="p-2 text-right text-sm font-medium w-24">الكمية</th>
@@ -343,6 +371,18 @@ const CommercialInvoiceForm = () => {
                                 {lines.map((line, index) => (
                                     <tr key={index} className="border-b hover:bg-slate-50">
                                         <td className="p-2">
+                                            <ItemCodeInput
+                                                items={items}
+                                                value={line.item_code || ''}
+                                                onChange={(nextCode) => updateLine(index, 'item_code', nextCode)}
+                                                placeholder="Item code"
+                                                className="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-1 text-sm font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                autoSelectUnique={false}
+                                                showOnEmpty={true}
+                                                maxResults={20}
+                                            />
+                                        </td>
+                                        <td className="p-2">
                                             <Select
                                                 value={line.item_id}
                                                 onChange={(e) => updateLine(index, 'item_id', e.target.value)}
@@ -351,7 +391,7 @@ const CommercialInvoiceForm = () => {
                                                 <option value="">اختر صنف</option>
                                                 {items.map(item => (
                                                     <option key={item.id} value={item.id}>
-                                                        {item.name_ar}
+                                                        {item.code} - {item.name_ar}
                                                     </option>
                                                 ))}
                                             </Select>

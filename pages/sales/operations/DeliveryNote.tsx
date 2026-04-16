@@ -1,9 +1,10 @@
 import React from 'react';
-import { Truck, Save, Printer, PackageCheck } from 'lucide-react';
+import DispatchPage from '../../inventory/DispatchPage';
 
-export const DeliveryNote = () => {
-    return (
-        <div className="p-6 bg-gray-50 h-full flex flex-col gap-6" dir="rtl">
+export const DeliveryNote: React.FC = () => <DispatchPage />;
+
+/*
+        <div className="app-page h-full flex flex-col gap-4" dir="rtl">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                     <Truck className="text-orange-600" /> إرسالية مبيعات (DN)
@@ -15,7 +16,7 @@ export const DeliveryNote = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="card p-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-2">استيراد من طلبية</label>
@@ -37,9 +38,10 @@ export const DeliveryNote = () => {
                     </div>
                 </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 p-6 flex items-center justify-center text-gray-400">
+            <div className="card flex-1 p-6 flex items-center justify-center text-gray-400">
                 قائمة الأصناف المراد تسليمها
             </div>
         </div>
     );
-};
+*/
+

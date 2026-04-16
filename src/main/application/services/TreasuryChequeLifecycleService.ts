@@ -1,0 +1,738 @@
+import { DomainError } from '../../domain/errors';
+import { FinancialAccountRole } from '../../domain/accountingResolution/enums/FinancialAccountRole';
+import { ResolutionDirection } from '../../domain/accountingResolution/enums/ResolutionDirection';
+import {
+    CancelChequeCommand,
+    ChequeDirection,
+    ChequeEventType,
+    ChequeRegisterEntity,
+    ClearIssuedChequeCommand,
+    ClearReceivedChequeCommand,
+    DepositChequeCommand,
+    ReturnReceivedChequeCommand,
+} from '../../domain/treasury/types/TreasuryTypes';
+import { TreasuryDocumentRepositoryPort, TreasuryChequeEventRecord } from '../ports/TreasuryPorts';
+import { AccountingResolutionUseCases } from '../useCases/AccountingResolutionUseCases';
+import { JournalDto, JournalEngineUseCases } from '../useCases/JournalEngineUseCases';
+
+type TreasuryContext = {
+    companyId: string;
+    branchId: string;
+    userId: string;
+};
+
+export interface TreasuryChequeLifecycleResult {
+    chequeId: string;
+    eventType: ChequeEventType;
+    status: 'UPDATED' | 'ALREADY_UPDATED';
+    chequeStatus: string;
+    journalId: string | null;
+    journalNo: string | null;
+    postingStatus: 'POSTED' | 'ALREADY_POSTED' | 'SKIPPED';
+}
+
+export class TreasuryChequeLifecycleService {
+    constructor(
+        private readonly repository: TreasuryDocumentRepositoryPort,
+        private readonly accountResolutionUseCases: AccountingResolutionUseCases,
+        private readonly journalEngineUseCases: JournalEngineUseCases,
+    ) {}
+
+    receiveChequeFromDocument(
+        context: TreasuryContext,
+        chequeId: string,
+        eventDate: string,
+        journalId: string,
+    ): void {
+        const cheque = this.requireCheque(context.companyId, chequeId);
+        if (cheque.direction !== 'RECEIVED') {
+            throw new DomainError('VALIDATION_ERROR', 'Cheque direction must be RECEIVED', {
+                messageKey: 'validation.treasury.cheque.direction_received_required',
+                details: { chequeId },
+            });
+        }
+
+        const existingEvent = this.repository.getChequeEvent(context.companyId, cheque.id, 'RECEIVE');
+        if (existingEvent) return;
+
+        this.repository.updateChequeState({
+            companyId: context.companyId,
+            chequeId: cheque.id,
+            status: 'IN_SAFE',
+            depositedBankAccountId: cheque.depositedBankAccountId || null,
+            clearedDate: null,
+            returnedDate: null,
+            notes: cheque.notes,
+            updatedAt: new Date().toISOString(),
+        });
+
+        this.repository.saveChequeEvent({
+            id: this.repository.nextIdentity(),
+            companyId: context.companyId,
+            chequeId: cheque.id,
+            eventType: 'RECEIVE',
+            eventDate: eventDate.slice(0, 10),
+            journalId,
+            sourceType: 'TREASURY_DOC_RECEIVE',
+            sourceVersion: 1,
+            createdAt: new Date().toISOString(),
+        });
+    }
+
+    issueChequeFromDocument(
+        context: TreasuryContext,
+        chequeId: string,
+        eventDate: string,
+        journalId: string,
+    ): void {
+        const cheque = this.requireCheque(context.companyId, chequeId);
+        if (cheque.direction !== 'ISSUED') {
+            throw new DomainError('VALIDATION_ERROR', 'Cheque direction must be ISSUED', {
+                messageKey: 'validation.treasury.cheque.direction_issued_required',
+                details: { chequeId },
+            });
+        }
+
+        const existingEvent = this.repository.getChequeEvent(context.companyId, cheque.id, 'ISSUE');
+        if (existingEvent) return;
+
+        this.repository.updateChequeState({
+            companyId: context.companyId,
+            chequeId: cheque.id,
+            status: 'ISSUED_PENDING',
+            depositedBankAccountId: cheque.depositedBankAccountId || null,
+            clearedDate: null,
+            returnedDate: null,
+            notes: cheque.notes,
+            updatedAt: new Date().toISOString(),
+        });
+
+        this.repository.saveChequeEvent({
+            id: this.repository.nextIdentity(),
+            companyId: context.companyId,
+            chequeId: cheque.id,
+            eventType: 'ISSUE',
+            eventDate: eventDate.slice(0, 10),
+            journalId,
+            sourceType: 'TREASURY_DOC_ISSUE',
+            sourceVersion: 1,
+            createdAt: new Date().toISOString(),
+        });
+    }
+
+    async depositCheque(context: TreasuryContext, command: DepositChequeCommand): Promise<TreasuryChequeLifecycleResult> {
+        const cheque = this.requireCheque(context.companyId, command.chequeId);
+        if (cheque.direction !== 'RECEIVED') {
+            throw new DomainError('VALIDATION_ERROR', 'Only received cheques can be deposited', {
+                messageKey: 'validation.treasury.cheque.deposit.direction',
+                details: { chequeId: cheque.id },
+            });
+        }
+        if (cheque.status === 'DEPOSITED') {
+            const existing = this.repository.getChequeEvent(context.companyId, cheque.id, 'DEPOSIT');
+            return {
+                chequeId: cheque.id,
+                eventType: 'DEPOSIT',
+                status: 'ALREADY_UPDATED',
+                chequeStatus: cheque.status,
+                journalId: existing?.journalId || null,
+                journalNo: this.resolveJournalNo(context.companyId, existing?.journalId || null),
+                postingStatus: existing?.journalId ? 'ALREADY_POSTED' : 'SKIPPED',
+            };
+        }
+        if (cheque.status !== 'IN_SAFE') {
+            throw new DomainError('INVALID_TRANSITION', 'Cheque must be in safe before deposit', {
+                messageKey: 'validation.treasury.cheque.deposit.invalid_state',
+                details: { chequeId: cheque.id, status: cheque.status },
+            });
+        }
+
+        const existingEvent = this.repository.getChequeEvent(context.companyId, cheque.id, 'DEPOSIT');
+        if (existingEvent) {
+            this.repository.updateChequeState({
+                companyId: context.companyId,
+                chequeId: cheque.id,
+                status: 'DEPOSITED',
+                depositedBankAccountId: command.bankAccountId,
+                clearedDate: cheque.clearedDate,
+                returnedDate: cheque.returnedDate,
+                notes: cheque.notes,
+                updatedAt: new Date().toISOString(),
+            });
+            return {
+                chequeId: cheque.id,
+                eventType: 'DEPOSIT',
+                status: 'ALREADY_UPDATED',
+                chequeStatus: 'DEPOSITED',
+                journalId: existingEvent.journalId,
+                journalNo: this.resolveJournalNo(context.companyId, existingEvent.journalId),
+                postingStatus: existingEvent.journalId ? 'ALREADY_POSTED' : 'SKIPPED',
+            };
+        }
+
+        const accounts = await this.resolveAccounts(context, {
+            documentType: 'CHEQUE_RECEIPT',
+            lineType: 'DEPOSIT',
+            partnerId: cheque.partnerId,
+            warehouseId: command.bankAccountId,
+            requiredRoles: [FinancialAccountRole.CHEQUES_DEPOSITED_ACCOUNT, FinancialAccountRole.CHEQUE_IN_SAFE_ACCOUNT],
+            direction: ResolutionDirection.TRANSFER,
+            currencyCode: cheque.currencyCode,
+        });
+
+        const journal = this.postLifecycleJournal(context, {
+            cheque,
+            eventType: 'DEPOSIT',
+            journalDate: command.date,
+            sourceType: 'TREASURY_CHEQUE_DEPOSIT',
+            description: `Deposit cheque ${cheque.chequeNo}`,
+            debitAccountId: accounts[FinancialAccountRole.CHEQUES_DEPOSITED_ACCOUNT],
+            creditAccountId: accounts[FinancialAccountRole.CHEQUE_IN_SAFE_ACCOUNT],
+        });
+
+        const eventDate = String(command.date || '').slice(0, 10);
+        const now = new Date().toISOString();
+
+        this.repository.runInTransaction(() => {
+            this.repository.updateChequeState({
+                companyId: context.companyId,
+                chequeId: cheque.id,
+                status: 'DEPOSITED',
+                depositedBankAccountId: command.bankAccountId,
+                clearedDate: cheque.clearedDate,
+                returnedDate: cheque.returnedDate,
+                notes: command.reason || cheque.notes,
+                updatedAt: now,
+            });
+            this.repository.saveChequeEvent(this.buildEventRecord(context, cheque.id, 'DEPOSIT', eventDate, journal?.id || null, 'TREASURY_CHEQUE_DEPOSIT', now));
+        });
+
+        return {
+            chequeId: cheque.id,
+            eventType: 'DEPOSIT',
+            status: 'UPDATED',
+            chequeStatus: 'DEPOSITED',
+            journalId: journal?.id || null,
+            journalNo: journal?.journalNo || null,
+            postingStatus: journal ? journal.postingStatus : 'SKIPPED',
+        };
+    }
+
+    async clearReceivedCheque(context: TreasuryContext, command: ClearReceivedChequeCommand): Promise<TreasuryChequeLifecycleResult> {
+        const cheque = this.requireCheque(context.companyId, command.chequeId);
+        if (cheque.direction !== 'RECEIVED') {
+            throw new DomainError('VALIDATION_ERROR', 'Only received cheques can be cleared', {
+                messageKey: 'validation.treasury.cheque.clear_received.direction',
+                details: { chequeId: cheque.id },
+            });
+        }
+
+        if (cheque.status === 'CLEARED') {
+            const existing = this.repository.getChequeEvent(context.companyId, cheque.id, 'CLEAR_RECEIVED');
+            return {
+                chequeId: cheque.id,
+                eventType: 'CLEAR_RECEIVED',
+                status: 'ALREADY_UPDATED',
+                chequeStatus: 'CLEARED',
+                journalId: existing?.journalId || null,
+                journalNo: this.resolveJournalNo(context.companyId, existing?.journalId || null),
+                postingStatus: existing?.journalId ? 'ALREADY_POSTED' : 'SKIPPED',
+            };
+        }
+
+        if (cheque.status !== 'DEPOSITED' && cheque.status !== 'IN_SAFE') {
+            throw new DomainError('INVALID_TRANSITION', 'Cheque cannot be cleared from current state', {
+                messageKey: 'validation.treasury.cheque.clear_received.invalid_state',
+                details: { chequeId: cheque.id, status: cheque.status },
+            });
+        }
+
+        const sourceRole = cheque.status === 'DEPOSITED'
+            ? FinancialAccountRole.CHEQUES_DEPOSITED_ACCOUNT
+            : FinancialAccountRole.CHEQUE_IN_SAFE_ACCOUNT;
+
+        const accounts = await this.resolveAccounts(context, {
+            documentType: 'CHEQUE_RECEIPT',
+            lineType: 'CLEAR_RECEIVED',
+            partnerId: cheque.partnerId,
+            warehouseId: cheque.depositedBankAccountId,
+            requiredRoles: [FinancialAccountRole.BANK_ACCOUNT, sourceRole],
+            direction: ResolutionDirection.TRANSFER,
+            currencyCode: cheque.currencyCode,
+        });
+
+        const journal = this.postLifecycleJournal(context, {
+            cheque,
+            eventType: 'CLEAR_RECEIVED',
+            journalDate: command.date,
+            sourceType: 'TREASURY_CHEQUE_CLEAR_RECEIVED',
+            description: `Clear received cheque ${cheque.chequeNo}`,
+            debitAccountId: accounts[FinancialAccountRole.BANK_ACCOUNT],
+            creditAccountId: accounts[sourceRole],
+        });
+
+        const eventDate = String(command.date || '').slice(0, 10);
+        const now = new Date().toISOString();
+
+        this.repository.runInTransaction(() => {
+            this.repository.updateChequeState({
+                companyId: context.companyId,
+                chequeId: cheque.id,
+                status: 'CLEARED',
+                depositedBankAccountId: cheque.depositedBankAccountId,
+                clearedDate: eventDate,
+                returnedDate: cheque.returnedDate,
+                notes: command.reason || cheque.notes,
+                updatedAt: now,
+            });
+            this.repository.saveChequeEvent(this.buildEventRecord(
+                context,
+                cheque.id,
+                'CLEAR_RECEIVED',
+                eventDate,
+                journal?.id || null,
+                'TREASURY_CHEQUE_CLEAR_RECEIVED',
+                now,
+            ));
+        });
+
+        return {
+            chequeId: cheque.id,
+            eventType: 'CLEAR_RECEIVED',
+            status: 'UPDATED',
+            chequeStatus: 'CLEARED',
+            journalId: journal?.id || null,
+            journalNo: journal?.journalNo || null,
+            postingStatus: journal ? journal.postingStatus : 'SKIPPED',
+        };
+    }
+    async returnReceivedCheque(context: TreasuryContext, command: ReturnReceivedChequeCommand): Promise<TreasuryChequeLifecycleResult> {
+        const cheque = this.requireCheque(context.companyId, command.chequeId);
+        if (cheque.direction !== 'RECEIVED') {
+            throw new DomainError('VALIDATION_ERROR', 'Only received cheques can be returned', {
+                messageKey: 'validation.treasury.cheque.return_received.direction',
+                details: { chequeId: cheque.id },
+            });
+        }
+
+        if (cheque.status === 'RETURNED') {
+            const existing = this.repository.getChequeEvent(context.companyId, cheque.id, 'RETURN_RECEIVED');
+            return {
+                chequeId: cheque.id,
+                eventType: 'RETURN_RECEIVED',
+                status: 'ALREADY_UPDATED',
+                chequeStatus: 'RETURNED',
+                journalId: existing?.journalId || null,
+                journalNo: this.resolveJournalNo(context.companyId, existing?.journalId || null),
+                postingStatus: existing?.journalId ? 'ALREADY_POSTED' : 'SKIPPED',
+            };
+        }
+
+        if (cheque.status === 'CANCELLED') {
+            throw new DomainError('INVALID_TRANSITION', 'Cancelled cheque cannot be returned', {
+                messageKey: 'validation.treasury.cheque.return_received.invalid_state',
+                details: { chequeId: cheque.id, status: cheque.status },
+            });
+        }
+
+        const sourceRole = cheque.status === 'DEPOSITED'
+            ? FinancialAccountRole.CHEQUES_DEPOSITED_ACCOUNT
+            : cheque.status === 'CLEARED'
+                ? FinancialAccountRole.BANK_ACCOUNT
+                : FinancialAccountRole.CHEQUE_IN_SAFE_ACCOUNT;
+
+        const accounts = await this.resolveAccounts(context, {
+            documentType: 'CHEQUE_RECEIPT',
+            lineType: 'RETURN_RECEIVED',
+            partnerId: cheque.partnerId,
+            warehouseId: cheque.depositedBankAccountId,
+            requiredRoles: [FinancialAccountRole.RETURNED_CHEQUE_ACCOUNT, sourceRole],
+            direction: ResolutionDirection.RETURN,
+            currencyCode: cheque.currencyCode,
+        });
+
+        const journal = this.postLifecycleJournal(context, {
+            cheque,
+            eventType: 'RETURN_RECEIVED',
+            journalDate: command.date,
+            sourceType: 'TREASURY_CHEQUE_RETURN_RECEIVED',
+            description: `Return received cheque ${cheque.chequeNo}`,
+            debitAccountId: accounts[FinancialAccountRole.RETURNED_CHEQUE_ACCOUNT],
+            creditAccountId: accounts[sourceRole],
+        });
+
+        const eventDate = String(command.date || '').slice(0, 10);
+        const now = new Date().toISOString();
+
+        this.repository.runInTransaction(() => {
+            this.repository.updateChequeState({
+                companyId: context.companyId,
+                chequeId: cheque.id,
+                status: 'RETURNED',
+                depositedBankAccountId: cheque.depositedBankAccountId,
+                clearedDate: cheque.clearedDate,
+                returnedDate: eventDate,
+                notes: command.reason || cheque.notes,
+                updatedAt: now,
+            });
+            this.repository.saveChequeEvent(this.buildEventRecord(
+                context,
+                cheque.id,
+                'RETURN_RECEIVED',
+                eventDate,
+                journal?.id || null,
+                'TREASURY_CHEQUE_RETURN_RECEIVED',
+                now,
+            ));
+        });
+
+        return {
+            chequeId: cheque.id,
+            eventType: 'RETURN_RECEIVED',
+            status: 'UPDATED',
+            chequeStatus: 'RETURNED',
+            journalId: journal?.id || null,
+            journalNo: journal?.journalNo || null,
+            postingStatus: journal ? journal.postingStatus : 'SKIPPED',
+        };
+    }
+
+    async clearIssuedCheque(context: TreasuryContext, command: ClearIssuedChequeCommand): Promise<TreasuryChequeLifecycleResult> {
+        const cheque = this.requireCheque(context.companyId, command.chequeId);
+        if (cheque.direction !== 'ISSUED') {
+            throw new DomainError('VALIDATION_ERROR', 'Only issued cheques can be cleared', {
+                messageKey: 'validation.treasury.cheque.clear_issued.direction',
+                details: { chequeId: cheque.id },
+            });
+        }
+        if (cheque.status === 'ISSUED_CLEARED') {
+            const existing = this.repository.getChequeEvent(context.companyId, cheque.id, 'CLEAR_ISSUED');
+            return {
+                chequeId: cheque.id,
+                eventType: 'CLEAR_ISSUED',
+                status: 'ALREADY_UPDATED',
+                chequeStatus: 'ISSUED_CLEARED',
+                journalId: existing?.journalId || null,
+                journalNo: this.resolveJournalNo(context.companyId, existing?.journalId || null),
+                postingStatus: existing?.journalId ? 'ALREADY_POSTED' : 'SKIPPED',
+            };
+        }
+        if (cheque.status !== 'ISSUED_PENDING') {
+            throw new DomainError('INVALID_TRANSITION', 'Issued cheque must be pending before clear', {
+                messageKey: 'validation.treasury.cheque.clear_issued.invalid_state',
+                details: { chequeId: cheque.id, status: cheque.status },
+            });
+        }
+
+        const accounts = await this.resolveAccounts(context, {
+            documentType: 'CHEQUE_PAYMENT',
+            lineType: 'CLEAR_ISSUED',
+            partnerId: cheque.partnerId,
+            warehouseId: cheque.depositedBankAccountId,
+            requiredRoles: [FinancialAccountRole.ISSUED_CHEQUE_ACCOUNT, FinancialAccountRole.BANK_ACCOUNT],
+            direction: ResolutionDirection.TRANSFER,
+            currencyCode: cheque.currencyCode,
+        });
+
+        const journal = this.postLifecycleJournal(context, {
+            cheque,
+            eventType: 'CLEAR_ISSUED',
+            journalDate: command.date,
+            sourceType: 'TREASURY_CHEQUE_CLEAR_ISSUED',
+            description: `Clear issued cheque ${cheque.chequeNo}`,
+            debitAccountId: accounts[FinancialAccountRole.ISSUED_CHEQUE_ACCOUNT],
+            creditAccountId: accounts[FinancialAccountRole.BANK_ACCOUNT],
+        });
+
+        const eventDate = String(command.date || '').slice(0, 10);
+        const now = new Date().toISOString();
+
+        this.repository.runInTransaction(() => {
+            this.repository.updateChequeState({
+                companyId: context.companyId,
+                chequeId: cheque.id,
+                status: 'ISSUED_CLEARED',
+                depositedBankAccountId: cheque.depositedBankAccountId,
+                clearedDate: eventDate,
+                returnedDate: cheque.returnedDate,
+                notes: command.reason || cheque.notes,
+                updatedAt: now,
+            });
+            this.repository.saveChequeEvent(this.buildEventRecord(
+                context,
+                cheque.id,
+                'CLEAR_ISSUED',
+                eventDate,
+                journal?.id || null,
+                'TREASURY_CHEQUE_CLEAR_ISSUED',
+                now,
+            ));
+        });
+
+        return {
+            chequeId: cheque.id,
+            eventType: 'CLEAR_ISSUED',
+            status: 'UPDATED',
+            chequeStatus: 'ISSUED_CLEARED',
+            journalId: journal?.id || null,
+            journalNo: journal?.journalNo || null,
+            postingStatus: journal ? journal.postingStatus : 'SKIPPED',
+        };
+    }
+
+    async cancelCheque(context: TreasuryContext, command: CancelChequeCommand): Promise<TreasuryChequeLifecycleResult> {
+        const cheque = this.requireCheque(context.companyId, command.chequeId);
+        if (cheque.status === 'CANCELLED') {
+            const existing = this.repository.getChequeEvent(context.companyId, cheque.id, 'CANCEL');
+            return {
+                chequeId: cheque.id,
+                eventType: 'CANCEL',
+                status: 'ALREADY_UPDATED',
+                chequeStatus: 'CANCELLED',
+                journalId: existing?.journalId || null,
+                journalNo: this.resolveJournalNo(context.companyId, existing?.journalId || null),
+                postingStatus: existing?.journalId ? 'ALREADY_POSTED' : 'SKIPPED',
+            };
+        }
+        if (cheque.status === 'CLEARED' || cheque.status === 'ISSUED_CLEARED') {
+            throw new DomainError('INVALID_TRANSITION', 'Cleared cheque cannot be cancelled', {
+                messageKey: 'validation.treasury.cheque.cancel.invalid_state',
+                details: { chequeId: cheque.id, status: cheque.status },
+            });
+        }
+
+        let journal: { id: string; journalNo: string; postingStatus: 'POSTED' | 'ALREADY_POSTED' } | null = null;
+
+        if (cheque.direction === 'RECEIVED' && cheque.status === 'DEPOSITED') {
+            const accounts = await this.resolveAccounts(context, {
+                documentType: 'CHEQUE_RECEIPT',
+                lineType: 'CANCEL',
+                partnerId: cheque.partnerId,
+                warehouseId: cheque.depositedBankAccountId,
+                requiredRoles: [FinancialAccountRole.CHEQUE_IN_SAFE_ACCOUNT, FinancialAccountRole.CHEQUES_DEPOSITED_ACCOUNT],
+                direction: ResolutionDirection.RETURN,
+                currencyCode: cheque.currencyCode,
+            });
+
+            journal = this.postLifecycleJournal(context, {
+                cheque,
+                eventType: 'CANCEL',
+                journalDate: command.date,
+                sourceType: 'TREASURY_CHEQUE_CANCEL',
+                description: `Cancel cheque ${cheque.chequeNo}`,
+                debitAccountId: accounts[FinancialAccountRole.CHEQUE_IN_SAFE_ACCOUNT],
+                creditAccountId: accounts[FinancialAccountRole.CHEQUES_DEPOSITED_ACCOUNT],
+            });
+        }
+
+        const eventDate = String(command.date || '').slice(0, 10);
+        const now = new Date().toISOString();
+
+        this.repository.runInTransaction(() => {
+            this.repository.updateChequeState({
+                companyId: context.companyId,
+                chequeId: cheque.id,
+                status: 'CANCELLED',
+                depositedBankAccountId: cheque.depositedBankAccountId,
+                clearedDate: cheque.clearedDate,
+                returnedDate: cheque.returnedDate,
+                notes: command.reason || cheque.notes,
+                updatedAt: now,
+            });
+            this.repository.saveChequeEvent(this.buildEventRecord(
+                context,
+                cheque.id,
+                'CANCEL',
+                eventDate,
+                journal?.id || null,
+                'TREASURY_CHEQUE_CANCEL',
+                now,
+            ));
+        });
+
+        return {
+            chequeId: cheque.id,
+            eventType: 'CANCEL',
+            status: 'UPDATED',
+            chequeStatus: 'CANCELLED',
+            journalId: journal?.id || null,
+            journalNo: journal?.journalNo || null,
+            postingStatus: journal ? journal.postingStatus : 'SKIPPED',
+        };
+    }
+
+    private async resolveAccounts(
+        context: TreasuryContext,
+        input: {
+            documentType: string;
+            lineType: string;
+            partnerId: string | null;
+            warehouseId: string | null;
+            requiredRoles: FinancialAccountRole[];
+            direction: ResolutionDirection;
+            currencyCode: string;
+        },
+    ): Promise<Record<FinancialAccountRole, string>> {
+        const result = await this.accountResolutionUseCases.resolveRequiredAccounts(context.companyId, {
+            companyId: context.companyId,
+            branchId: context.branchId,
+            documentType: input.documentType,
+            lineType: input.lineType,
+            itemId: null,
+            itemGroupId: null,
+            warehouseId: input.warehouseId,
+            partnerId: input.partnerId,
+            taxProfileId: null,
+            isService: false,
+            requiresInventory: false,
+            requiresTax: false,
+            currencyCode: input.currencyCode,
+            direction: input.direction,
+            requiredRoles: input.requiredRoles,
+            optionalRoles: [],
+        });
+
+        if (!result.success) {
+            throw new DomainError('VALIDATION_ERROR', 'Cheque account resolution failed', {
+                messageKey: 'error.account_resolution.mapping_not_found',
+                details: {
+                    requiredRoles: input.requiredRoles,
+                    missingRoles: result.missingRoles,
+                },
+            });
+        }
+
+        const accounts = {} as Record<FinancialAccountRole, string>;
+        for (const role of input.requiredRoles) {
+            const resolved = result.resolvedAccounts[role];
+            if (!resolved) {
+                throw new DomainError('VALIDATION_ERROR', 'Required account role was not resolved', {
+                    messageKey: 'error.account_resolution.mapping_not_found',
+                    details: { role },
+                });
+            }
+            accounts[role] = resolved.accountId;
+        }
+
+        return accounts;
+    }
+
+    private postLifecycleJournal(
+        context: TreasuryContext,
+        input: {
+            cheque: ChequeRegisterEntity;
+            eventType: ChequeEventType;
+            journalDate: string;
+            sourceType: string;
+            description: string;
+            debitAccountId: string;
+            creditAccountId: string;
+        },
+    ): { id: string; journalNo: string; postingStatus: 'POSTED' | 'ALREADY_POSTED' } | null {
+        const amount = Math.round((Number(input.cheque.amount || 0) + Number.EPSILON) * 100) / 100;
+        if (amount <= 0) return null;
+
+        try {
+            const result = this.journalEngineUseCases.postJournal(context.companyId, context.branchId, context.userId, {
+                companyId: context.companyId,
+                branchId: context.branchId,
+                journalDate: String(input.journalDate || '').slice(0, 10),
+                sourceType: input.sourceType,
+                sourceId: input.cheque.id,
+                sourceNo: input.cheque.chequeNo,
+                sourceVersion: 1,
+                referenceNo: input.cheque.chequeNo,
+                description: input.description,
+                currencyCode: input.cheque.currencyCode,
+                exchangeRate: Number(input.cheque.currencyRate || 1),
+                totalDebit: amount,
+                totalCredit: amount,
+                postedBy: context.userId,
+                lines: [
+                    {
+                        lineNo: 1,
+                        accountId: input.debitAccountId,
+                        description: input.description,
+                        debit: amount,
+                        credit: 0,
+                        currencyCode: input.cheque.currencyCode,
+                        exchangeRate: Number(input.cheque.currencyRate || 1),
+                        branchId: context.branchId,
+                        partnerId: input.cheque.partnerId || null,
+                    },
+                    {
+                        lineNo: 2,
+                        accountId: input.creditAccountId,
+                        description: input.description,
+                        debit: 0,
+                        credit: amount,
+                        currencyCode: input.cheque.currencyCode,
+                        exchangeRate: Number(input.cheque.currencyRate || 1),
+                        branchId: context.branchId,
+                        partnerId: input.cheque.partnerId || null,
+                    },
+                ],
+            });
+            return { id: result.journalId, journalNo: result.journalNo, postingStatus: 'POSTED' };
+        } catch (error: any) {
+            if (String(error?.code || '') !== 'ERR_SOURCE_ALREADY_POSTED') {
+                throw error;
+            }
+
+            const existing = this.journalEngineUseCases.getBySource(context.companyId, {
+                sourceType: input.sourceType,
+                sourceId: input.cheque.id,
+                sourceVersion: 1,
+            });
+            if (!existing) throw error;
+            return { id: existing.id, journalNo: existing.journalNo, postingStatus: 'ALREADY_POSTED' };
+        }
+    }
+
+    private buildEventRecord(
+        context: TreasuryContext,
+        chequeId: string,
+        eventType: ChequeEventType,
+        eventDate: string,
+        journalId: string | null,
+        sourceType: string,
+        nowIso: string,
+    ): TreasuryChequeEventRecord {
+        return {
+            id: this.repository.nextIdentity(),
+            companyId: context.companyId,
+            chequeId,
+            eventType,
+            eventDate,
+            journalId,
+            sourceType,
+            sourceVersion: 1,
+            createdAt: nowIso,
+        };
+    }
+
+    private requireCheque(companyId: string, chequeId: string): ChequeRegisterEntity {
+        const normalizedId = String(chequeId || '').trim();
+        if (!normalizedId) {
+            throw new DomainError('VALIDATION_ERROR', 'Cheque id is required', {
+                messageKey: 'validation.treasury.cheque.id_required',
+            });
+        }
+
+        const cheque = this.repository.getChequeById(companyId, normalizedId);
+        if (!cheque) {
+            throw new DomainError('DOCUMENT_NOT_FOUND', `Cheque ${normalizedId} was not found`, {
+                messageKey: 'error.treasury.cheque.not_found',
+                details: { chequeId: normalizedId },
+            });
+        }
+
+        return cheque;
+    }
+
+    private resolveJournalNo(companyId: string, journalId: string | null): string | null {
+        if (!journalId) return null;
+        const journal = this.journalEngineUseCases.getById(companyId, journalId);
+        return journal?.journalNo || null;
+    }
+}

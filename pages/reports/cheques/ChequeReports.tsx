@@ -62,12 +62,12 @@ export const ChequeReports = () => {
     ];
 
     return (
-        <div className="p-6 bg-gray-50 h-full border-l" dir="rtl">
+        <div className="app-page h-full border-l" dir="rtl">
             <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                 <CreditCard className="text-purple-600" /> تقارير الشيكات
             </h1>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="card p-6">
                 <div className="flex gap-2 border-b pb-4 mb-4 overflow-x-auto">
                     {tabs.map(t => (
                         <button
@@ -125,3 +125,4 @@ export const ChequeReports = () => {
         </div>
     );
 };
+

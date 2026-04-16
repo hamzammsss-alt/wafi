@@ -18,7 +18,7 @@ class AuthService {
         'مسؤول النظام': ['ALL'],
         'المدير المالي': ['Financials', 'Banks', 'Budgets', 'Reports', 'Treasury'],
         'مدير المبيعات': ['Sales', 'Customers', 'Reports'],
-        'مدير المشتريات': ['Purchasing', 'Suppliers', 'Reports'],
+        'مدير المشتريات': ['Purchasing', 'Suppliers', 'Reports', 'PURCHASE_PR_APPROVE', 'PURCHASE_PO_APPROVE'],
         'أمين المستودع': ['Inventory', 'Stock Count'],
         'أمين الصندوق': ['Treasury', 'Cash', 'Financials'],
         'محاسب رئيسي': ['Financials', 'Entries', 'Reports'],

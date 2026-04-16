@@ -282,7 +282,7 @@ const ExportShipmentForm = () => {
                             </Button>
                         </CardHeader>
                         <CardContent className="p-0">
-                            <table className="w-full text-sm">
+                            <table className="dense-table w-full">
                                 <thead className="bg-slate-50 border-b">
                                     <tr>
                                         <th className="p-4 text-right">رقم الفاتورة</th>
@@ -326,7 +326,7 @@ const ExportShipmentForm = () => {
                             <CardTitle className="text-lg font-bold">قوائم التعبئة (Packing Lists)</CardTitle>
                         </CardHeader>
                         <CardContent className="p-0">
-                            <table className="w-full text-sm">
+                            <table className="dense-table w-full">
                                 <thead className="bg-slate-50 border-b">
                                     <tr>
                                         <th className="p-4 text-right">رقم القائمة</th>

@@ -8,6 +8,9 @@ export const CATEGORY_SLUGS: Record<string, string> = {
     'المشتريات والاستيراد': 'purchasing', // Legacy or potential mix-up to be safe, but we'll add new ones below
     'المشتريات': 'purchasing',
     'المبيعات': 'sales',
+    'المستودعات': 'warehouses',
+    'السندات': 'vouchers',
+    'البنوك': 'banking',
     // 'المبيعات والعملاء': 'sales', // Legacy
 
     'المحاسبة العامة': 'gl',

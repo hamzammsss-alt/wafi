@@ -146,7 +146,7 @@ export const BillOfMaterials = () => {
                         {/* Ingredients Card */}
                         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                             <h2 className="font-bold text-gray-700 mb-4">المكونات (المواد الخام)</h2>
-                            <table className="w-full border-collapse">
+                            <table className="dense-table w-full">
                                 <thead className="bg-gray-50 text-gray-600 text-sm">
                                     <tr>
                                         <th className="p-3 text-right rounded-r-lg">المادة الخام</th>

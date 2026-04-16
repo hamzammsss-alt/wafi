@@ -3,7 +3,7 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus } from 'lucid
 
 export const CalendarApp = () => {
     return (
-        <div className="p-6 bg-gray-50 h-full flex flex-col" dir="rtl">
+        <div className="app-page h-full flex flex-col" dir="rtl">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                     <CalendarIcon className="text-indigo-600" /> الرزنامة
@@ -13,7 +13,7 @@ export const CalendarApp = () => {
                 </button>
             </div>
 
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
+            <div className="flex-1 card flex flex-col">
                 <div className="p-4 border-b flex justify-between items-center bg-gray-50">
                     <div className="flex items-center gap-4">
                         <h2 className="text-xl font-bold text-gray-800">فبراير 2024</h2>
@@ -56,3 +56,4 @@ export const CalendarApp = () => {
         </div>
     );
 };
+

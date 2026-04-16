@@ -7,6 +7,7 @@ import { ToastContainer } from './components/ui/Toast';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import Login from './pages/system/Login';
 import { LoadingScreen } from './components/ui/LoadingScreen';
+import { ZoomProvider } from './src/contexts/ZoomContext';
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState(true);
@@ -29,21 +30,23 @@ const App: React.FC = () => {
 
   return (
     <HashRouter>
-      <NotificationsProvider>
-        <TabsProvider>
-          <Routes>
-            {/* Standalone Login Page - Public Access */}
-            <Route path="/system/login" element={<Login />} />
+      <ZoomProvider>
+        <NotificationsProvider>
+          <TabsProvider>
+            <Routes>
+              {/* Standalone Login Page - Public Access */}
+              <Route path="/system/login" element={<Login />} />
 
-            {/* Protected Routes - Reguire Auth */}
-            <Route element={<ProtectedRoute />}>
-              {/* All other routes are handled by the MainLayout's Tab System */}
-              <Route path="/*" element={<MainLayout />} />
-            </Route>
-          </Routes>
-          <ToastContainer />
-        </TabsProvider>
-      </NotificationsProvider>
+              {/* Protected Routes - Reguire Auth */}
+              <Route element={<ProtectedRoute />}>
+                {/* All other routes are handled by the MainLayout's Tab System */}
+                <Route path="/*" element={<MainLayout />} />
+              </Route>
+            </Routes>
+            <ToastContainer />
+          </TabsProvider>
+        </NotificationsProvider>
+      </ZoomProvider>
     </HashRouter>
   );
 };

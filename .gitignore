@@ -20,5 +20,28 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
+
+# Electron build output
+dist-electron/
+dist-electron-backup/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# .NET build artifacts
+backend/**/obj/
+backend/**/bin/
+
+# Temporary output and debug files
+tmp_*.txt
+tmp_*.db
+output.txt
+test_logs.txt
+schema_dump.txt
+extracted_features.txt
+
+# Tool/AI directories
+.codex/

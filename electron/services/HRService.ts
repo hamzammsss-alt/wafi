@@ -1,7 +1,71 @@
 import { db } from '../database';
 import { v4 as uuidv4 } from 'uuid';
+import { AccountService } from './AccountService';
+import { SystemService } from './SystemService';
 
 export class HRService {
+
+    private static buildEmployeeFullName(personal: any): string {
+        return [personal?.first_name, personal?.father_name, personal?.grandfather_name, personal?.last_name]
+            .map((part: any) => String(part || '').trim())
+            .filter(Boolean)
+            .join(' ') || 'موظف';
+    }
+
+    private static generateChildAccountCode(parentId: string): string | null {
+        const parentAcc = db.prepare('SELECT account_code FROM gl_chart_of_accounts WHERE id = ?').get(parentId) as any;
+        if (!parentAcc?.account_code) return null;
+
+        const siblings = db.prepare('SELECT account_code FROM gl_chart_of_accounts WHERE parent_id = ?').all(parentId) as any[];
+        let maxSuffix = 0;
+        siblings.forEach((s: any) => {
+            if (typeof s.account_code !== 'string') return;
+            if (!s.account_code.startsWith(parentAcc.account_code)) return;
+            const suffix = s.account_code.slice(parentAcc.account_code.length);
+            const val = parseInt(suffix, 10);
+            if (!Number.isNaN(val) && val > maxSuffix) maxSuffix = val;
+        });
+
+        return parentAcc.account_code + String(maxSuffix + 1).padStart(4, '0');
+    }
+
+    private static ensureEmployeeLinkedAccount(personal: any): string | null {
+        let linkedAccountId = personal?.linked_account_id || null;
+        let explicitParentId: string | null = null;
+
+        if (linkedAccountId) {
+            const account = db.prepare('SELECT id, is_transactional FROM gl_chart_of_accounts WHERE id = ?').get(linkedAccountId) as any;
+            if (account?.id) {
+                if (Number(account.is_transactional) === 1) return linkedAccountId;
+                explicitParentId = account.id;
+                linkedAccountId = null;
+            } else {
+                linkedAccountId = null;
+            }
+        }
+
+        const settings = SystemService.getSettings();
+        const parentId = explicitParentId || settings['default_employee_parent'];
+        if (!parentId) return null;
+
+        const accountTypeRow = db.prepare('SELECT account_type FROM gl_chart_of_accounts WHERE id = ?').get(parentId) as any;
+        const childCode = this.generateChildAccountCode(parentId);
+        if (!childCode) return null;
+
+        const createdId = AccountService.createAccount({
+            account_code: childCode,
+            name_ar: this.buildEmployeeFullName(personal),
+            name_en: null,
+            parent_id: parentId,
+            account_type: accountTypeRow?.account_type || 'ASSET',
+            is_transactional: 1,
+            currency_id: null,
+            requires_cost_center: 0,
+            system_type: 'EMPLOYEE'
+        });
+
+        return createdId as string;
+    }
 
     // =================================================================================================
     // 1. ORGANIZATION (Departments & Job Titles)
@@ -91,6 +155,8 @@ export class HRService {
     static saveEmployee(data: any) {
         const { personal, contract, relatives } = data; // Expecting nested object from UI
 
+        const resolvedLinkedAccountId = this.ensureEmployeeLinkedAccount(personal || {});
+
         // 1. Validate National ID Uniqueness
         if (personal && personal.national_id && personal.national_id.trim() !== '') {
             const existing = db.prepare('SELECT id FROM hr_employees WHERE national_id = ?').get(personal.national_id) as any;
@@ -142,7 +208,7 @@ export class HRService {
                         address_city = @address_city, address_street = @address_street, photo_url = @photo_url, status = @status,
                         linked_account_id = @linked_account_id
                     WHERE id = @id
-                `).run({ ...personalData, linked_account_id: personal.linked_account_id || null });
+                `).run({ ...personalData, linked_account_id: resolvedLinkedAccountId });
             } else {
                 empId = uuidv4();
                 db.prepare(`
@@ -157,7 +223,7 @@ export class HRService {
                         @mobile_phone, @emergency_phone, @email,
                         @address_city, @address_street, @photo_url, @status, @linked_account_id
                     )
-                `).run({ ...personalData, id: empId, linked_account_id: personal.linked_account_id || null });
+                `).run({ ...personalData, id: empId, linked_account_id: resolvedLinkedAccountId });
             }
 
             // 2. Save Contract (If provided)

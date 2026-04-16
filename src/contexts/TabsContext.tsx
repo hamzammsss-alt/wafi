@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getRouteByPath } from '../../config/routes';
 
 export interface Tab {
     id: string;
@@ -21,6 +22,12 @@ interface TabsContextType {
 }
 
 const TabsContext = createContext<TabsContextType | undefined>(undefined);
+
+const buildPathWithSearch = (location: { pathname?: string; search?: string }) => {
+    const pathname = String(location?.pathname || '/').trim() || '/';
+    const search = String(location?.search || '').trim();
+    return `${pathname}${search}`;
+};
 
 export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [tabs, setTabs] = useState<Tab[]>([
@@ -84,6 +91,27 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const updateTabTitle = useCallback((path: string, newTitle: string) => {
         setTabs(prev => prev.map(t => t.path === path ? { ...t, title: newTitle } : t));
     }, []);
+
+    useEffect(() => {
+        const currentPath = buildPathWithSearch(location);
+        if (!currentPath || currentPath === '/system/login') return;
+
+        setActiveTabPath((prev) => (prev === currentPath ? prev : currentPath));
+        setTabs((prev) => {
+            if (prev.some((tab) => tab.path === currentPath)) return prev;
+
+            const route = getRouteByPath(currentPath);
+            return [
+                ...prev,
+                {
+                    id: currentPath,
+                    path: currentPath,
+                    title: route?.description || currentPath,
+                    isClosable: currentPath !== '/',
+                },
+            ];
+        });
+    }, [location]);
 
     return (
         <TabsContext.Provider value={{ tabs, activeTabPath, openTab, closeTab, switchTab, navigateInTab, updateTabTitle }}>

@@ -44,10 +44,10 @@ export const CompanyInformation: React.FC = () => {
     };
 
     return (
-        <div className="h-full bg-gray-50 p-6 overflow-auto" dir="rtl">
+        <div className="app-page h-full overflow-auto" dir="rtl">
             <div className="max-w-5xl mx-auto">
                 {/* Header */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="card p-6 mb-6">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
@@ -69,7 +69,7 @@ export const CompanyInformation: React.FC = () => {
                 </div>
 
                 {/* Basic Information */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="card p-6 mb-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <FileText size={20} className="text-indigo-600" />
                         البيانات الأساسية
@@ -160,7 +160,7 @@ export const CompanyInformation: React.FC = () => {
                 </div>
 
                 {/* Financial Information */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                <div className="card p-6 mb-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <DollarSign size={20} className="text-green-600" />
                         البيانات المالية
@@ -201,7 +201,7 @@ export const CompanyInformation: React.FC = () => {
                 </div>
 
                 {/* Logos */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="card p-6">
                     <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <Upload size={20} className="text-purple-600" />
                         الشعارات
@@ -259,3 +259,4 @@ export const CompanyInformation: React.FC = () => {
         </div>
     );
 };
+

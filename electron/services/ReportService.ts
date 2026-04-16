@@ -349,9 +349,13 @@ export class ReportService {
                 SUM(l.total_price) as total_sales,
                 -- Cost Calculation: Sum of Cost recorded in Inventory Transactions for this Ref
                 (
-                    SELECT ABS(SUM(inv_tr.cost_price * inv_tr.quantity))
+                    SELECT ABS(SUM(
+                        CAST(COALESCE(NULLIF(inv_tr.unit_cost, ''), NULLIF(inv_tr.cost_price, ''), 0) AS REAL)
+                        * COALESCE(inv_tr.quantity, 0)
+                    ))
                     FROM inventory_transactions inv_tr
-                    WHERE inv_tr.ref_no = i.invoice_no AND inv_tr.item_id = l.item_id
+                    WHERE (inv_tr.ref_no = i.invoice_no OR inv_tr.ref_document_id = i.invoice_no)
+                      AND inv_tr.item_id = l.item_id
                 ) as total_cost
             FROM sales_invoice_lines l
             JOIN sales_invoices i ON l.invoice_id = i.id

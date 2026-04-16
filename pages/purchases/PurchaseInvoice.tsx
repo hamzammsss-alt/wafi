@@ -1,14 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     Save, Printer, Search, Plus, Trash2, Calendar,
     ArrowRight, Truck, Building2, Package,
     ChevronDown, Hash, CreditCard, FileText
 } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { UnifiedPartnerPicker, UnifiedPartner } from '../../components/UnifiedPartnerPicker';
 import { v4 as uuidv4 } from 'uuid';
+import { useTabs } from '../../src/contexts/TabsContext';
 import { toArabicWords } from '../../src/utils/tafqeet';
 import { useEnterNavigation } from '../../src/hooks/useEnterNavigation';
+import { useBesanHotkeys } from '../../src/hooks/useBesanHotkeys';
+import { findItemByCode, searchItemsByInput } from '../../utils/itemLookup';
+import { ItemCodeInput } from '../../components/items/ItemCodeInput';
+import { ItemLookupModal } from '../../src/components/items/ItemLookupModal';
 
 // --- Types ---
 interface InvoiceHeader {
@@ -57,6 +62,9 @@ interface Item {
     id: string;
     name_ar: string;
     code: string;
+    barcode?: string;
+    name_en?: string;
+    name?: string;
     cost_price: number;
     base_unit_id: string;
     tax_rate?: number;
@@ -72,10 +80,100 @@ interface Warehouse {
     name: string;
 }
 
+interface DispatchConversionContext {
+    source: 'dispatch';
+    dispatchId: string;
+    dispatchCode?: string | null;
+    createdAt?: number;
+}
+
+interface DispatchTrackingMeta {
+    partnerCode: string;
+    partnerName: string;
+}
+
+const PURCHASE_INVOICE_CONVERSION_KEY = 'wafi:purchase-invoice-conversion';
+
+const normalizeText = (value: unknown): string => String(value ?? '').trim().toLowerCase();
+
+const parseDispatchTrackingNotes = (rawNotes: unknown): DispatchTrackingMeta => {
+    const parsed: DispatchTrackingMeta = {
+        partnerCode: '',
+        partnerName: ''
+    };
+
+    const source = String(rawNotes ?? '').trim();
+    if (!source) return parsed;
+
+    const parts = source.split('|').map((part) => part.trim()).filter(Boolean);
+    for (const part of parts) {
+        const separator = part.indexOf(':');
+        if (separator < 0) continue;
+
+        const key = normalizeText(part.slice(0, separator));
+        const value = part.slice(separator + 1).trim();
+        if (!value) continue;
+
+        if (
+            key.includes('partner code') ||
+            key.includes('supplier code') ||
+            key.includes('customer code') ||
+            key.includes('كود')
+        ) {
+            parsed.partnerCode = value;
+            continue;
+        }
+        if (
+            key.includes('partner name') ||
+            key.includes('supplier name') ||
+            key.includes('customer name') ||
+            key.includes('المورد') ||
+            key.includes('العميل') ||
+            key.includes('الدليل')
+        ) {
+            parsed.partnerName = value;
+        }
+    }
+
+    return parsed;
+};
+
+const readPurchaseInvoiceConversionContext = (): DispatchConversionContext | null => {
+    try {
+        const raw = sessionStorage.getItem(PURCHASE_INVOICE_CONVERSION_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed?.source !== 'dispatch') return null;
+        const dispatchId = String(parsed?.dispatchId || '').trim();
+        if (!dispatchId) return null;
+        return {
+            source: 'dispatch',
+            dispatchId,
+            dispatchCode: parsed?.dispatchCode ? String(parsed.dispatchCode) : null,
+            createdAt: Number(parsed?.createdAt || 0) || undefined
+        };
+    } catch {
+        return null;
+    }
+};
+
+const clearPurchaseInvoiceConversionContext = () => {
+    try {
+        sessionStorage.removeItem(PURCHASE_INVOICE_CONVERSION_KEY);
+    } catch {
+        // ignore storage failures
+    }
+};
+
 // --- Component ---
 export const PurchaseInvoice = () => {
     const navigate = useNavigate();
     const { id } = useParams();
+    const [searchParams] = useSearchParams();
+    const dispatchIdFromQuery = String(searchParams.get('dispatch_id') || '').trim();
+    const dispatchCodeFromQuery = String(searchParams.get('dispatch_code') || '').trim();
+    const conversionAppliedRef = useRef(false);
+    const { openTab } = useTabs();
 
     // Add Container Ref for Navigation
     const containerRef = useRef<HTMLDivElement>(null);
@@ -119,9 +217,25 @@ export const PurchaseInvoice = () => {
         shipmentId: ''
     });
 
+    const createLine = (): InvoiceLine => ({
+        id: uuidv4(),
+        itemId: '',
+        itemName: '',
+        itemCode: '',
+        unitId: '',
+        unitName: '',
+        quantity: 1,
+        price: 0,
+        taxAmount: 0,
+        taxRate: 0.16,
+        discount: 0,
+        total: 0,
+        net: 0
+    });
+
     const [lines, setLines] = useState<InvoiceLine[]>([
-        { id: uuidv4(), itemId: '', itemName: '', itemCode: '', unitId: '', unitName: '', quantity: 1, price: 0, taxAmount: 0, taxRate: 0.16, discount: 0, total: 0, net: 0 },
-        { id: uuidv4(), itemId: '', itemName: '', itemCode: '', unitId: '', unitName: '', quantity: 1, price: 0, taxAmount: 0, taxRate: 0.16, discount: 0, total: 0, net: 0 }
+        createLine(),
+        createLine()
     ]);
 
     // UI State
@@ -130,10 +244,119 @@ export const PurchaseInvoice = () => {
     const [activeLineId, setActiveLineId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
+    const applyDispatchConversion = async (
+        api: any,
+        conversionContext: DispatchConversionContext,
+        fetchedItems: Item[],
+        fetchedUnits: Unit[],
+        fetchedSuppliers: any[]
+    ) => {
+        if (!api?.inventory?.getStockDocument) return false;
+
+        const dispatch = await api.inventory.getStockDocument(conversionContext.dispatchId);
+        const sourceHeader = dispatch?.header;
+        const sourceLines = Array.isArray(dispatch?.lines) ? dispatch.lines : [];
+        if (!sourceHeader || sourceLines.length === 0) return false;
+
+        const notesMeta = parseDispatchTrackingNotes(sourceHeader?.notes);
+        const dispatchCode = String(
+            sourceHeader?.code ||
+            sourceHeader?.ref_no ||
+            conversionContext.dispatchCode ||
+            ''
+        ).trim();
+        const dispatchDate =
+            String(sourceHeader?.date || '').split('T')[0] ||
+            new Date().toISOString().split('T')[0];
+
+        let matchedSupplier: any = null;
+        if (Array.isArray(fetchedSuppliers)) {
+            const byCode = notesMeta.partnerCode
+                ? fetchedSuppliers.find((supplier: any) =>
+                    normalizeText(supplier?.code || supplier?.partner_code) === normalizeText(notesMeta.partnerCode)
+                )
+                : null;
+            const byName = !byCode && notesMeta.partnerName
+                ? fetchedSuppliers.find((supplier: any) =>
+                    normalizeText(supplier?.name_ar || supplier?.name || supplier?.name_en) === normalizeText(notesMeta.partnerName)
+                )
+                : null;
+            matchedSupplier = byCode || byName || null;
+        }
+
+        const mappedLines = sourceLines
+            .map((line: any): InvoiceLine | null => {
+                const itemId = String(line?.item_id || '').trim();
+                if (!itemId) return null;
+
+                const quantity = Math.abs(Number(line?.quantity) || 0);
+                if (quantity <= 0) return null;
+
+                const matchedItem = fetchedItems.find((item) => String(item.id) === itemId);
+                const unitId = String(line?.unit_id || matchedItem?.base_unit_id || '').trim();
+                const unitName = unitId
+                    ? String(fetchedUnits.find((unit) => String(unit.id) === unitId)?.name_ar || line?.unit_name || '')
+                    : String(line?.unit_name || '');
+                const taxRate = Number(matchedItem?.tax_rate ?? 0.16);
+                const price = Number(matchedItem?.cost_price ?? line?.cost ?? 0);
+                const total = quantity * price;
+                const taxAmount = (total || 0) * taxRate;
+
+                return {
+                    id: uuidv4(),
+                    itemId,
+                    itemName: String(line?.item_name || matchedItem?.name_ar || matchedItem?.name || ''),
+                    itemCode: String(line?.item_code || matchedItem?.code || ''),
+                    unitId,
+                    unitName,
+                    quantity,
+                    price,
+                    taxAmount,
+                    taxRate,
+                    discount: 0,
+                    total,
+                    net: total + taxAmount
+                };
+            })
+            .filter((line: InvoiceLine | null): line is InvoiceLine => !!line);
+
+        if (mappedLines.length === 0) return false;
+
+        setHeader((prev) => ({
+            ...prev,
+            date: dispatchDate,
+            dueDate: dispatchDate,
+            warehouseId: String(sourceHeader?.warehouse_id || prev.warehouseId || ''),
+            supplierId: matchedSupplier?.id || prev.supplierId,
+            supplierCode: String(matchedSupplier?.code || matchedSupplier?.partner_code || prev.supplierCode || ''),
+            supplierName: String(
+                matchedSupplier?.name_ar ||
+                matchedSupplier?.name ||
+                matchedSupplier?.name_en ||
+                notesMeta.partnerName ||
+                prev.supplierName
+            ),
+            supplierPhone: String(matchedSupplier?.phone || matchedSupplier?.mobile || prev.supplierPhone || ''),
+            manualRef: dispatchCode || prev.manualRef,
+            notes: `محول من سند إرسال ${dispatchCode || conversionContext.dispatchId}`
+        }));
+        setLines(mappedLines);
+        return true;
+    };
+
     // --- Load Data ---
     useEffect(() => {
+        conversionAppliedRef.current = false;
         loadMasterData();
-    }, [id]);
+    }, [id, dispatchIdFromQuery, dispatchCodeFromQuery]);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            loadMasterData();
+        };
+        window.addEventListener('focus', handleFocus);
+        return () => window.removeEventListener('focus', handleFocus);
+    }, [id, dispatchIdFromQuery, dispatchCodeFromQuery]);
 
     const loadMasterData = async () => {
         setLoading(true);
@@ -171,6 +394,37 @@ export const PurchaseInvoice = () => {
                     branchId: mainBranch ? mainBranch.id : (brs?.[0]?.id || ''),
                     warehouseId: mainWarehouse ? mainWarehouse.id : ''
                 }));
+
+                if (!conversionAppliedRef.current) {
+                    const storedContext = readPurchaseInvoiceConversionContext();
+                    const conversionContext: DispatchConversionContext | null =
+                        storedContext ||
+                        (dispatchIdFromQuery
+                            ? {
+                                source: 'dispatch',
+                                dispatchId: dispatchIdFromQuery,
+                                dispatchCode: dispatchCodeFromQuery || null
+                            }
+                            : null);
+
+                    if (conversionContext?.source === 'dispatch' && conversionContext.dispatchId) {
+                        try {
+                            await applyDispatchConversion(
+                                api,
+                                conversionContext,
+                                its || [],
+                                us || [],
+                                sups || []
+                            );
+                        } finally {
+                            clearPurchaseInvoiceConversionContext();
+                        }
+                    } else {
+                        clearPurchaseInvoiceConversionContext();
+                    }
+
+                    conversionAppliedRef.current = true;
+                }
             }
         } catch (e) {
             console.error(e);
@@ -190,11 +444,36 @@ export const PurchaseInvoice = () => {
 
     const { subtotal, totalDiscount, totalTax, netTotal } = calculateTotals();
 
+    const applyItemToLine = (line: InvoiceLine, item: Item): InvoiceLine => {
+        const taxRate = (item.tax_rate !== undefined) ? item.tax_rate : 0.16;
+        const baseTotal = line.quantity * item.cost_price;
+        const taxAmount = (baseTotal - line.discount) * taxRate;
+
+        return {
+            ...line,
+            itemId: item.id,
+            itemCode: item.code,
+            itemName: item.name_ar,
+            unitId: item.base_unit_id,
+            price: item.cost_price,
+            taxRate,
+            total: baseTotal,
+            taxAmount,
+            net: baseTotal + taxAmount - line.discount
+        };
+    };
+
     const updateLine = (id: string, field: keyof InvoiceLine, value: any) => {
         setLines(prev => prev.map(l => {
             if (l.id !== id) return l;
 
             const updated = { ...l, [field]: value };
+
+            if (field === 'itemCode') {
+                const matched = findItemByCode(items, String(value));
+                if (matched) return applyItemToLine(updated, matched);
+                return { ...updated, itemId: '', itemName: '' };
+            }
 
             // Recalculate Logic
             const baseTotal = updated.quantity * updated.price;
@@ -208,57 +487,31 @@ export const PurchaseInvoice = () => {
         }));
     };
 
-    const handleItemCodeBlur = (lineId: string, code: string) => {
-        if (!code) return;
-        const item = items.find(i => i.code === code);
-
-        setLines(prev => prev.map(l => {
-            if (l.id !== lineId) return l;
-            if (item) {
-                return {
-                    ...l,
-                    itemId: item.id,
-                    itemCode: item.code,
-                    itemName: item.name_ar,
-                    unitId: item.base_unit_id,
-                    price: item.cost_price,
-                    taxRate: (item.tax_rate !== undefined) ? item.tax_rate : 0.16,
-                    // Recalculate immediately
-                    taxAmount: (l.quantity * item.cost_price - l.discount) * ((item.tax_rate !== undefined) ? item.tax_rate : 0.16),
-                    net: (l.quantity * item.cost_price) + ((l.quantity * item.cost_price - l.discount) * ((item.tax_rate !== undefined) ? item.tax_rate : 0.16)) - l.discount
-                };
-            } else {
-                return { ...l, itemId: '', itemName: '--- صنف غير موجود ---' };
-            }
-        }));
-    };
-
     const handleItemSelect = (item: Item) => {
         if (!activeLineId) return;
         setLines(prev => prev.map(l => {
             if (l.id !== activeLineId) return l;
-            return {
-                ...l,
-                itemId: item.id,
-                itemCode: item.code,
-                itemName: item.name_ar,
-                unitId: item.base_unit_id,
-                price: item.cost_price,
-                taxRate: (item.tax_rate !== undefined) ? item.tax_rate : 0.16,
-                // Recalculate immediately
-                taxAmount: (l.quantity * item.cost_price - l.discount) * ((item.tax_rate !== undefined) ? item.tax_rate : 0.16),
-                net: (l.quantity * item.cost_price) + ((l.quantity * item.cost_price - l.discount) * ((item.tax_rate !== undefined) ? item.tax_rate : 0.16)) - l.discount
-            };
+            return applyItemToLine(l, item);
         }));
         setItemSearchOpen(false);
         setActiveLineId(null);
         setSearchTerm('');
     };
 
+    const openPortalTab = (path: string, title: string) => {
+        openTab({
+            id: path,
+            path,
+            title,
+            isClosable: true
+        });
+        setItemSearchOpen(false);
+        setActiveLineId(null);
+        setSearchTerm('');
+    };
+
     const addNewLine = () => {
-        setLines(prev => [...prev, {
-            id: uuidv4(), itemId: '', itemName: '', itemCode: '', unitId: '', unitName: '', quantity: 1, price: 0, taxAmount: 0, taxRate: 0.16, discount: 0, total: 0, net: 0
-        }]);
+        setLines(prev => [...prev, createLine()]);
     };
 
     const removeLine = (id: string) => {
@@ -266,6 +519,58 @@ export const PurchaseInvoice = () => {
             setLines(prev => prev.filter(l => l.id !== id));
         }
     };
+
+    const focusLineField = (
+        rowIndex: number,
+        field: 'itemCode' | 'quantity' | 'price' | 'discount'
+    ) => {
+        const input = document.getElementById(`purchase-invoice-${field}-${rowIndex}`) as HTMLInputElement | null;
+        if (!input) return;
+        input.focus();
+        input.select();
+    };
+
+    const moveNextFromField = (
+        rowIndex: number,
+        field: 'itemCode' | 'quantity' | 'price' | 'discount'
+    ) => {
+        if (field === 'itemCode') {
+            window.setTimeout(() => focusLineField(rowIndex, 'quantity'), 0);
+            return;
+        }
+
+        if (field === 'quantity') {
+            window.setTimeout(() => focusLineField(rowIndex, 'price'), 0);
+            return;
+        }
+
+        if (field === 'price') {
+            window.setTimeout(() => focusLineField(rowIndex, 'discount'), 0);
+            return;
+        }
+
+        const nextIndex = rowIndex + 1;
+        if (rowIndex === lines.length - 1) {
+            setLines(prev => [...prev, createLine()]);
+            window.setTimeout(() => focusLineField(nextIndex, 'itemCode'), 40);
+            return;
+        }
+
+        window.setTimeout(() => focusLineField(nextIndex, 'itemCode'), 0);
+    };
+
+    const handleLineEnter = (
+        e: React.KeyboardEvent<HTMLInputElement>,
+        rowIndex: number,
+        field: 'itemCode' | 'quantity' | 'price' | 'discount'
+    ) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        e.stopPropagation();
+        moveNextFromField(rowIndex, field);
+    };
+
+    const modalItems = useMemo(() => searchItemsByInput(items, searchTerm, 100), [items, searchTerm]);
 
     const handleSave = async (post: boolean = false) => {
         // Validation...
@@ -300,6 +605,31 @@ export const PurchaseInvoice = () => {
             setHeader(prev => ({ ...prev, supplierName: '--- غير موجود ---' }));
         }
     }
+
+    const handleNew = () => navigate('/purchases/invoices/new');
+    const handlePost = async () => { alert("Post not implemented in this demo."); };
+
+    useBesanHotkeys({
+        disabled: itemSearchOpen || supplierPickerOpen || loading || submitting,
+        onNew: handleNew,
+        onSave: () => handleSave(false),
+        onPost: handlePost,
+        onClose: () => {
+            if (itemSearchOpen) setItemSearchOpen(false);
+            if (supplierPickerOpen) setSupplierPickerOpen(false);
+        },
+        onLookup: () => {
+            if (activeLineId) {
+                setItemSearchOpen(true);
+            } else {
+                // If no active line, set the first one or create new
+                if (lines.length > 0) {
+                    setActiveLineId(lines[0].id);
+                    setItemSearchOpen(true);
+                }
+            }
+        }
+    });
 
     return (
         <div ref={containerRef} className="flex flex-col h-screen bg-gray-50 from-gray-50 to-white" dir="rtl">
@@ -388,6 +718,32 @@ export const PurchaseInvoice = () => {
 
                 {/* 2. Items Grid */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
+                    <div className="px-4 py-3 border-b border-gray-200 bg-white flex items-center justify-between">
+                        <div className="text-sm font-bold text-gray-700">الأصناف</div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => openPortalTab('/items', 'بطاقات الأصناف')}
+                                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                قائمة الأصناف
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => openPortalTab('/items', 'إضافة صنف جديد')}
+                                className="px-3 py-1.5 border border-indigo-200 bg-indigo-50 rounded-lg text-sm text-indigo-700 hover:bg-indigo-100 transition-colors"
+                            >
+                                إضافة صنف جديد
+                            </button>
+                            <button
+                                type="button"
+                                onClick={loadMasterData}
+                                className="px-3 py-1.5 border border-emerald-200 bg-emerald-50 rounded-lg text-sm text-emerald-700 hover:bg-emerald-100 transition-colors"
+                            >
+                                تحديث الأصناف
+                            </button>
+                        </div>
+                    </div>
                     <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wider grid grid-cols-12 gap-3">
                         <div className="col-span-2">كود الصنف</div>
                         <div className="col-span-3">اسم الصنف</div>
@@ -401,17 +757,21 @@ export const PurchaseInvoice = () => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                        {lines.map((line) => (
+                        {lines.map((line, index) => (
                             <div key={line.id} className="grid grid-cols-12 gap-3 items-center p-2 rounded-lg hover:bg-gray-50 group border border-transparent hover:border-gray-200 transition-all">
                                 {/* Item Code Input */}
                                 <div className="col-span-2 relative">
                                     <div className="flex items-center">
-                                        <input
-                                            type="text"
+                                        <ItemCodeInput
+                                            items={items}
                                             value={line.itemCode}
-                                            onChange={e => updateLine(line.id, 'itemCode', e.target.value)}
-                                            onBlur={e => handleItemCodeBlur(line.id, e.target.value)}
+                                            onChange={(nextCode) => updateLine(line.id, 'itemCode', nextCode)}
+                                            onEnter={() => moveNextFromField(index, 'itemCode')}
+                                            inputId={`purchase-invoice-itemCode-${index}`}
                                             className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 font-mono text-sm h-10"
+                                            autoSelectUnique={false}
+                                            showOnEmpty={true}
+                                            maxResults={20}
                                             placeholder="كود الصنف"
                                         />
                                         <button
@@ -446,8 +806,10 @@ export const PurchaseInvoice = () => {
                                 <div className="col-span-1">
                                     <input
                                         type="number"
+                                        id={`purchase-invoice-quantity-${index}`}
                                         value={line.quantity}
                                         onChange={e => updateLine(line.id, 'quantity', Number(e.target.value))}
+                                        onKeyDown={e => handleLineEnter(e, index, 'quantity')}
                                         className="w-full px-2 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 text-center font-bold h-10"
                                         min="1"
                                     />
@@ -457,8 +819,10 @@ export const PurchaseInvoice = () => {
                                 <div className="col-span-1">
                                     <input
                                         type="number"
+                                        id={`purchase-invoice-price-${index}`}
                                         value={line.price}
                                         onChange={e => updateLine(line.id, 'price', Number(e.target.value))}
+                                        onKeyDown={e => handleLineEnter(e, index, 'price')}
                                         className="w-full px-2 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 text-center h-10"
                                     />
                                 </div>
@@ -467,8 +831,10 @@ export const PurchaseInvoice = () => {
                                 <div className="col-span-1">
                                     <input
                                         type="number"
+                                        id={`purchase-invoice-discount-${index}`}
                                         value={line.discount}
                                         onChange={e => updateLine(line.id, 'discount', Number(e.target.value))}
+                                        onKeyDown={e => handleLineEnter(e, index, 'discount')}
                                         className="w-full px-2 py-2 border border-gray-200 rounded-lg outline-none focus:border-indigo-500 text-center h-10 text-red-500"
                                     />
                                 </div>
@@ -545,9 +911,7 @@ export const PurchaseInvoice = () => {
                             />
                         </div>
                         <div className="flex-1 overflow-y-auto p-2">
-                            {items
-                                .filter(i => i.name_ar.includes(searchTerm) || i.code.includes(searchTerm))
-                                .slice(0, 50)
+                            {modalItems
                                 .map(item => (
                                     <div
                                         key={item.id}
@@ -555,7 +919,9 @@ export const PurchaseInvoice = () => {
                                         className="p-3 hover:bg-gray-50 border-b border-gray-100 cursor-pointer flex justify-between items-center"
                                     >
                                         <div className="font-bold text-gray-800">{item.name_ar}</div>
-                                        <div className="text-sm text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">{item.code}</div>
+                                        <div className="text-sm text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
+                                            {item.barcode ? `${item.code} | ${item.barcode}` : item.code}
+                                        </div>
                                     </div>
                                 ))
                             }
