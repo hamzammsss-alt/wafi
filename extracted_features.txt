@@ -1,0 +1,1705 @@
+1
+BISAN SYSTEMS LTD.
+BISAN  erp  TRADE & INDUSTRY
+      
+      
+     
+     
+    
+    
+     
+      
+ 
+Bisan Systems Ltd.
+Batn El Hawa Street
+P. O. Box 530
+Ramallah, PalestineTel: +970 2 298 5941
+Fax +970 2 298 5942Jerusalem: +972 2 627 7196
+Jawwal: +970 599 677 904
+Ooredoo: +970 562 900 020
+Jordan: +960 6 400 8017USA: +1 617 902 2261
+whatsapp +970599677904
+info@bisan.comA r e l i a b l e & c o m p r e h e n s i v e y e t s c a l a b l e E R P
+s o l u t i o n f o r s m a l l , m e d i u m & l a r g e s i z e d
+e n t e r p r i s e s ; s e r v i c i n g a w i d e r a n g e o f
+b u s i n e s s s e c t o r s f r o m s e r v i c e o r i e n t e d t o
+l a r g e i n d u s t r i a l e s t a b l i s h m e n t s . B i s a n E R P
+o f f e r s c u s t o m i z e d m o d u l e s f o r v e r t i c a l
+s e c t o r s . T h u s , p r o v i d i n g t h e u l t i m a t e s o l u t i o n
+f o r y o u r d a i l y b u s i n e s s a c t i v i t i e s a n y t i m e &
+a
+ n y w h e r e .
+2
+BISAN SYSTEMS LTD.
+O U R  PU R PO SE
+wherever we go,
+we improve 
+management
+decision making.why bisan?
+bisan erp general Features
+bisan ERP Financial functions
+Cybersecurity & Access Rights
+a glimpse at our partners
+Pro Vs. Lite ComparisonFinancial Management
+Sales & Marketing Management
+Purchases, Inventory & Warehouse Management
+bisan erp Modules
+Financial Budget
+Sales Budget
+Branch Management
+Large Dealership
+Workflow & Electronic Transaction Approval
+Fixed Assets Management
+Production Management
+Campaigns & Loyalty
+Payroll & Attendance
+Human Resources Management & HR Portal
+Online/Offline Point of Sale (POS)
+Mobile Sales Application with Catalog View
+Leasing
+Fuel Station Management
+Management of Crushers & Ready-mix Projects
+Car Rental
+Service Center
+W W W . B I S A N . C O M
+3
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+35+ years of Excellence 
+Why Bisan?
+12,000A fully integrated ERP solution serving the current and future needs of various sectors.
+Using Bisan Solutions
+International Market
+Presence
+ Fast and Comprehensive
+Implementation Available Anytime…
+Anywhere
+Licensed in Many
+Countries
+365 Days Support
+AvailabilityZero Investment
+in Hardware
+An ERP Specifically
+Designed to Meet
+Today‘s ChallengesContinuous Upgrades
+at No Additional CostCloud Application
+Available in Eight
+LanguagesA Modular Seamlessly
+Integrated System with a
+Single Point of Entry
+Redundant SitesAdaptable to your
+own Business and
+Industry Needs
+Optimized Decision Making ReliableMulti-layer Security100% Secure Access to
+Real Time Information+
+http://www.aicpa.org/soc4so
+4
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+Bisan ERP General Features
+Bisan ERP is continuously upgraded with enhancements and new
+features to improve efficiency and provide higher accuracy.
+5
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+   
+     
+    
+      
+   
+     
+     
+       
+      
+           
+    
+     
+     
+    
+   
+   
+    
+     
+    
+     
+     
+   
+    
+  
+Truly Multilingual system
+A unique multilingual implementation
+providing the user the option to
+switch between desired languages at
+any given time during a session. An
+enhanced capability that allows
+entering sales vouchers in a certain
+language and printing it in another.
+ 
+       
+      
+      
+       
+      
+     cloud erp
+The main screen is designed to clearly
+differentiate the application from the
+browser. The system supports all internet
+and intranet functionalities. The system is
+accessible from any internet connection,
+providing high data security.
+User-friendly
+The
+ system provides user-friendly  menus
+and graphics, a capability  to hide, show
+and move columns around to customize
+screens per user.
+ The menus and windows
+are  designed in groups that deal with
+different cycles of accounting  and
+management titles.Split views
+A
+ feature to split the view to multiple
+screens of the open tabs of files,
+transactions or reports in the system.
+6
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+A complete drill down functionality
+showing all details of each
+transaction on every report.
+Capability to filter tables by
+excluding or including any criteria.A tool to record recurring
+transactions for higher
+efficiency and productivity.
+Capability to send automated SMS notifications
+directly from the system per set configurable
+criteria for the accounts payable, accounts
+receivable,
+balances.transactions and customerFiltering Capabilitiesdrill down functionality
+SMS INtegrationMacro recorder
+Keyboard Accessibility 
+All functionality in Bisan ERP can be
+accessed using the keyboard alone,
+without relying on a mouse or
+touchpad. In addition to
+customizable shortcuts per each
+user's preference for increased
+efficiency.
+
+7
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+        
+     
+         
+     
+     
+    
+      
+        
+      
+      
+      
+      
+      
+         
+       
+       
+    
+    
+Advanced search functionality
+A
+ unique detailed search mechanism which enables
+search in any given database, regardless of its size
+by searching through keywords or any other
+requested field. The search utilizes the Soundex
+algorithm that is especially handy for Arabic
+keyword searches.Data import
+Capability to import tables and lists
+from Excel, XML & Text with the
+appropriate account mapping and
+fields.Reports Export
+Capability to export all generated reports to
+Excel,
+ JSON, XML, Text and HTML files, which
+can be opened by any other spreadsheet or
+word processing software.Fully integrated modules
+The package is fully integrated where all the data
+is entered through conventional vouchers directly
+on the screen. The system will eliminate the use of
+all paperwork whereby all transactions are
+entered once and automatically posted to
+corresponding modules, accounts and files.
+8
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+     
+    
+   
+           
+      
+      
+      
+     
+User-defined HTML bank transfer
+forms printed directly from the
+payment vouchers.     
+     
+   
+ 
+    
+    
+      
+       
+Bank transfer forms  
+   Ability to attach any file type with the related
+record or voucher, such as attaching purchase
+or expense invoices with related payment or
+journal
+ voucher or attaching item picture with
+item file or for catalog view.Document attachment Integration with peripherals
+Full
+ integration with peripherals such as
+check readers and scanners, bar code
+readers, scales, document scanners
+and
+ others.
+Barcode Reading & Printing
+Integration
+ with barcode readers for
+easy inventory taking and adding
+items in an invoice, in addition, to
+direct barcode printing for labels.Multiple
+ Year Reporting
+A full reporting capability per different
+periods and years allowing for
+multiple
+ years reporting, overlapping
+years and cumulative periods.
+9
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+      
+     
+           
+     
+       
+       
+      
+     
+      
+  
+     
+  
+    
+           
+    
+    
+  
+  
+     Email integration
+Full integration with email systems, where
+single vouchers, such as purchase orders,
+invoices or receipts, could be sent. Also, bulk
+actions, such as pay slips or statements of
+accounts, are sent in PDF format as
+attachments to the e-mail and all
+transactions are logged and stored in the
+system for review.QR code for delivery location
+The ability to print a QR code on store
+issues and invoices indicating the
+contact’s location for accurate and
+error free delivery.
+Customized
+ views
+User customized views for all tables, to
+set preferences for certain criteria and
+they can be saved for future retrieval.User preferences
+An ability to define each user’s
+language preference, setting
+default fields in transactions and
+customized
+ views for tables.
+10
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+    
+     
+            
+      
+        
+    
+     
+      
+       
+     
+  
+     
+     
+     
+     
+     
+     
+  Record Cloning
+T o a c c e l e r a t e t h e d a t a e n t r y a n d t o s a v e
+t i m e a n d e f f o r t , y o u c a n c l o n e a n y
+r e c o r d a v a i l a b l e , w h e t h e r i t i s a f i l e o r a
+v o u c h e r . T h u s , p r o v i d i n g a p o w e r f u l
+f e a t u r e f o r u s i n g a n y a v a i l a b l e v o u c h e r
+a s a t e m p l a t e , r a t h e r t h a n b u i l d i n g a
+s e p a r a t e t e m p l a t e p e r v o u c h e r .Multiple users Definition
+Multiple users are each defined
+with assigned access rights up to
+the field level.
+Contact Language Preference
+Regardless of the default language the
+user is working with, a language
+preference for each contact may be
+defined; for sending invoices and SMS
+messages in a preferred different
+language.Check
+ Reading & Printing
+Fully user-defined easy-to-use setup per
+bank account for check dimensions and
+available fields for any check format.
+11
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+The system allows the user to open
+different menus and tables at the same
+time, to add new records and modify
+existing ones without having to interrupt
+the transaction you are working on.  
+The system provides consistent use of function
+keys and icons that are clearly defined. In
+addition, it provides a customized definition of
+shortcuts and icons per user.A dashboard including various
+widgets for easy reading of data
+and reports in the system.
+A feature to automatically generate
+customizable alerts from the system.
+These alerts include SMS messages,
+email notifications or pop-up messages
+on the screen.Multi-tab Interface
+Customizing User Shortcuts & IconsDashboard & Widgets
+Notification Alerts         
+   
+     
+       
+     
+Customizable Tables and Files
+Customizable tables and files as per your
+terminology and internal processes
+through adding certain fields to existing
+tables and files with the option to change
+suggested labels and titles for fields.
+12
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+ 
+       
+     
+      
+     
+  
+     
+     
+    
+      
+       
+   
+    
+      
+     
+       
+     
+      
+     
+    
+       
+     
+      
+     
+   
+      
+   
+    
+    
+     
+     
+    
+      
+   
+     
+     
+    
+      
+ Full audit trail
+Every
+ change in the system is audited on
+the field level, giving authorized users
+access to view all historical changes of
+any piece of data with who/what/where/
+and when information.Segmented accounts
+According to the type of your institution,
+whether manufacturing or service
+oriented, you could tailor segmented
+accounts to cope with management
+requirements.
+API
+ Data exchange
+A
+ capability to integrate with third
+party systems by utilizing the API
+data exchange module, thus, saving
+time and effort in data entry and
+ensuring accuracy.
+13
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+   bisan erp Modules 
+14
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+General Ledger (GL)
+Accounts Receivable & Accounts Payable
+A fully real time integrated module with the GL. It includes
+multi-currency accounts management with consolidated
+reports; for easy accurate comprehensive view for all
+customers and vendors balances, in addition, to detailed
+transactions with full analysis of your customers’ and
+supplier’s activities such as aging, periodic collections
+and maximum credit reports.A flexible chart of accounts with a multi-level file structure
+and multi-level segments; capturing all vouchers and
+financial transactions and providing flexible reporting
+capabilities for any specified period, including detailed
+information and a drill down functionality. A double-entry
+voucher system that is fully integrated to maintain all your
+financial entries in an accounting ledger.financial management
+15
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+Providing grouping on any set of files, whether
+general ledger accounts, A/R, A/P, assets or cost
+centers to simplify data entry and provide flexible
+comprehensive reporting options.
+User-defined properties when extracting the
+financial reports for valuation handling, reporting
+pending inventory in store issues and store receipt
+vouchers.
+Multi-level VAT rate definition that is fully integrated
+with vouchers; giving a fully automated calculation
+and management for taxable transactions and
+providing full reporting and VAT settlement
+processing, including detailed invoice bank report.Multi-level File Structure
+VAT Settlement & Invoice BankPending Inventory Handling & Reporting
+16
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+Comprehensive financial reports for any period of time
+including (DD-MM-YY TO DD-MM-YY), giving flexibility for
+cross period and multiyear reporting, in addition, to
+providing currency translation for extracting the reports in
+any desired currency defined in the system.
+Management for multiple bank accounts and multiple
+currencies, full management and tracking for received and
+issued checks and bank transfers with full details, including
+due dates and endorsed checks. This provides an easy
+automated bank reconciliation process, a cash flow
+forecast for each bank account and the capability to track
+the full check cycle from when it is written till it is cashed or
+canceled.For accurate item cost calculation and evaluation, the system provides a tool for financial management,
+tracking, reporting and allocation of additional costs per shipment. Especially for imports where each
+additional cost such as transportation, tariffs, storage, bonds...etc. can be allocated to different items in
+the shipment, by a predefined set of criteria or by direct allocation per item.
+Financial Statements
+Full Banking & Checks ManagementImport & Item Cost Allocation Management
+17
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+Fully user-defined ease-to-use setup per bank account
+for checks dimensions and available fields for any
+available check format; in addition, to user-defined
+HTML bank transfer forms. 
+Featuring an unlimited number of account segments of
+any size, with sub ledgers giving you the flexibility of
+tracking transactions to the smallest detail. Clients
+could tailor segmented accounts to cope with
+management requirements, was it per department,
+project, cost center, currency or other.Fully integrated with financial reports; providing detailed
+depreciation schedules per asset or group of assets at
+any period of time, facilitating management of assets,
+new additions and discarding. In addition, to providing
+detailed managerial reports for assets related expenses.
+Multiple Segments/Cost CentersCheck Printing & Bank Transfer forms
+Automatic Depreciation Calculations 
+18
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+For accurate financial and managerial reporting
+Bisan ERP provides automated calculation and
+management for accrued and prepaid expenses
+with an easy-to-use user-defined setup.
+Full multi-currency management with user-defined
+currencies and currency rates tracking; providing the
+ability to use multiple currencies per voucher, with
+automated currency conversion and currency
+variance calculations vouchers. This allows the
+management of as many currencies as needed,
+keeping track of account balances, customer
+statements and financial reports in the standard
+currency, as well as any other defined currency.
+Moreover, the system provides multi-currency
+reporting and value translation for all available
+reports.Prepaid & Accrued Expenses
+Multi-Currency Management
+19
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+The system provides a mini-CRM system with full
+customer information, in addition to multi-level
+grouping file structure for tracking and roll up
+reporting to parent company level.
+The system provides segments for categorizing
+customers, to help extract data for sector types
+or any required grouping desired for
+managerial reporting and market analysis.
+Price quotation sent to customers keeping track
+of historical data and automatically integrated
+with the sales process vouchers.Customers
+Proforma InvoicesCustomer SegmentationSales & Marketing Management
+20
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+Full management and tracking for salespersons per sales
+document; providing full sales analysis and reporting, in
+addition, to commission calculations based on sales and
+collection.Full integration and workflow between all sales vouchers
+and proforma invoices, sales orders, store issue vouchers
+and invoices. This simplifies processing, tracking quantities
+and prices from one document to another, including partial
+quantities; eliminating double data entry and providing full
+traceability per item for accurate processing and control.
+Multiple price lists with multiple currencies where each
+customer or group of customers is assigned a price list. With
+a multi-level file structure, the system provides the flexibility
+to update all related price lists in one entry, as well as the
+option to automatically update the defined prices for each
+customer once a new sales invoice, manual invoice or sales
+order is posted. In addition, to special deals and agreements
+management; where each customer could be assigned a
+special price list with a validity date per item.Price Management
+Sales Force ManagementSales Voucher Integration
+21
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+Comprehensive analytical reporting for quantities and
+values provided in multi-currencies, for cross period,
+periodic, comparative reports per periods, sectors, item
+groups, categories and areas; with detailed reports
+including profit per item or customer at any period.
+To facilitate accurate collection and evaluation
+the system provides different invoice
+settlement options.Analytical Sales Reports
+Invoice Settlement
+22
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+The system allows an unlimited number of warehouses
+to be defined, with grouping options for multi branch
+inventory management and evaluation.Full set of purchase vouchers (purchase orders, store
+receipts, purchase invoices and purchase returns).
+Vouchers in the workflow are linked together for easy
+tracking and control. All transactions are fully
+integrated with the GL and the budgeting module.
+Suppliers could be grouped based on type of activity
+and sector. Items could be assigned to suppliers for
+ease of control and for comparing item prices from
+different suppliers.SuppliersPurchase Cycle Workflow
+Multiple Warehouse ManagementPurchases, Inventory &
+Warehouse Management 
+23
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+The system provides the ability to assign a bin number
+or location per warehouse for each item with
+maximum, minimum and reorder quantities to
+facilitate locating items, managing available
+quantities per shelf and ease of the inventory taking
+process.
+An innovative approach for multiple unit
+management for items. Each defined item could
+have more than one unit of measurement with
+automatic conversion; simplifying data entry
+transactions and providing comprehensive
+reporting capabilities per any desired item unit.Automated real time First In, First Out (FIFO), by serial
+number, standard or fixed ending inventory
+evaluation by item at any desired time; taking into
+account branches and warehouse grouping.Inventory & Location Management
+Ending Inventory Evaluation
+Multiple Unit Tracking Per Item
+24
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+Comprehensive analytical reporting for quantities and values;
+providing deep data with multi-currency, cross-period,
+periodic and comparative reports per periods, areas per item
+or supplier.Full management for items sold by area or volume with unlimited
+dimension options for the same item such as glass, stone and
+marble, where the item is sold by count in different dimensions
+while priced by area or volume, this option provides the ultimate
+management tool for such items by tracking only one item unit
+for data processing and providing summary reports by area or
+volume and comprehensive reports with infinite combinations of
+different dimensions per item.Full count and weight management where an item is sold or
+purchased by unit of count, package or case, while priced
+by weight where actual weight per unit varies. This provides
+easy inventory sales and purchase processing, while
+maintaining a high level of sales and inventory control.
+Purchases reportsCount & Weight Item Management
+Height, Width & Length Item Management
+25
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+The system provides a multi-level segmentation and
+grouping per item providing comprehensive purchases and
+managerial reporting by quantities and values by items,
+brands, categories, classifications...etc.Ability to assign part numbers and barcodes per item unit
+for an enhanced inventory management system;
+providing an easy user-defined label printing tool to print
+item part numbers, serial numbers or batches as
+barcodes. This feature is a practical cost-effective
+solution.
+Tracking of each item with the specific serial number or batch (shelf-
+life expiry dates) for enhancing the management of items under
+warranty, recalling items or track expiry dates for perishable items;
+includes a complete set of reports. Keep track of each item
+according to your preferences and procedure using fully
+customizable alerts and notifications in the system.Barcode Management
+Item Segmentation & Reporting
+Serial Number, batch Lot & expiry date Tracking
+BISAN SYSTEMS LTD.
+     
+      
+      
+        
+      
+     
+O M C . N A S I . B W W W       
+      
+       
+      
+  
+       
+    
+      
+     
+       
+ 
+         
+       
+         
+      
+      
+       
+      
+      
+       
+      
+            
+      
+      
+      
+   
+      
+       
+     
+     
+      
+  
+      
+     
+      
+    
+        
+      
+         
+      
+       
+     The Sales Budget module is seamlessly integrated with the 
+sales  vouchers  providing  real  time  reporting  and  targets 
+monitoring.
+ Flexible Structure : Flexible sales budget structure based 
+on  any  combination  of  defined  segments,item 
+categories,customer  groups, 
+  areas  or  sales  persons.  
+Sales  budgets  could  be  configured  per  quantities 
+and/or sales amounts.
+Multi-year & 
+ Period Budgets : The  system  allows  setting 
+up multiple  year  sales  budgets  with  transactions  
+and monitoring  across  fiscal  years.F urthermore,   the  
+system  allows  creating  multiple  sales  budgets 
+with  different  configuration  setup  per  period  for 
+reporting.
+Budget  Vouchers : Sales  budget  setup  transactions  
+are  entered  through  special  budget  vouchers,keeping  
+track  of  all  additions, 
+  amendments  and  variations  on  
+any  sales budget.
+Flexible  Dates : A  flexible  time  span  for  each 
+budget created; allowing budgets to be allocated
+per  year, 
+ quarter,  month,  or  a  range  of  days;  including 
+non-consistent time intervals within the same budget.
+Reporting : Various  reports,   including;   roll  up 
+sales segments, budgeted vs actual sales.The Financial Budget module is seamlessly integrated with 
+the GL, the purchasing vouchers and other modules 
+providing real time reporting and budget control.
+Multi-year & Period Budgets : The system allows setting 
+up multiple year budgets with transaction and control 
+across fiscal years. The system allows
+creating multiple budgets per period for control 
+purposes and reporting.
+Flexible Structure : Flexible budget structure based on 
+any combination of defined segments.
+Budget Vouchers : Budget setup transactions are 
+entered through special budget vouchers, keeping 
+track of all additions, amendments and variations on 
+any budget.
+Flexible Dates & Controls : A flexible time span for each 
+budget created; allowing budgets to be allocated per 
+year, quarter, month, or a range of days; including on-
+consistent time intervals within the same budget. 
+Moreover, budgets could be defined as, controlled 
+budgets not allowing users to exceed set amounts or 
+uncontrolled budgets used for reporting purposes.
+Reporting : Various numbers of reports, including: roll 
+up accounts and segments, budgeted vs. actual 
+expenditure, budget period matrix for expenses and 
+revenues for every segment and every year.financial
+ budgetsales budget26
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+Large Dealership Branch Management
+Workflow & Electronic
+Transaction Approval 
+A module to manage sales between PS/IL for large
+corporations as classified with the Tax Authorities,
+including an electronic file that is submitted to the
+Tax Authorities.The system allows an unlimited number of
+branches to be defined in the system, with
+grouping options for branch management and
+financial reporting.
+To save time and ensure accuracy, the system offers
+a multi-level electronic approval structure per
+document. Thus, providing a paperless, fully tracked,
+automated and audited transaction processing
+based on your own set policies and procedures.27
+BISAN SYSTEMS LTD.
+fixed assets management
+Asset Purchase: Managed by conventional purchase vouchers eliminating double data entry and errors. 
+Each fixed asset entered is automatically assigned a unique asset tag “serial number,” in addition to the
+supplier serial number (if available), the asset tag could be printed as a barcode label directly from the
+system and attached to the asset.
+Locations: Flexible user-defined location structure that could track multiple geographic areas and buildings 
+down to the room level.
+Custody Management:  In addition, to asset tracking by location, assets could be managed by custody. Asset 
+movement from location and/or custody are managed by serially numbered vouchers, keeping historical 
+movements that could be easily tracked and audited at any point of time. User-friendly tools for automatic 
+loading and bulk movement of assets from one location to another or to multiple locations 
+Fixed Assets Count:  Special count vouchers with user-defined settings based on location or building are 
+defined for asset count. Count vouchers are serially numbered keeping track of historical transactions. Data 
+entry is flexible to use barcode scanners by scanning either the asset tags or the supplier’s serial numbers. 
+Reporting contains assets per location, in addition, to comparing assets per location with counted assets.
+Asset Disposal Management : Management of sold, donated, lost or used as spare parts of fixed assets with 
+full related financial transactions.The Fixed Assets Management module is designed to manage the entire life-
+cycle of fixed assets, including: purchase of assets, asset location and custody,
+asset count, expired assets, assets retirement and sale of assets. It includes
+multiple asset accounts, multiple depreciation accounts, and multiple
+depreciation expense accounts. Assets are grouped by type, category,
+classification or others. The module is fully integrated with items and
+warehouse management. It provides automatic calculation and posting of
+depreciation expenses which could be set periodically and provides full fixed
+assets disposal management; in addition to detailed reporting.
+W W W . B I S A N . C O M28
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+Production Management
+Theoretical (Standard) Production Formulas: 
+Multiple theoretical production formulas can be
+defined using the units and quantities of: finished
+products, raw materials, hours of labor per
+employees’ groups and percentages of allocated
+direct cost.
+Bill of Materials:  Raw materials needed for 
+producing the required quantity of finished goods 
+are calculated based on theoretical production 
+formulas defined.Production Lines:  Multiple production lines can 
+be defined for better planning of resources and
+more accurate direct and indirect cost allocation. 
+Employees Groups:  For easier planning and 
+labor cost allocation, multiple labor groups can 
+be defined where employees are assigned to 
+different groups based on the type of labor 
+required in production.Production Vouchers: Actual quantities of finished products 
+produced, actual quantities of raw material and labor hours
+per employee used in production.
+Variance Calculations:  Detailed reports comparing both 
+quantities and cost of raw material and labor hours as per 
+theoretical formulas with actual raw material and labor hours 
+consumed for actual finished products produced during any 
+period.
+Warehouse Integration: Production vouchers are fully 
+integrated with warehouse and stock cards including
+production floor and warehouse management.Flexible to support multiple production theoretical
+formulas, to report variances on standard and actual
+raw material and direct labor used in production,
+besides, automatic allocation of direct and indirect
+production costs and expenses; giving accurate
+calculation of cost per produced unit.29
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+Raw Material Variance Controls: User-defined 
+variance percent allowed per raw material line
+item used in production formula, controlling
+mistakes in actual quantities of raw materials used
+in production and data entry errors. 
+Direct Cost Allocation:  The production module is 
+fully integrated with the general ledger where all 
+transactions on accounts defined as direct cost in 
+the production formulas are allocated to production 
+costing based on points and percentages as 
+defined in the production formulas.
+Indirect Cost Allocation:  All transactions on 
+accounts defined in the GL as indirect expenses 
+are allocated to production costing as a percent 
+of direct material or direct labor as defined in the 
+production formulas.Finished Goods Costing: Automatic calculation 
+of cost per unit produced by allocating actual raw
+materials used, direct labor (employees actual
+hours used), and actual direct & indirect costs in
+the period. 
+Comprehensive Reports:  Produced quantities, raw 
+material and labor required, actual raw material 
+and labor consumed, quantities and cost variance 
+calculations and finished goods costing per unit.30
+O M C . N A S I . B W W W BISAN SYSTEMS LTD.
+        
+        
+          
+        
+        
+              
+        
+         
+        
+                
+              
+     
+         
+    
+        
+       
+           
+          
+         
+     
+          campaigns & loyalty
+         
+        
+       Two configurable modules in one, a Campaigns module or a
+Loyalty module, in which campaigns manage sales campaigns and
+offers, as well as, customer’s points and balances.
+Loyalty is points based module for customers for 
+purchases depending on loyalty scheme defined.
+Point redemption formula may be defined to be 
+consumed as a payment option for products/services.
+Loyalty and Campaign invoices may be customized to 
+add and show loyalty points balances for each 
+contact, item, group, classification, category etc.
+Advanced filters to allow/deny contacts or invoices.
+Loyalty reports include points aging, items sold on 
+points, redemption amounts, points balance details 
+and points per campaigns.Campaigns can all be entered in the generic format (buy 
+2 get 1 free) versus the range format (first ten or last ten).
+Both campaigns may be assigned by quantity or by 
+invoice amount.
+Each campaign may be assigned to a certain 
+department, branch, area or currency.
+Campaigns can be set to run in specific days and hours.
+Campaigns may be assigned for a selected few of the 
+contacts and users can create membership groups.
+Campaigns reports include: campaign performance, 
+bonus items per campaign and profit per campaign.31
+BISAN SYSTEMS LTD.Payroll & Attendance
+       
+        
+     
+       
+      
+     
+          
+      
+         
+      
+      
+       
+     
+    
+     
+        
+        
+          
+       
+         
+         
+  
+        
+         
+ 
+       
+        
+       
+        
+        
+              
+          
+         
+           
+         
+             
+            
+         
+          
+     The Payroll and Attendance module fully supports multiple countries Payroll
+Deduction Regulations, income tax and other local tax regulations. It is
+flexible to support different methods and formulas for calculating payroll,
+allowances and deductions. A payroll form can be created to take into
+account calculation method, payment period, payment type and the design
+of printout pay slip for each group of employees. The system allows the user
+to create and print payroll slips for each employee, and offers easy and
+flexible treatment of employee advances and loans. Additionally, the system
+can deal with attendance transactions either by import from the attendance
+clock or through manual entry.
+Employee File: Full name, employment type, ID
+number, address, city, phone, fax, mobile, email, job 
+title,education, gender, bank account, marital 
+status,number of children, card number, general 
+notes and employees’ start dates and end dates.
+Payroll Calculations Variables: User-defined infinite 
+number of variables that will be used in setting different 
+payroll calculation formulas. This approach provides
+a flexible powerful tool similar to building formulas in 
+spreadsheets.
+Salaries Calculations: The system provides different 
+methods for salaries calculations, hourly rates, 
+over time and attendance hours, multiple shifts and
+fixed periodic salaries (daily, weekly, bi-weekly, 
+monthly,quarterly, semi-annually and annually).
+Deductions & Allowances: User-defined calculation 
+methods
+ for deductions and additions to salaries. The 
+system is ready for implementing the SSC announced 
+instructions and regulations.
+W
+ W W . B I S A N . C O MSalaries Yearly Increases Percent or Scale: Multiple 
+methods for defining yearly salary increases per employee 
+groups or individual employees as a fixed percent rate or 
+based on defined scales, such as; a combination of grade
+and step matrix.
+Payroll Tax Forms: An automatically generated ready to 
+submit detailed payroll tax form as required by the PNA 
+tax authorities and complying with updated tax laws.
+Pay Slips: Fully customizable pay-slips to include any 
+information available in the employee file and any 
+variable or calculation in the payroll. Different pay slips 
+formats and information fields could be defined based on
+employee
+ groups and sub groups.32
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+Employee Group: 
+setup.
+Working Schedule: The system allows assigning employees to different groups for time saving and easy 
+Flexible planned working schedule per employee group including start and end time, 
+breaks, handling of extra and shortage time from schedule. In addition to the option of including the break
+within or subtracting it from the regular working hours. The working schedule is built in an easy logical flow
+with the ability of assigning the whole year in a weekly format or handling specific calendar days. The
+system provides the option of adding a rule where OUT actions are auto recorded in case there is an
+unclosed day.
+Attendance Rules: Multiple set of rules for handling attendance calculations such as maximum and 
+minimum daily working hours, margins for early and late IN minutes, margins for early and late OUT minutes
+. 
+Vacations Schedule:  Setting employees vacations and providing detailed reports per employee in addition 
+to vacation balance calculations.
+Absence Types:  Defining an unlimited number of absence types such as delays/early leaves, annual vacation,
+holidays, closures, illness, maternity...etc. with tracking and reporting on each type. The system enables different
+ways of dealing with attendance delays/early departures such as reduction from vacation balance, deduction
+from salary...etc.33
+BISAN SYSTEMS LTD.Human Resources Management & HR Portal
+       
+        
+       
+       
+      
+      
+       
+       
+          
+       
+        
+         
+        
+        
+      
+        
+      
+    
+     
+      
+     
+       
+              
+      
+      
+        
+         
+          
+       
+   
+         
+          
+              
+      
+          
+         
+         
+         
+         
+O M C . N A S I . B W W WA full HR management module that includes the organization structure,
+employee
+ profile, absence management, and performance evaluation
+in addition to a self-service portal. This module fully integrates with
+and
+ completes the Payroll & Attendance module. The HR administrator
+is responsible for setting up the employee profiles and information
+whereby each employee may access the module and perform needed
+actions
+ through a portal or directly through the system.
+Organization Structure: A sub-module to identify how
+the company is organized, what divisions it has, what
+departments these divisions contain, and what are the
+defined
+ positions in these departments. Divisions may be
+distributed horizontally (the common case) across the
+organization hierarchy or through a vertical alignment.
+The divisions and departments entities provide flexibility to
+allow room for any future organization restructuring.
+Salary Range: A salary range may be added to positions.
+Thus, providing more control, where each employee
+is directly assigned a position. The HR administrator
+may define groups and link employees to these groups 
+depending on the organization’s needs. The main defined
+entities in this module are: division, department, position,
+employee, position history, group and branch.
+Employee Profile: A profile that captures all the
+needed data of the employees, including basic
+Information, dependents list, personnel, insurance,
+education, certificates, previous work experience, in-
+house experience, acquired training, and bank accounts
+information.
+ Salary information, history, allowances and
+deductions are also defined. Once a profile is
+deactivated, it can be reactivated in case of re-
+employment.Absence
+ Management: A submodule for leave
+management, for vacations, holidays, and other leaves
+such as annual, sick, educational, training, breastfeeding,
+and others as defined per the organization’s policies. The
+organization can set its own rules to check the eligibility
+and scope of the vacation, as well as, designing a workflow
+for approvals for certain leaves, thus enabling email
+notification for vacation requests.
+Employees may access the self-service portal to apply for 
+leaves and to check their yearly vacation balance, as well
+as, leave approvals or rejections.34
+O M C . N A S I . B W W W BISAN SYSTEMS LTD.
+     
+      
+            
+         
+   
+      
+       
+       
+        
+        
+      
+      
+       
+         
+        
+      
+         
+        
+       
+         
+       
+         
+      
+       
+   
+        
+      
+       
+      
+      
+       
+        
+              
+       
+           
+         
+   
+       
+        
+        
+         
+        
+      
+      
+        
+         
+         
+       
+         
+   Performance Evaluation: This module manages the 
+performance evaluation across the organization as a whole,
+it can be triggered to start or to end at any time
+in the year whenever the organization sees it is suitable
+for its business operations.
+The performance evaluation is based on creating
+evaluation templates for each division or department or 
+group
+ or specific position based on the organization’s 
+needs. Defined parameters and KPIs are set for calculating 
+evaluation range and statuses and may be linked to
+salary
+ raises for the next payroll cycle.
+Achievements
+ can be documented under three types;
+reward, recognition or promotion. Also, notices can be 
+recorded in the employee file as a notice or warning.
+Managers may view all evaluations and their status for 
+pending and completed ones through the self-service 
+portal and may be edited until they are finally approved
+by the designated approver.Recruitment : the system provides a complete
+solution for the recruitment process. Once a vacancy 
+position is defined and the recruitment stages are set, the 
+user can track each applicant’s progress and the
+status of each vacancy in a very robust manner, until 
+reaching the conclusion of either deactivating the 
+application or recruiting the applicant which creates a
+comprehensive new employee file.
+Self-service
+ HR Portal : In order to have a functional 
+HR module; an employee portal is essentially
+needed. The portal enables the employees to view 
+their information, and execute certain actions such 
+as apply for a vacation, approve employee-related 
+requests, and fill the performance evaluation form. It 
+is a stand-alone product with a simple web interface
+that connects directly to the HR module and Bisan 
+ERP.35
+O M C . N A S I . B W W W BISAN SYSTEMS LTD.
+Online/Offline point of sale (POS)
+         
+     
+       
+     
+        
+       
+        
+     
+       
+             
+        
+          
+          
+      
+      
+       
+        
+       
+                 
+     
+   
+       
+   
+    
+        
+   
+        
+         
+          
+          
+   
+       
+        
+          
+   
+        
+                
+       
+       
+      
+     A user-friendly Point of Sale module for retail and
+cash
+ sales, easy-to-use setup and management. It is
+seamlessly fully integrated with the Bisan ERP Trade
+and Industry Professional Edition utilizing all back-
+office
+ system features, reporting and modules.
+Full set of related sales and collection reports including 
+comparative hourly sales.
+Item barcode scanning.
+Supports multi-currency customer payments and change 
+amounts.
+Multi-currency item price lists.
+Real time integration with warehouse and inventory 
+management.
+Supports defining a different warehouse for each P OS.
+Supports defining a specific price list for each POS.
+Access rights for each POS to define available item groups.
+Supports adding order variations to items on PO S 
+invoice/receipt.
+Supports adding delivery charges and delivery 
+instructions.
+Supports holding invoices when holding items for 
+customers.
+Shifts start/end with a summary report of cash at shift end.
+Handles sales returns.
+User-friendly interface for adding customers and contact 
+information for gathering a customers’ database.Online real time integration with back office with 
+Internet connection.
+Works offline when connection is lost.
+Supports multiple POS stations.
+Supports multiple price lists and station and customer 
+price list definition.
+Supports touch screens with catalog view and item 
+grouping.
+Supports campaigns offers and schemes by showing 
+a list of all active campaigns for the designated 
+period.
+Quick access to define fast moving items.
+One function key for printing POS invoices on slip 
+printers, open cash drawer and post transactions.
+Easy search and item lookup.
+Cash and on account sales.
+Supports to and from money transfers.
+Full integration with peripherals: slip printers, cash 
+drawer, barcode scanners and scales barcodes.
+Direct impact on inventory with sales transactions.36
+O M C . N A S I . B W W W BISAN SYSTEMS LTD.
+mobile sales application With Catalog View
+                          
+         
+      
+        
+          
+  
+          
+  
+         
+        
+    
+      
+          
+       
+              
+  
+            
+               
+                 
+ 
+         
+                  
+         
+          
+         
+          
+          A mobile sales application that is fully integrated with Bisan ERP
+Trade & Industry providing a flexible and cost effective solution
+for automation and management of the sales force in the field.
+It allows distributors and suppliers to collect sales orders, sales
+returns and collections. The module is set up on an Android
+tablet or smartphone, and can be connected to a receipt slip
+printer.
+A complete ordering and van sales module, with an 
+automatic check for items actually loaded on trucks and 
+semi-automated van refill capabilities.
+Real time tracking for sales orders, invoices, collections 
+and inventory with prefix sequence of documents for 
+each salesman.
+Catalog view to organize items in groups and ease the 
+ordering process.
+Attach images for item groups, classification, brands 
+and categories.Apply campaigns and offer loyalty discounts for 
+customers..
+User friendly and easy-to-use with three different views 
+and the ability to increase the size of the item picture.
+Barcode scanning through the camera of the tablet or 
+mobile for placing orders.
+Works both online and offline if the salesman is out of 
+network connectivity to resume work without interruption. 
+Once the connection is re-established all data is sent to 
+Bisan ERP automatically.
+Ability to  enter a comment per line item and all comments 
+appear in Bisan ERP.37
+O M C . N A S I . B W W W BISAN SYSTEMS LTD.
+         
+        
+      
+      
+         
+        
+          
+      
+      
+           
+                    
+         
+     
+        
+         
+     
+       
+       
+       
+         
+      
+        
+         
+      
+          
+           
+         
+           
+     All issued invoices for cash or credit  sales allow for  
+bonuses and  discounts and are fully  integrated with  
+inventory in Bisan ERP.
+Giving a discount and/or bonus on sales invoices, 
+which automatically is reflected  in Bisan ERP’s 
+inventory.
+All mobile  application vouchers such as invoices, 
+orders and receipts are automatically  posted to Bisan  
+ERP and are reflected  on the accounts directly  as soon 
+as they are printed 
+in the mobile application.
+Reporting  showing activity logs for all sent  vouchers, 
+saved vouchers, inventory balances, vouchers inputted 
+while users  were working  offline  and have not  been 
+transferred  to Bisan
+ERP yet, a detailed report  of all returned items during a 
+specific time frame, statements of
+accounts and a  report for all cash or checks collected  
+per user.Bluetooth connection to printers for printing sales 
+orders, sales returns with return reason, receipt 
+vouchers, manual receipts and statements of account.
+Supports automatic synchronization by hiding out-of-
+stock items in the warehouse for sale orders.
+Ability to edit sales orders on Bisan ERP.
+Each mobile application user preference is defined in 
+Bisan ERP for setting the user language.
+Multi-currency and check receipt vouchers are given 
+automatic serial numbers in Bisan ERP
+ once they are printed in the mobile application.38
+O M C . N A S I . B W W W BISAN SYSTEMS LTD.
+Leasing
+            
+       
+    
+       
+         
+          
+    
+         
+              
+     
+        
+         
+         
+      
+       
+        
+        
+        
+      
+                
+      
+      
+        
+        
+        
+        
+   
+         
+       
+      
+   
+       
+      
+        
+    
+       
+                 
+        The Leasing module is tailored and designed to be utilized for 
+the functions of the automotive industry for contractual car 
+leasing.
+Additional information is added to the contact file to 
+include monthly payment, bank account details, 
+employer and length of employment.
+Information about vehicle, vin number, color of vehicle, 
+type, year of production, mileage,used or new, firsthand 
+or secondhand and car registration date.
+Defining two types of contracts: lease to buy, or lease 
+with the option to buy at the end of the contract period.
+Full contract information is defined to specify the 
+purchase currency and price, commission approval 
+date, date, and amount of first payment, the insurance, 
+guarantor,registration, maintenance, add-on fees, 
+down payment, acquisition payment and any loan 
+information taken for the purpose of leasing.
+An option to spread out the payment installments 
+periodically: monthly, bi-monthly,quarterly, semi-
+annually and annually.Two types of revenue calculations by defining 
+percentages based on purchase amount or loan 
+amount.
+Defined security access rights to allow users to 
+change payment amounts or dates.
+Calculation is based on XIRR-format used for 
+unearned revenue calculation and principal amount.
+Ability to create leasing groups for issuing one 
+invoice for multiple cars leasing.
+Amortization calculations and payment totals 
+reporting.
+Ability to settle contracts for early closing.
+Defining printing templates for leasing contracts, 
+purchase invoices, registration and application 
+forms.
+Full reporting for pending payments, pending 
+revenues and lease aging.39
+O M C . N A S I . B W W W BISAN SYSTEMS LTD.
+    
+       
+     
+       
+   The Crushers & Ready-mix Industry requires a special
+delivery note as per the nature of the operation.
+Weight calculations are specific and accounted for,
+along with extensive reporting:
+  
+  
+   
+    
+     
+           
+         
+     
+       
+   
+        
+      
+    
+        
+     
+    Management of Crushers
+& Ready-Mix ProjectsFuel Station Management
+Fuel
+ Station operations require customized
+features. This module offers a real time solution
+that includes meters management, cash and
+coupon sales, as well as, periodic invoicing for
+full control of items:
+Meter
+ management.
+Shift management.
+Cash sale management.
+Coupon and non-cash sale.
+Periodic invoicing for non-cash sales.
+Special reporting for station, meter, shift and item.Customized delivery format.
+Truck and driver delivery costing per location/ quantity/
+  type of item.
+Ready-mix specification such as flow and greatest
+  measurement.
+Printing delivery in special format per industry
+  (ready-mix, crushers or other).
+Integration with electronic scales.
+Net weight calculation based on each truck weight.
+Periodic
+ invoicing for each project.
+Special reporting.40
+O M C . N A S I . B W W W BISAN SYSTEMS LTD.
+      
+     
+      
+     A module that manages the required service center
+activities in the maintenance and repair industry:
+      
+                
+           
+  
+   
+     
+            
+      
+          
+      
+        
+       
+      
+        
+   
+       
+     
+      
+         
+       Service Center Car Rental
+For car rental operations, special forms and
+an agreement are generated from within
+the system, as well as, extensive reporting
+for the rented and available cars:
+Full management for car rental operations.
+Customized form for car rental agreement.
+Customized printing for car rental agreement.
+Extension agreements.
+Car damage value.
+Available
+ cars on item lookup.
+Send agreements to invoices.Creates installation work order to install sold equipment.
+Work order ticket for maintenance request.
+A detailed report for the employee’s time spent and
+  inventory items consumed for repair and maintenance.
+Track spare parts and accessories used in maintenance.
+Tracking actions to detect work order status.
+Integration with inventory management and invoicing.
+Service contract management for warranty, lease and
+  maintenance.
+Group action to extend or deactivate contracts.
+Preventive visits schedules and reports.
+Management of metered devices maintenance.
+Billing could be set upon meter minimum quantity and/
+or minimum period.41
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+cybersecurity & Access Rights42
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+Controls for assigning password strength
+and requests to change it periodically.Users are organized in a tree fashion similar to that
+of the company’s administrative tree, each user
+can be assigned specific access rights on any
+option, module and functionality in the system.
+A feature that allows users to incorporate
+verified third-party applications as a
+login option to the ERP system.A two-factor authentication for additional
+optional security that sends an SMS to the
+mobile number defined in the user’s file. Users
+should enter the code sent in SMS to verify
+login and it can be defined to verify every login
+or only when trying to log in from new stations.
+Definable time schedules to permit users to log
+in to the system at specific schedules or times.
+password securityAccess Rights security
+Third Party Login Options
+login scheduleTwo-factor Authentication43
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.
+Permitting authorized users’ access in permissible
+fields, sub-fields by defining criteria and rules per
+voucher or record field providing a high level of
+user access control.
+User-defined set of controls for data entry security
+and control, such as: maximum and minimum allowed
+document dates from system date; per bank account
+lock date for reconciled bank statements; data entries
+lock date for last audited or reporting period. These
+controls guarantee unintentional data entry that will
+affect audited or submitted reports.User-defined document printing options allowing
+or denying access to print and post vouchers.In addition to usernames and passwords, a
+security option is defined for permitting
+specific stations to access the system.
+Assigning required signatures for approvals per
+voucher based on criteria and rules for fields
+such as voucher amount, branch, department
+and/or supplier.control datesadvanced security
+Document Printingstation login security
+Electronic signatures44
+W W W . B I S A N . C O M BISAN SYSTEMS LTD.a glimpse at our partners45
+
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.pro vs. lite comparison
+pro lite Features
+General Ledger  
+Account Receivable & Account Payable  
+Multi lingual  
+Multi Currency  
+Multi Currency reporting & values Translation  
+Sales  
+Purchases  
+Full banking & Checks Management  
+Ending Inventory Calculations  
+Depreciation automatic calculations  
+Financial Statements  
+VAT Settlement
+Automatic Currency Variance
+Drill Down Functionality  
+Returns Reason Report  
+Single Point of Entry  
+Contact Language Preferences
+Filtering Capabilities  
+Reports Export to HTML Excel & Text  
+Macro Recorder  
+Multiple Year Reporting  
+Access Rights security  
+Station Login Security  
+Password Security  
+Control Dates  
+Barcode Reading & Printing  
+QR Code for location  vs. pro lite Features
+Login Schedule  
+Electronic Signature Setup  
+Checks Reading  
+Checks Printing  
+Automatic Bank Reconciliation  
+Customized Views  
+Email Integration  
+SMS Integration  
+User Preferences  
+Advanced Security  
+Bank Transfer Forms  
+Advanced Search Functionality  
+Data & Report Import  
+Multiple Segments/ Cost Centers  
+Multi-level File Structure  
+Prepaid & Accrued Expenses  
+Customers Segmentation  
+Multiple Sale & Purchase Price Lists  
+Periodic Sales Reports
+Item Segmentation & Reporting  
+Auditor & Parent Company Codes  
+Invoice Settlement  
+Sector Specific Modules  
+Project Management  
+Multiple Unit Tracking Per Item  vs.
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+_
+__
+_46
+W W W . B I S A N . C O MBISAN SYSTEMS LTD.
+pro lite Additional modules  
+Serial/ Batch Lot Tracking  
+Financial Budgeting  
+Fixed Assets Management  
+Workflow & Electronic Transaction Approval  
+Production Management  
+Payroll  
+HR Portal  
+Sales Performa Invoice  
+Online & Offline Point Of Sale  
+Mobile Sales Application
+Document Attachment  
+Full Audit Trail  
+Multi Branch Management  
+Multi Company Consolidated Financial Report  
+Number of Concurrent Users  vs.
+____________
+Multiple1__47
