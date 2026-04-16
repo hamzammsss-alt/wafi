@@ -1,0 +1,232 @@
+[TEST] Initializing DB at: D:\wafi erp\database.sqlite
+[DB] Loading schema from: D:\wafi erp\database\schema_v1_foundation.sql
+[DB] Loading Schema V2 from: D:\wafi erp\database\schema_v2_inventory_partners.sql
+[DB] Loading Schema V3 from: D:\wafi erp\database\schema_v3_financials.sql
+[DB] Loading Schema V4 (Sales) from: D:\wafi erp\database\schema_v4_sales.sql
+[DB] Loading Schema V5 (Purchasing) from: D:\wafi erp\database\schema_v5_purchasing.sql
+[DB] Loading Schema V6 (Treasury) from: D:\wafi erp\database\schema_v6_treasury.sql
+[DB] Loading Schema V7 (Reports Views) from: D:\wafi erp\database\schema_v7_views.sql
+[DB] Loading Schema V8 (Manufacturing) from: D:\wafi erp\database\schema_v8_manufacturing.sql
+[DB] Loading Schema V41 (Auth Fix) from: D:\wafi erp\database\schema_v41_fix_auth.sql
+[DB] Loading Schema V14 (Unified HR & Payroll) from: D:\wafi erp\database\schema_v14_hr_unified.sql
+[DB] Loading Schema V10 (Sales Quotations & Orders) from: D:\wafi erp\database\schema_v10_sales_cycle.sql
+[DB] Loading Schema V11 (Budgets) from: D:\wafi erp\database\schema_v11_budgets.sql
+[DB] Loading Schema V12 (Assets) from: D:\wafi erp\database\schema_v12_assets.sql
+[DB] Loading Schema V13 (Currency Rates) from: D:\wafi erp\database\schema_v13_currency_rates.sql
+[DB] Loading Schema V16 (Currency History) from: D:\wafi erp\database\schema_v16_currency_history.sql
+[DB] Loading Schema V17 (Master Data) from: D:\wafi erp\database\schema_v17_master_data.sql
+[DB] Loading Schema V18 (Inventory Master) from: D:\wafi erp\database\schema_v18_inventory_master.sql
+[DB] Skipped duplicate column in Schema V18 (Inventory Master): duplicate column name: brand_id
+[DB] Loading Partners Master V19 from: D:\wafi erp\database\schema_v19_partners_master.sql
+[DB] Skipped duplicate column in Partners Master V19: duplicate column name: region_id
+[DB] Skipped duplicate column in Partners Master V19: duplicate column name: group_id
+[DB] Skipped duplicate column in Partners Master V19: duplicate column name: sales_rep_id
+[DB] Skipped duplicate column in Partners Master V19: duplicate column name: website
+[DB] Skipped duplicate column in Partners Master V19: duplicate column name: credit_days
+[DB] Loading Financial Definitions V20 from: D:\wafi erp\database\schema_v20_financial_definitions.sql
+[DB] Loading Inventory Enhancements V21 from: D:\wafi erp\database\schema_v21_inventory_enhancements.sql
+[DB] Loading Purchase Cycle V22 from: D:\wafi erp\database\schema_v22_purchase_cycle_expansion.sql
+[DB] Loading Loading Purchase Returns V23 from: D:\wafi erp\database\schema_v23_purchase_returns.sql
+[DB] Loading Loading Sales Updates V24 from: D:\wafi erp\database\schema_v24_sales_updates.sql
+[DB] Skipped duplicate column in Loading Sales Updates V24: duplicate column name: sales_rep_id
+[DB] Loading Loading HR Updates V25 from: D:\wafi erp\database\schema_v25_hr_updates.sql
+[DB] Skipped duplicate column in Loading HR Updates V25: duplicate column name: hourly_rate
+[DB] Loading Inventory Full V26 from: D:\wafi erp\database\schema_v26_inventory_full.sql
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: trade_name
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: name_he
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: tax_type
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: is_service
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: costing_method
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: standard_cost
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: floor_price
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: has_expiry
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: has_serial
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: shelf_life_days
+[DB] Skipped duplicate column in Inventory Full V26: duplicate column name: default_warehouse_id
+[DB] Loading Purchase RFQ V27 from: D:\wafi erp\database\schema_v27_purchase_rfq.sql
+[DB] Loading Payroll Updates V15 from: D:\wafi erp\database\schema_v15_payroll_updates.sql
+[DB] Skipped duplicate column in Payroll Updates V15: duplicate column name: salary_type
+[DB] Skipped duplicate column in Payroll Updates V15: duplicate column name: commission_rate
+[DB] Skipped duplicate column in Payroll Updates V15: duplicate column name: commission_target
+[DB] Skipped duplicate column in Payroll Updates V15: duplicate column name: piece_rate_default
+[DB] Loading Fix Taxes V32 from: D:\wafi erp\database\schema_v32_fix_taxes.sql
+[DB] Loading Critical Fixes V33 from: D:\wafi erp\database\schema_v33_critical_fixes.sql
+[DB] Skipped duplicate column in Critical Fixes V33: duplicate column name: description
+[DB] Skipped duplicate column in Critical Fixes V33: duplicate column name: name
+[DB] Skipped duplicate column in Critical Fixes V33: duplicate column name: category
+[DB] Skipped duplicate column in Critical Fixes V33: duplicate column name: issue_date
+[DB] Loading Item Fields V34 from: D:\wafi erp\database\schema_v34_item_fields.sql
+[DB] Skipped duplicate column in Item Fields V34: duplicate column name: production_line
+[DB] Skipped duplicate column in Item Fields V34: duplicate column name: default_supplier_id
+[DB] Skipped duplicate column in Item Fields V34: duplicate column name: warranty_info
+[DB] Skipped duplicate column in Item Fields V34: duplicate column name: grade
+[DB] Loading Fix Missing Tables V35 from: D:\wafi erp\database\schema_v35_fix_missing_tables.sql
+[DB] Loading Fix MFG Schema V36 from: D:\wafi erp\database\schema_v36_fix_mfg_schema.sql
+[DB] Loading Taxes Update V37 from: D:\wafi erp\database\schema_v37_taxes_update.sql
+[DB] Loading Analysis Codes V38 from: D:\wafi erp\database\schema_v38_analysis_codes.sql
+[DB] Loading Stock Documents V39 from: D:\wafi erp\database\schema_v39_stock_documents.sql
+[DB] Loading Partners Profile V42 from: D:\wafi erp\database\schema_v42_partner_profile_expansion.sql
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: name_he
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: parent_partner_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: partner_language
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: registration_date
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: birth_date
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: nationality
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: is_company
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: print_prices_on_docs
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: print_balance_on_docs
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: membership_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: sector_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_type_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: vendor_type_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: notes
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: address_en
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: address_he
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: street_ar
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: street_en
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: street_he
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: country_code
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: timezone
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: po_box
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: gps_location
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: contact_methods_json
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: bank_accounts_json
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_enabled
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_name_ar
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_name_en
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_name_he
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_code
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_currency_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_account_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_discount_percent
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_previous_balance
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_tax_mode
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_end_deal_date
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: customer_item_rules_json
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: credit_policy_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: max_credit_limit
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: max_checks_limit
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: personal_check_limit
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: facilitation_days
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: facilitation_from_month_end
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: allow_over_limit
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: overdue_unpaid_days
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: validation_type
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: include_collection_checks
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: include_sales_orders_posting
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: allowed_check_due_days
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_enabled
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_name_ar
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_name_en
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_name_he
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_price_list_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_currency_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_account_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_tax_mode
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_items_only
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_item_rules_json
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_source_discount_percent
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: supplier_source_discount_until
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_enabled
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_title_ar
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_title_en
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_title_he
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_gender
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_doc_type
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_id_number
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_is_resident
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_social_status
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_account_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_currency_id
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_children_count
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_students_count
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_dependents_count
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_education
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_group
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_number
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_hire_date
+[DB] Skipped duplicate column in Partners Profile V42: duplicate column name: employee_end_date
+[DB] Loading Seeding Custom Bank Accounts from: D:\wafi erp\database\seed_banks_custom.sql
+[DB] Loading Dispatch V43 from: D:\wafi erp\database\schema_v43_dispatch.sql
+[DB] Loading Order to Invoice Cycle V44 from: D:\wafi erp\database\schema_v44_order_to_invoice_cycle.sql
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: delivery_status
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: dispatched_qty
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: invoiced_qty
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: source_type
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: source_id
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: source_line_id
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: dispatch_id
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: order_id
+[DB] Skipped duplicate column in Order to Invoice Cycle V44: duplicate column name: dispatch_line_id
+[DB] Loading Treasury Schema V45 from: D:\wafi erp\database\schema_v45_treasury_updates.sql
+[DB] Skipped duplicate column in Treasury Schema V45: duplicate column name: manual_ref
+[DB] Skipped duplicate column in Treasury Schema V45: duplicate column name: cost_center_id
+[DB] Skipped duplicate column in Treasury Schema V45: duplicate column name: sales_rep_code
+[DB] Skipped duplicate column in Treasury Schema V45: duplicate column name: bank_id
+[DB] Skipped duplicate column in Treasury Schema V45: duplicate column name: endorser
+[DB] Added 'reconciled' to journal_entry_lines
+[DB] Verified dispatch_header schema (added invoice fields).
+[DB] Seeding Default Parent Accounts...
+[DB] Failed to seed default parent accounts SqliteError: no such column: account_level
+    at Database.prepare (D:\wafi erp\node_modules\better-sqlite3\lib\methods\wrappers.js:5:21)
+    at initDB (D:\wafi erp\dist-electron\electron\database.js:289:44)
+    at Object.<anonymous> (D:\wafi erp\scripts\test-db.js:7:5)
+    at Module._compile (node:internal/modules/cjs/loader:1714:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1848:10)
+    at Module.load (node:internal/modules/cjs/loader:1448:32)
+    at Module._load (node:internal/modules/cjs/loader:1270:12)
+    at c._load (node:electron/js2c/node_init:2:17993)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:244:24) {
+  code: 'SQLITE_ERROR'
+}
+[DB] Verified bank_accounts schema (added missing columns).
+[DB] Verified banks schema.
+[Seed] Starting Palestinian Data Seeding (Standard COA)...
+[Seed] Currencies exist. Fetching IDs...
+[Seed] Seeding Taxes...
+[Seed] COA already exists.
+[Seed] Completed.
+Seeding/Updating Standard Organizational Roles (Arabic)...
+Roles seeded (Arabic) successfully.
+[DB] Cleaned up invalid units.
+[DB REPAIR] Checking for phantom FK references in sqlite_master...
+[DB REPAIR] Found 8 objects with broken FK references. Patching sqlite_master directly...
+[DB REPAIR] ❌ Fatal error during broken FK reference patch: SqliteError: table sqlite_master may not be modified
+    at Database.prepare (D:\wafi erp\node_modules\better-sqlite3\lib\methods\wrappers.js:5:21)
+    at D:\wafi erp\dist-electron\electron\database.js:700:28
+    at sqliteTransaction (D:\wafi erp\node_modules\better-sqlite3\lib\methods\transaction.js:65:24)
+    at initDB (D:\wafi erp\dist-electron\electron\database.js:705:15)
+    at Object.<anonymous> (D:\wafi erp\scripts\test-db.js:7:5)
+    at Module._compile (node:internal/modules/cjs/loader:1714:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1848:10)
+    at Module.load (node:internal/modules/cjs/loader:1448:32)
+    at Module._load (node:internal/modules/cjs/loader:1270:12)
+    at c._load (node:electron/js2c/node_init:2:17993) {
+  code: 'SQLITE_ERROR'
+}
+[DB] dispatch_header and dispatch_lines tables ready.
+[DB] Verified mfg_machines schema.
+[DB] Master Data Redesign Migration Completed
+[DB] Added 'linked_account_id' to hr_employees.
+[DB] Loading Schema V7 (Reports Views) from: D:\wafi erp\database\schema_v7_views.sql
+[DEBUG] Dump failed Error: ENOENT: no such file or directory, open 'C:\WAFI ERP\schema_dump.txt'
+    at Object.writeFileSync (node:fs:2425:20)
+    at initDB (D:\wafi erp\dist-electron\electron\database.js:1048:12)
+    at Object.<anonymous> (D:\wafi erp\scripts\test-db.js:7:5)
+    at Module._compile (node:internal/modules/cjs/loader:1714:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1848:10)
+    at Module.load (node:internal/modules/cjs/loader:1448:32)
+    at Module._load (node:internal/modules/cjs/loader:1270:12)
+    at c._load (node:electron/js2c/node_init:2:17993)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:244:24) {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\WAFI ERP\\schema_dump.txt'
+}
+Database initialized with System Admin tables.
+[TEST] Database initialized successfully.
+[TEST] Broken FKs in sqlite_master: 8
+[TEST] FAILURE: Broken FKs still remain.

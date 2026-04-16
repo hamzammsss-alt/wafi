@@ -1,0 +1,47 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sw?
+
+# Electron build output
+dist-electron/
+dist-electron-backup/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# .NET build artifacts
+backend/**/obj/
+backend/**/bin/
+
+# Temporary output and debug files
+tmp_*.txt
+tmp_*.db
+output.txt
+test_logs.txt
+schema_dump.txt
+extracted_features.txt
+
+# Tool/AI directories
+.codex/

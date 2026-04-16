@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: wafi: https://fonts.googleapis.com https://fonts.gstatic.com https://esm.sh; img-src 'self' data: blob: wafi:;">
+  <title>WAFI ERP</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+  <style>
+    /* Root CSS Variables for DPI Scaling */
+    :root {
+      --base-font-size: 16px;
+      --scale-factor: 1;
+    }
+
+    /* DPI Scaling Support - 125% (1.25x) */
+    @media screen and (-webkit-device-pixel-ratio: 1.25),
+    screen and (device-pixel-ratio: 1.25) {
+      :root {
+        --scale-factor: 1.25;
+      }
+    }
+
+    /* DPI Scaling Support - 150% (1.5x) */
+    @media screen and (-webkit-device-pixel-ratio: 1.5),
+    screen and (device-pixel-ratio: 1.5) {
+      :root {
+        --scale-factor: 1.5;
+      }
+    }
+
+    /* DPI Scaling Support - 175% (1.75x) */
+    @media screen and (-webkit-device-pixel-ratio: 1.75),
+    screen and (device-pixel-ratio: 1.75) {
+      :root {
+        --scale-factor: 1.75;
+      }
+    }
+
+    /* DPI Scaling Support - 200% (2x) */
+    @media screen and (-webkit-device-pixel-ratio: 2),
+    screen and (device-pixel-ratio: 2) {
+      :root {
+        --scale-factor: 2;
+      }
+    }
+
+    body {
+      font-family: 'IBM Plex Sans Arabic', sans-serif;
+      background-color: #0f172a;
+      margin: 0;
+      overflow: hidden;
+      /* Ensure proper rendering at all zoom levels */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Ensure all fixed/absolute positioned elements respect viewport */
+    * {
+      box-sizing: border-box;
+    }
+
+    /* Data-Dense Utilities */
+    .dense-table th,
+    .dense-table td {
+      padding: 4px 12px;
+      font-size: 0.875rem;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 10px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Hide scrollbar for menu overflow */
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Ensure dropdowns and modals are always visible */
+    .dropdown-menu,
+    [role="menu"],
+    [role="dialog"] {
+      position: fixed !important;
+      z-index: 9999 !important;
+    }
+  </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0"
+  }
+}
+</script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+
+</html>
