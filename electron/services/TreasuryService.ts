@@ -719,6 +719,12 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                 // So we credit that Bank Account.
 
                 for (const c of checks) {
+                    let persistedBankId = c.bank_id || null;
+                    if (!persistedBankId && c.bank_account_id) {
+                        const bankAccountRow = db.prepare("SELECT bank_id FROM bank_accounts WHERE id = ?").get(c.bank_account_id);
+                        persistedBankId = bankAccountRow?.bank_id || null;
+                    }
+
                     // Insert into Cheques Table (OUTGOING)
                     db.prepare(`
                         INSERT INTO cheques (
@@ -739,7 +745,7 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                         partner: header.partner_id,
                         vid: voucherId,
                         drawer: 'Self', // We are the drawer
-                        bank_id: c.bank_id || null
+                        bank_id: persistedBankId
                     });
 
                     // Add Journal Credit Line (Credit The Bank Account)
@@ -772,7 +778,8 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                         line_description: `شيك رقم ${c.cheque_no} - ${c.description || ''}`,
                         cost_center_id: header.cost_center_id || null,
                         invoice_ref: c.cheque_no || null,
-                        due_date: c.due_date || null
+                        due_date: c.due_date || null,
+                        bank_account_id: c.bank_account_id || null
                     });
                 }
             }
@@ -827,19 +834,19 @@ WHERE status LIKE 'PENDING_APPROVAL%';
         if (header.journal_header_id) {
             // Debit Lines (Receipts - Cash/Bank)
             const debits = db.prepare(`
-                SELECT l.*, a.name_ar as account_name 
+                SELECT l.*, a.name_ar as account_name, a.account_code as account_code
                 FROM journal_entry_lines l
                 LEFT JOIN accounts a ON l.account_id = a.id
-                WHERE l.header_id = ? AND l.debit > 0
+                WHERE l.journal_entry_id = ? AND l.debit > 0
             `).all(header.journal_header_id);
             cashDetails = debits;
 
             // Credit Lines (Against - Invoices/Accounts)
             const credits = db.prepare(`
-                SELECT l.*, a.name_ar as account_name 
+                SELECT l.*, a.name_ar as account_name, a.account_code as account_code
                 FROM journal_entry_lines l
                 LEFT JOIN accounts a ON l.account_id = a.id
-                WHERE l.header_id = ? AND l.credit > 0
+                WHERE l.journal_entry_id = ? AND l.credit > 0
             `).all(header.journal_header_id);
             againstDetails = credits;
         }
@@ -877,7 +884,7 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                 SELECT l.*, a.name_ar as account_name, a.account_code as account_code 
                 FROM journal_entry_lines l
                 LEFT JOIN accounts a ON l.account_id = a.id
-                WHERE l.header_id = ? AND l.credit > 0
+                WHERE l.journal_entry_id = ? AND l.credit > 0
             `).all(header.journal_header_id);
             creditLines = credits;
 
@@ -886,7 +893,7 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                 SELECT l.*, a.name_ar as account_name, a.account_code as account_code 
                 FROM journal_entry_lines l
                 LEFT JOIN accounts a ON l.account_id = a.id
-                WHERE l.header_id = ? AND l.debit > 0
+                WHERE l.journal_entry_id = ? AND l.debit > 0
             `).all(header.journal_header_id);
             debitLines = debits;
         }
@@ -901,8 +908,85 @@ WHERE status LIKE 'PENDING_APPROVAL%';
             FROM treasury_vouchers v
             LEFT JOIN business_partners p ON v.partner_id = p.id
             WHERE v.voucher_type = 'PAYMENT'
-            ORDER BY v.date DESC, v.created_at DESC LIMIT 100
+            ORDER BY v.date DESC, v.created_at DESC
                             `).all();
+    }
+
+    static deletePaymentVoucher(id: string) {
+        const voucher = db.prepare(`
+            SELECT id, voucher_no, journal_header_id
+            FROM treasury_vouchers
+            WHERE id = ? AND voucher_type = 'PAYMENT'
+        `).get(id) as { id: string; voucher_no: string; journal_header_id?: string | null } | undefined;
+
+        if (!voucher) {
+            throw new Error('سند الصرف غير موجود');
+        }
+
+        const deleteVoucher = db.prepare(`
+            DELETE FROM treasury_vouchers
+            WHERE id = ? AND voucher_type = 'PAYMENT'
+        `);
+        const deleteJournalLines = db.prepare(`
+            DELETE FROM journal_entry_lines
+            WHERE journal_entry_id = ?
+        `);
+        const deleteJournalHeader = db.prepare(`
+            DELETE FROM journal_entries
+            WHERE id = ?
+        `);
+
+        const runTransaction = db.transaction(() => {
+            deleteVoucher.run(voucher.id);
+            if (voucher.journal_header_id) {
+                deleteJournalLines.run(voucher.journal_header_id);
+                deleteJournalHeader.run(voucher.journal_header_id);
+            }
+        });
+
+        runTransaction();
+        return { success: true, id: voucher.id, voucher_no: voucher.voucher_no };
+    }
+
+    static updatePaymentVoucherStatus(id: string, status: 'DRAFT' | 'POSTED') {
+        const voucher = db.prepare(`
+            SELECT id, voucher_no, status, journal_header_id
+            FROM treasury_vouchers
+            WHERE id = ? AND voucher_type = 'PAYMENT'
+        `).get(id) as { id: string; voucher_no: string; status: string; journal_header_id?: string | null } | undefined;
+
+        if (!voucher) {
+            throw new Error('سند الصرف غير موجود');
+        }
+
+        if (voucher.status === status) {
+            return { success: true, id: voucher.id, voucher_no: voucher.voucher_no, status };
+        }
+
+        const updateVoucher = db.prepare(`
+            UPDATE treasury_vouchers
+            SET status = ?
+            WHERE id = ? AND voucher_type = 'PAYMENT'
+        `);
+        const updateJournal = db.prepare(`
+            UPDATE journal_entries
+            SET status = ?
+            WHERE id = ?
+        `);
+
+        const runTransaction = db.transaction(() => {
+            updateVoucher.run(status, voucher.id);
+            if (voucher.journal_header_id) {
+                updateJournal.run(status, voucher.journal_header_id);
+            }
+        });
+
+        runTransaction();
+        return { success: true, id: voucher.id, voucher_no: voucher.voucher_no, status };
+    }
+
+    static postPaymentVoucher(id: string) {
+        return TreasuryService.updatePaymentVoucherStatus(id, 'POSTED');
     }
 
     static getReceiptVouchers(filters?: any) {
@@ -911,8 +995,85 @@ WHERE status LIKE 'PENDING_APPROVAL%';
             FROM treasury_vouchers v
             LEFT JOIN business_partners p ON v.partner_id = p.id
             WHERE v.voucher_type = 'RECEIPT'
-            ORDER BY v.date DESC, v.created_at DESC LIMIT 100
+            ORDER BY v.date DESC, v.created_at DESC
                             `).all();
+    }
+
+    static deleteReceiptVoucher(id: string) {
+        const voucher = db.prepare(`
+            SELECT id, voucher_no, journal_header_id
+            FROM treasury_vouchers
+            WHERE id = ? AND voucher_type = 'RECEIPT'
+        `).get(id) as { id: string; voucher_no: string; journal_header_id?: string | null } | undefined;
+
+        if (!voucher) {
+            throw new Error('سند القبض غير موجود');
+        }
+
+        const deleteVoucher = db.prepare(`
+            DELETE FROM treasury_vouchers
+            WHERE id = ? AND voucher_type = 'RECEIPT'
+        `);
+        const deleteJournalLines = db.prepare(`
+            DELETE FROM journal_entry_lines
+            WHERE journal_entry_id = ?
+        `);
+        const deleteJournalHeader = db.prepare(`
+            DELETE FROM journal_entries
+            WHERE id = ?
+        `);
+
+        const runTransaction = db.transaction(() => {
+            deleteVoucher.run(voucher.id);
+            if (voucher.journal_header_id) {
+                deleteJournalLines.run(voucher.journal_header_id);
+                deleteJournalHeader.run(voucher.journal_header_id);
+            }
+        });
+
+        runTransaction();
+        return { success: true, id: voucher.id, voucher_no: voucher.voucher_no };
+    }
+
+    static updateReceiptVoucherStatus(id: string, status: 'DRAFT' | 'POSTED') {
+        const voucher = db.prepare(`
+            SELECT id, voucher_no, status, journal_header_id
+            FROM treasury_vouchers
+            WHERE id = ? AND voucher_type = 'RECEIPT'
+        `).get(id) as { id: string; voucher_no: string; status: string; journal_header_id?: string | null } | undefined;
+
+        if (!voucher) {
+            throw new Error('سند القبض غير موجود');
+        }
+
+        if (voucher.status === status) {
+            return { success: true, id: voucher.id, voucher_no: voucher.voucher_no, status };
+        }
+
+        const updateVoucher = db.prepare(`
+            UPDATE treasury_vouchers
+            SET status = ?
+            WHERE id = ? AND voucher_type = 'RECEIPT'
+        `);
+        const updateJournal = db.prepare(`
+            UPDATE journal_entries
+            SET status = ?
+            WHERE id = ?
+        `);
+
+        const runTransaction = db.transaction(() => {
+            updateVoucher.run(status, voucher.id);
+            if (voucher.journal_header_id) {
+                updateJournal.run(status, voucher.journal_header_id);
+            }
+        });
+
+        runTransaction();
+        return { success: true, id: voucher.id, voucher_no: voucher.voucher_no, status };
+    }
+
+    static postReceiptVoucher(id: string) {
+        return TreasuryService.updateReceiptVoucherStatus(id, 'POSTED');
     }
 
     // --- Manual Bank Reconciliation ---

@@ -1477,21 +1477,21 @@ export const ReceiptVoucher = () => {
                                 <table className="w-full border-separate border-spacing-0 text-right text-[13px] text-slate-700" style={{ minWidth: '900px' }}>
                                     <thead className="sticky top-0 z-20 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
                                         <tr>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle first:border-r w-[220px]">حساب</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[90px]">عملة</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[120px]">حساب فرعي</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[140px]">مرجع</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[120px]">قيمة مدين</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[120px]">مدين</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[120px]">قيمة دائن</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[120px]">دائن</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[120px]">مرجع ضريبي</th>
-                                            <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[120px]">تاريخ الفاتورة</th>
+                                            <FilterableHeader tab="AGAINST" colKey="accountCode" label="حساب" widthClass="first:border-r w-[220px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="lineCurrency" label="عملة" widthClass="w-[90px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="subAccountId" label="حساب فرعي" widthClass="w-[120px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="lineRef" label="مرجع" widthClass="w-[140px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="debitForeign" label="قيمة مدين" widthClass="w-[120px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="debit" label="مدين" widthClass="w-[120px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="creditForeign" label="قيمة دائن" widthClass="w-[120px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="credit" label="دائن" widthClass="w-[120px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="taxRef" label="مرجع ضريبي" widthClass="w-[120px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="invoiceDate" label="تاريخ الفاتورة" widthClass="w-[120px]" />
                                             <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[50px] text-center"></th>
                                         </tr>
                                     </thead>
                                     <tbody onKeyDown={handleGridKeyDown}>
-                                        {againstLines.map(line => (
+                                        {filteredAgainstLines.map(line => (
                                             <tr key={line.id} className="bg-white hover:bg-sky-50 transition-colors group">
                                                 <td className="border border-[#d7e9fb] p-1 relative">
                                                     <div className="flex gap-1">
@@ -1548,7 +1548,10 @@ export const ReceiptVoucher = () => {
                                     </tfoot>
                                 </table>
                                 <div className="p-3 border-t border-slate-100">
-                                    <button onClick={() => setAgainstLines(prev => [...prev, emptyAgainstLine()])}
+                                    <button onClick={() => {
+                                        setAgainstLines(prev => [...prev, emptyAgainstLine()]);
+                                        setAgainstFilters({});
+                                    }}
                                         className="flex items-center gap-2 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-lg transition-all text-sm">
                                         <Plus size={16} /><span>إضافة سطر</span>
                                     </button>

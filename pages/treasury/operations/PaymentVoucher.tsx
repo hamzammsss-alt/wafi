@@ -453,52 +453,64 @@ export const PaymentVoucher = () => {
 
                     // Map Lines (Payment Means - Credits + Cheques)
                     const newLines: PaymentLine[] = [];
+                    const creditLines = Array.isArray(data.lines) ? data.lines.filter((line: any) => Number(line?.credit || 0) > 0) : [];
 
                     // 1. Checks
                     if (data.checks && data.checks.length > 0) {
                         data.checks.forEach((c: any) => {
+                            const matchedCreditLine = creditLines.find((line: any) => {
+                                const sameChequeRef = normalizeText(line?.invoice_ref) && normalizeText(line?.invoice_ref) === normalizeText(c?.cheque_no);
+                                const descriptionMatchesCheque = normalizeText(c?.cheque_no) && normalizeText(line?.line_description).includes(normalizeText(c?.cheque_no));
+                                const sameAmount = Math.abs(Number(line?.credit || 0) - Number(c?.amount || 0)) < 0.01;
+                                return sameChequeRef || (descriptionMatchesCheque && sameAmount);
+                            });
+                            const matchedBankAccount = findBankAccountByGlAccount(matchedCreditLine?.account_id || null);
                             newLines.push({
                                 id: uuidv4(), type: 'CHEQUE',
                                 lineCurrency: normalizeText(c.currency || 'ILS').toUpperCase() || 'ILS',
                                 amountForeign: Number(c.foreign_amount || c.amount) || 0,
                                 amountLocal: Number(c.amount) || 0,
-                                accountId: c.account_id || null, // Assuming cheque has a source bank account
-                                accountName: c.account_name || '',
-                                amount: c.amount, description: c.description || '',
-                                chequeNo: c.cheque_no, bankName: c.bank_name, bankId: c.bank_id,
+                                accountId: matchedCreditLine?.account_id || c.account_id || null,
+                                accountName: matchedCreditLine?.account_name || c.account_name || '',
+                                amount: c.amount, description: c.description || matchedCreditLine?.line_description || '',
+                                chequeNo: c.cheque_no, bankName: c.bank_name || matchedBankAccount?.bank_name || '', bankId: c.bank_id,
+                                bankAccountId: matchedBankAccount?.id || matchedCreditLine?.bank_account_id || '',
                                 dueDate: c.due_date ? c.due_date.split('T')[0] : ''
                             });
                         });
                     }
 
                     // 2. Cash/Bank Credits (excluding those linked to checks if possible)
-                    if (data.lines && data.lines.length > 0) {
-                        data.lines.forEach((l: any) => {
+                    if (creditLines.length > 0) {
+                        creditLines.forEach((l: any) => {
                             // Only consider credit lines (payment means)
-                            if (l.credit > 0) {
-                                // Attempt to distinguish CASH from TRANSFER based on account type or name
-                                let lineType: 'CASH' | 'CHEQUE' | 'TRANSFER' = 'CASH';
-                                if (l.account_name && (l.account_name.includes('بنك') || l.account_name.includes('Bank'))) {
-                                    lineType = 'TRANSFER';
-                                }
-                                // If this line is a Bank Credit for a cheque, skip it if we already added the cheque
-                                // This is a heuristic and might need refinement based on actual data structure
-                                const isChequeRelatedCredit = data.checks?.some((c: any) =>
-                                    c.account_id === l.account_id && c.amount === l.credit
-                                );
-                                if (isChequeRelatedCredit) return;
-
-                                newLines.push({
-                                    id: uuidv4(), type: lineType,
-                                    lineCurrency: 'ILS',
-                                    amountForeign: Number(l.credit) || 0,
-                                    amountLocal: Number(l.credit) || 0,
-                                    accountId: l.account_id,
-                                    accountName: l.account_name || '',
-                                    amount: l.credit,
-                                    description: l.line_description || ''
-                                });
+                            // Attempt to distinguish CASH from TRANSFER based on account type or name
+                            let lineType: 'CASH' | 'CHEQUE' | 'TRANSFER' = 'CASH';
+                            if (l.account_name && (l.account_name.includes('بنك') || l.account_name.includes('Bank'))) {
+                                lineType = 'TRANSFER';
                             }
+                            const isChequeRelatedCredit = data.checks?.some((c: any) => {
+                                const sameChequeRef = normalizeText(l?.invoice_ref) && normalizeText(l?.invoice_ref) === normalizeText(c?.cheque_no);
+                                const descriptionMatchesCheque = normalizeText(c?.cheque_no) && normalizeText(l?.line_description).includes(normalizeText(c?.cheque_no));
+                                const sameAmount = Math.abs(Number(c?.amount || 0) - Number(l?.credit || 0)) < 0.01;
+                                return sameChequeRef || (descriptionMatchesCheque && sameAmount);
+                            });
+                            if (isChequeRelatedCredit) return;
+
+                            const matchedBankAccount = findBankAccountByGlAccount(l.account_id);
+
+                            newLines.push({
+                                id: uuidv4(), type: lineType,
+                                lineCurrency: 'ILS',
+                                amountForeign: Number(l.credit) || 0,
+                                amountLocal: Number(l.credit) || 0,
+                                accountId: l.account_id,
+                                accountName: l.account_name || '',
+                                amount: l.credit,
+                                description: l.line_description || '',
+                                bankAccountId: l.bank_account_id || matchedBankAccount?.id || '',
+                                bankName: matchedBankAccount?.bank_name || ''
+                            });
                         });
                     }
                     if (newLines.length > 0) setLines(newLines);

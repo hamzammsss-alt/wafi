@@ -628,6 +628,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     treasury: {
         createReceipt: (data: any) => invoke('treasury-create-receipt', data),
         createPayment: (data: any) => invoke('treasury-create-payment', data),
+        deleteReceipt: (id: string) => invoke('treasury-delete-receipt', id),
+        deletePayment: (id: string) => invoke('treasury-delete-payment', id),
+        postReceipt: (id: string) => invoke('treasury-post-receipt', id),
+        postPayment: (id: string) => invoke('treasury-post-payment', id),
+        updateReceiptStatus: (id: string, status: 'DRAFT' | 'POSTED') => invoke('treasury-update-receipt-status', { id, status }),
+        updatePaymentStatus: (id: string, status: 'DRAFT' | 'POSTED') => invoke('treasury-update-payment-status', { id, status }),
         getReceipt: (id: string) => invoke('treasury-get-receipt', id),
         getPayment: (id: string) => invoke('treasury-get-payment', id),
         getPayments: (filters: any) => invoke('treasury-get-payments', filters),

@@ -1502,6 +1502,12 @@ const registerIPCHandlers = (db: any) => {
   // --- Treasury & Cheques Handlers (New) ---
   safeHandle('treasury-create-receipt', (event, data) => TreasuryService.createReceiptVoucher(data));
   safeHandle('treasury-create-payment', (event, data) => TreasuryService.createPaymentVoucher(data));
+  safeHandle('treasury-delete-receipt', (event, id) => TreasuryService.deleteReceiptVoucher(id));
+  safeHandle('treasury-delete-payment', (event, id) => TreasuryService.deletePaymentVoucher(id));
+  safeHandle('treasury-post-receipt', (event, id) => TreasuryService.postReceiptVoucher(id));
+  safeHandle('treasury-post-payment', (event, id) => TreasuryService.postPaymentVoucher(id));
+  safeHandle('treasury-update-receipt-status', (event, { id, status }) => TreasuryService.updateReceiptVoucherStatus(id, status));
+  safeHandle('treasury-update-payment-status', (event, { id, status }) => TreasuryService.updatePaymentVoucherStatus(id, status));
   safeHandle('treasury-get-receipt', (event, id) => TreasuryService.getReceipt(id)); // Existing mapping, now exposed.
   safeHandle('treasury-get-payment', (event, id) => TreasuryService.getPaymentVoucher(id));
   safeHandle('treasury-get-payments', (event, filters) => TreasuryService.getPaymentVouchers(filters));
