@@ -1,0 +1,540 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Edit, Loader2, Plus, Save, Search, Trash2, Wallet, X } from 'lucide-react';
+import { AccountPicker } from '../../../components/AccountPicker';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+
+type CurrencyRow = {
+    id: string;
+    code: string;
+    name_ar?: string | null;
+    name_en?: string | null;
+};
+
+type CashBoxRow = {
+    id: string;
+    code: string;
+    name_ar: string;
+    name_en?: string | null;
+    currency_id?: string | null;
+    currency_code?: string | null;
+    currency_name?: string | null;
+    gl_account_id?: string | null;
+    gl_account_code?: string | null;
+    gl_account_name?: string | null;
+    note?: string | null;
+    is_active?: number | boolean;
+};
+
+type CashBoxForm = {
+    id?: string;
+    code: string;
+    name_ar: string;
+    name_en: string;
+    currency_id: string;
+    currency_code: string;
+    gl_account_id: string;
+    gl_account_code: string;
+    gl_account_name: string;
+    note: string;
+    is_active: boolean;
+};
+
+const buildEmptyForm = (currencies: CurrencyRow[]): CashBoxForm => {
+    const preferredCurrency =
+        currencies.find((row) => ['NIS', 'ILS'].includes(String(row.code || '').toUpperCase())) || currencies[0];
+
+    return {
+        code: '',
+        name_ar: '',
+        name_en: '',
+        currency_id: preferredCurrency?.id || '',
+        currency_code: preferredCurrency?.code || 'NIS',
+        gl_account_id: '',
+        gl_account_code: '',
+        gl_account_name: '',
+        note: '',
+        is_active: true,
+    };
+};
+
+const getCurrencyLabel = (currency?: CurrencyRow | null) => {
+    if (!currency) return '';
+    return currency.name_ar || currency.name_en || currency.code;
+};
+
+export function CashBoxesPage() {
+    const electronApi = (window as any).electronAPI;
+    const masterDataApi = electronApi?.masterData;
+    const currencyApi = electronApi?.currency;
+
+    const [cashBoxes, setCashBoxes] = useState<CashBoxRow[]>([]);
+    const [currencies, setCurrencies] = useState<CurrencyRow[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [search, setSearch] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const [accountPickerOpen, setAccountPickerOpen] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [formData, setFormData] = useState<CashBoxForm>(buildEmptyForm([]));
+
+    const selectedCurrency = useMemo(
+        () =>
+            currencies.find(
+                (row) =>
+                    row.id === formData.currency_id ||
+                    String(row.code || '').toUpperCase() === String(formData.currency_code || '').toUpperCase(),
+            ) || null,
+        [currencies, formData.currency_code, formData.currency_id],
+    );
+
+    const filteredCashBoxes = useMemo(() => {
+        const term = search.trim().toLowerCase();
+        if (!term) return cashBoxes;
+
+        return cashBoxes.filter((row) =>
+            [
+                row.code,
+                row.name_ar,
+                row.name_en,
+                row.currency_code,
+                row.currency_name,
+                row.gl_account_code,
+                row.gl_account_name,
+                row.note,
+            ]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(term)),
+        );
+    }, [cashBoxes, search]);
+
+    const loadData = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const [boxes, currencyRows] = await Promise.all([
+                masterDataApi?.getCashBoxes?.() || [],
+                currencyApi?.getCurrencies?.() || electronApi?.getCurrencies?.() || [],
+            ]);
+
+            const normalizedCurrencies = Array.isArray(currencyRows) ? currencyRows : [];
+            setCashBoxes(Array.isArray(boxes) ? boxes : []);
+            setCurrencies(normalizedCurrencies);
+            setFormData((prev) => (prev.currency_id || prev.currency_code ? prev : buildEmptyForm(normalizedCurrencies)));
+        } catch (err) {
+            console.error(err);
+            setError('تعذر تحميل بيانات الصناديق. حاول مرة أخرى.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const openCreate = () => {
+        setError(null);
+        setFormData(buildEmptyForm(currencies));
+        setIsModalOpen(true);
+    };
+
+    useCreateIntent(openCreate);
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setAccountPickerOpen(false);
+        setError(null);
+        setFormData(buildEmptyForm(currencies));
+    };
+
+    const handleEdit = (row: CashBoxRow) => {
+        const matchedCurrency =
+            currencies.find(
+                (currency) =>
+                    currency.id === row.currency_id ||
+                    String(currency.code || '').toUpperCase() === String(row.currency_code || '').toUpperCase(),
+            ) || null;
+
+        setError(null);
+        setFormData({
+            id: row.id,
+            code: row.code || '',
+            name_ar: row.name_ar || '',
+            name_en: row.name_en || '',
+            currency_id: matchedCurrency?.id || row.currency_id || '',
+            currency_code: matchedCurrency?.code || row.currency_code || '',
+            gl_account_id: row.gl_account_id || '',
+            gl_account_code: row.gl_account_code || '',
+            gl_account_name: row.gl_account_name || '',
+            note: row.note || '',
+            is_active: row.is_active === false || row.is_active === 0 ? false : true,
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleCurrencyChange = (value: string) => {
+        const nextCurrency =
+            currencies.find((currency) => currency.id === value || currency.code === value) || null;
+
+        setFormData((prev) => {
+            const nextCurrencyId = nextCurrency?.id || value;
+            const shouldResetAccount = prev.currency_id && prev.currency_id !== nextCurrencyId;
+            return {
+                ...prev,
+                currency_id: nextCurrencyId,
+                currency_code: nextCurrency?.code || prev.currency_code,
+                ...(shouldResetAccount
+                    ? { gl_account_id: '', gl_account_code: '', gl_account_name: '' }
+                    : {}),
+            };
+        });
+    };
+
+    const handleSave = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setError(null);
+
+        if (!formData.code.trim()) {
+            setError('رمز الصندوق مطلوب.');
+            return;
+        }
+
+        if (!formData.name_ar.trim()) {
+            setError('اسم الصندوق مطلوب.');
+            return;
+        }
+
+        if (!formData.gl_account_id) {
+            setError('يجب اختيار حساب صندوق مرتبط من شجرة الحسابات.');
+            return;
+        }
+
+        try {
+            setSaving(true);
+            await masterDataApi.saveCashBox({
+                ...formData,
+                is_active: formData.is_active ? 1 : 0,
+            });
+            closeModal();
+            await loadData();
+        } catch (err: any) {
+            console.error(err);
+            setError(err?.message || 'تعذر حفظ بيانات الصندوق.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('هل تريد تعطيل هذا الصندوق؟')) return;
+
+        try {
+            await masterDataApi.deleteCashBox(id);
+            await loadData();
+        } catch (err) {
+            console.error(err);
+            setError('تعذر حذف الصندوق.');
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 p-4 md:p-6" dir="rtl">
+            <WorkspaceHeader
+                icon={<Wallet size={24} />}
+                title="الصناديق"
+                subtitle="تعريف صناديق القبض والصرف وربط كل صندوق بحساب صندوق مطابق للعملة. يتم إنشاء الصندوق كحساب فرعي تلقائيًا تحت الحساب المرتبط."
+                badges={[
+                    { label: `الإجمالي ${cashBoxes.length}`, tone: 'warning' },
+                    { label: `المعروض ${filteredCashBoxes.length}`, tone: 'success' },
+                ]}
+                actions={
+                    <button
+                        onClick={openCreate}
+                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
+                    >
+                        <Plus size={18} />
+                        إضافة صندوق
+                    </button>
+                }
+                className="mb-6"
+            />
+
+            {error && !isModalOpen && (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                    {error}
+                </div>
+            )}
+
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="relative max-w-md">
+                    <Search className="absolute right-3 top-3.5 text-slate-400" size={18} />
+                    <input
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="ابحث برمز الصندوق أو اسمه أو العملة أو الحساب..."
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-10 pl-4 text-sm outline-none transition focus:border-cyan-500 focus:bg-white"
+                    />
+                </div>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center gap-3 p-14 text-slate-500">
+                        <Loader2 className="animate-spin text-sky-600" size={32} />
+                        <p>جارٍ تحميل الصناديق...</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-right text-sm">
+                            <thead className="bg-slate-50 text-slate-600">
+                                <tr>
+                                    <th className="px-4 py-3 font-bold">الرمز</th>
+                                    <th className="px-4 py-3 font-bold">اسم الصندوق</th>
+                                    <th className="px-4 py-3 font-bold">العملة</th>
+                                    <th className="px-4 py-3 font-bold">الحساب المرتبط</th>
+                                    <th className="px-4 py-3 font-bold">ملاحظة</th>
+                                    <th className="px-4 py-3 text-center font-bold">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {filteredCashBoxes.length > 0 ? (
+                                    filteredCashBoxes.map((row) => (
+                                        <tr key={row.id} className="transition hover:bg-sky-50/40">
+                                            <td className="px-4 py-3 font-mono font-bold text-sky-700">{row.code}</td>
+                                            <td className="px-4 py-3">
+                                                <div className="font-semibold text-slate-800">{row.name_ar}</div>
+                                                {row.name_en && <div className="text-xs text-slate-500">{row.name_en}</div>}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
+                                                    {row.currency_name || row.currency_code || '-'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="font-mono text-xs text-sky-700">{row.gl_account_code || '-'}</div>
+                                                <div className="text-slate-700">{row.gl_account_name || '-'}</div>
+                                            </td>
+                                            <td className="max-w-xs px-4 py-3 text-slate-600">
+                                                <span className="line-clamp-2">{row.note || '-'}</span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button
+                                                        onClick={() => handleEdit(row)}
+                                                        className="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                                                        title="تعديل"
+                                                    >
+                                                        <Edit size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(row.id)}
+                                                        className="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                                                        title="تعطيل"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={6} className="px-4 py-14 text-center text-slate-400">
+                                            لا توجد صناديق مطابقة.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            <AnimatePresence>
+                {isModalOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[9999] flex items-start justify-center bg-slate-950/45 p-4 pt-8 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.96, y: 16 }}
+                            className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+                        >
+                            <div className="flex items-center justify-between bg-gradient-to-l from-sky-600 to-cyan-500 px-5 py-4 text-white">
+                                <div>
+                                    <div className="text-lg font-extrabold">{formData.id ? 'تعديل صندوق' : 'إضافة صندوق'}</div>
+                                    <div className="text-xs text-white/85">اختر العملة أولًا ثم اربط الصندوق بحساب صندوق مطابق من مجموعة 111.</div>
+                                </div>
+                                <button onClick={closeModal} className="rounded-full p-2 transition hover:bg-white/15">
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSave} className="space-y-5 p-5">
+                                {error && (
+                                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                                        {error}
+                                    </div>
+                                )}
+
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label className="mb-1.5 block text-xs font-bold text-slate-600">رمز الصندوق</label>
+                                        <input
+                                            value={formData.code}
+                                            onChange={(event) =>
+                                                setFormData((prev) => ({ ...prev, code: event.target.value.toUpperCase() }))
+                                            }
+                                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-sky-500"
+                                            placeholder="مثال: CASH-NIS-01"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1.5 block text-xs font-bold text-slate-600">العملة</label>
+                                        <select
+                                            value={formData.currency_id || formData.currency_code}
+                                            onChange={(event) => handleCurrencyChange(event.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-sky-500"
+                                        >
+                                            {currencies.map((currency) => (
+                                                <option key={currency.id} value={currency.id}>
+                                                    {getCurrencyLabel(currency)} ({currency.code})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1.5 block text-xs font-bold text-slate-600">اسم الصندوق</label>
+                                        <input
+                                            value={formData.name_ar}
+                                            onChange={(event) => setFormData((prev) => ({ ...prev, name_ar: event.target.value }))}
+                                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-sky-500"
+                                            placeholder="اسم الصندوق بالعربية"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1.5 block text-xs font-bold text-slate-600">الاسم بالإنجليزية</label>
+                                        <input
+                                            value={formData.name_en}
+                                            onChange={(event) => setFormData((prev) => ({ ...prev, name_en: event.target.value }))}
+                                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-sky-500"
+                                            placeholder="Cash box name"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                    <div className="mb-3 text-sm font-bold text-slate-700">الحساب المرتبط</div>
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                                        <button
+                                            type="button"
+                                            onClick={() => setAccountPickerOpen(true)}
+                                            className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-right text-sm transition hover:border-sky-300 hover:bg-sky-50/50"
+                                        >
+                                            {formData.gl_account_id ? (
+                                                <div className="space-y-1">
+                                                    <div className="font-mono text-xs text-sky-700">{formData.gl_account_code || formData.gl_account_id}</div>
+                                                    <div className="font-medium text-slate-700">{formData.gl_account_name || 'حساب صندوق مختار'}</div>
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-400">اختر حساب الصندوق من شجرة الحسابات...</span>
+                                            )}
+                                        </button>
+                                        {formData.gl_account_id && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setFormData((prev) => ({
+                                                        ...prev,
+                                                        gl_account_id: '',
+                                                        gl_account_code: '',
+                                                        gl_account_name: '',
+                                                    }))
+                                                }
+                                                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600 transition hover:bg-red-100"
+                                            >
+                                                مسح الربط
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="mt-3 text-xs text-slate-500">
+                                        سيُنشأ هذا الصندوق كحساب فرعي تلقائيًا تحت الحساب المحدد، ويجب أن تكون عملة الحساب مطابقة لعملة الصندوق.
+                                    </p>
+                                    {selectedCurrency && (
+                                        <p className="mt-1 text-xs font-medium text-cyan-700">
+                                            العملة الحالية: {getCurrencyLabel(selectedCurrency)} ({selectedCurrency.code})
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-bold text-slate-600">ملاحظة</label>
+                                    <textarea
+                                        value={formData.note}
+                                        onChange={(event) => setFormData((prev) => ({ ...prev, note: event.target.value }))}
+                                        rows={4}
+                                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none transition focus:border-sky-500"
+                                        placeholder="أي تفاصيل إضافية عن هذا الصندوق"
+                                    />
+                                </div>
+
+                                <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.is_active}
+                                        onChange={(event) => setFormData((prev) => ({ ...prev, is_active: event.target.checked }))}
+                                        className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                    />
+                                    الصندوق فعال
+                                </label>
+
+                                <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={closeModal}
+                                        className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+                                    >
+                                        إلغاء
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={saving}
+                                        className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-70"
+                                    >
+                                        {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                                        حفظ الصندوق
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AccountPicker
+                isOpen={accountPickerOpen}
+                onClose={() => setAccountPickerOpen(false)}
+                onSelect={(account: any) => {
+                    setFormData((prev) => ({
+                        ...prev,
+                        gl_account_id: account.id,
+                        gl_account_code: account.account_code || account.code || '',
+                        gl_account_name: account.name_ar || account.name || account.name_en || '',
+                    }));
+                    setAccountPickerOpen(false);
+                }}
+                allowedPrefixes={['111']}
+                currencyId={formData.currency_id || formData.currency_code || null}
+            />
+        </div>
+    );
+}

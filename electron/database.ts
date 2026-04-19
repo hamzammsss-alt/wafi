@@ -675,6 +675,49 @@ export const initDB = (dbPath: string) => {
     console.error("[DB] Failed to migrate bank_accounts", e);
   }
 
+  // 4.2 Cash Boxes
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cash_boxes (
+      id TEXT PRIMARY KEY,
+      code TEXT NOT NULL,
+      name_ar TEXT NOT NULL,
+      name_en TEXT,
+      currency_id TEXT,
+      currency_code TEXT NOT NULL DEFAULT 'NIS',
+      gl_account_id TEXT NOT NULL,
+      note TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(currency_id) REFERENCES currencies(id),
+      FOREIGN KEY(gl_account_id) REFERENCES accounts(id)
+    );
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cash_boxes_code ON cash_boxes(code);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cash_boxes_currency ON cash_boxes(currency_code);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cash_boxes_account ON cash_boxes(gl_account_id);`);
+
+  try {
+    const cbCols = db.prepare("PRAGMA table_info(cash_boxes)").all();
+    if (cbCols.length > 0) {
+      if (!cbCols.some((c: any) => c.name === 'code')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN code TEXT").run();
+      if (!cbCols.some((c: any) => c.name === 'name_ar')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN name_ar TEXT").run();
+      if (!cbCols.some((c: any) => c.name === 'name_en')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN name_en TEXT").run();
+      if (!cbCols.some((c: any) => c.name === 'currency_id')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN currency_id TEXT").run();
+      if (!cbCols.some((c: any) => c.name === 'currency_code')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN currency_code TEXT DEFAULT 'NIS'").run();
+      if (!cbCols.some((c: any) => c.name === 'gl_account_id')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN gl_account_id TEXT").run();
+      if (!cbCols.some((c: any) => c.name === 'note')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN note TEXT").run();
+      if (!cbCols.some((c: any) => c.name === 'is_active')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN is_active INTEGER DEFAULT 1").run();
+      if (!cbCols.some((c: any) => c.name === 'created_by')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN created_by TEXT").run();
+      if (!cbCols.some((c: any) => c.name === 'created_at')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN created_at DATETIME").run();
+      if (!cbCols.some((c: any) => c.name === 'updated_at')) db.prepare("ALTER TABLE cash_boxes ADD COLUMN updated_at DATETIME").run();
+      console.log("[DB] Verified cash_boxes schema.");
+    }
+  } catch (e) {
+    console.error("[DB] Failed to migrate cash_boxes", e);
+  }
+
   // MIGRATION: Add extra fields to banks table (for Import)
   try {
     const bankCols = db.prepare("PRAGMA table_info(banks)").all();

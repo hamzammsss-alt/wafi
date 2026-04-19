@@ -11,6 +11,7 @@ import { toArabicWords } from '../../../src/utils/tafqeet';
 import { useEnterNavigation } from '../../../src/hooks/useEnterNavigation';
 import { DocumentSupportDock } from '../../../src/components/workspace/DocumentSupportDock';
 import { getTreasurySupportSections } from '../../../src/components/workspace/documentSupportSections';
+import { loadUnifiedAccountTree } from '../../../src/utils/unifiedAccountTree';
 
 interface PaymentHeader {
     voucherNo: string;
@@ -51,6 +52,7 @@ interface PaymentLine {
     bankName?: string;
     bankId?: string; // Legacy
     bankAccountId?: string; // New
+    subAccountId?: string;
     dueDate?: string;
 }
 interface PaymentAgainstLine {
@@ -86,6 +88,9 @@ interface BankAccountOption {
     currency_id: string;
     gl_account_id?: string;
     gl_account_name?: string;
+    sub_account_id?: string;
+    sub_account_code?: string;
+    sub_account_name?: string;
     is_active: number;
 }
 interface Currency { id: string; code: string; name_ar: string; exchange_rate: number; }
@@ -299,7 +304,7 @@ export const PaymentVoucher = () => {
     const [lines, setLines] = useState<PaymentLine[]>([
         {
             id: uuidv4(), type: 'CASH', lineCurrency: 'ILS', amountForeign: 0, amountLocal: 0,
-            accountId: null, accountName: '', amount: 0, description: ''
+            accountId: null, accountName: '', amount: 0, description: '', subAccountId: ''
         }
     ]);
     const [againstLines, setAgainstLines] = useState<PaymentAgainstLine[]>([emptyAgainstLine()]);
@@ -332,7 +337,7 @@ export const PaymentVoucher = () => {
                 api.hr?.getEmployees ? api.hr.getEmployees() : Promise.resolve([]),
                 api.partner?.getSalesReps ? api.partner.getSalesReps() : Promise.resolve([]),
                 api.treasury.getPayments ? api.treasury.getPayments({}) : Promise.resolve([]),
-                api.getAccountTree ? api.getAccountTree() : Promise.resolve([])
+                loadUnifiedAccountTree(api, true)
             ]);
 
             setBanks(bks || []); setBankAccounts((bankAccountRows || []).filter((row: any) => row?.is_active)); setCurrencies(curs || []);
@@ -475,6 +480,7 @@ export const PaymentVoucher = () => {
                                 amount: c.amount, description: c.description || matchedCreditLine?.line_description || '',
                                 chequeNo: c.cheque_no, bankName: c.bank_name || matchedBankAccount?.bank_name || '', bankId: c.bank_id,
                                 bankAccountId: matchedBankAccount?.id || matchedCreditLine?.bank_account_id || '',
+                                subAccountId: matchedCreditLine?.sub_account_id || matchedBankAccount?.sub_account_id || '',
                                 dueDate: c.due_date ? c.due_date.split('T')[0] : ''
                             });
                         });
@@ -509,14 +515,15 @@ export const PaymentVoucher = () => {
                                 amount: l.credit,
                                 description: l.line_description || '',
                                 bankAccountId: l.bank_account_id || matchedBankAccount?.id || '',
-                                bankName: matchedBankAccount?.bank_name || ''
+                                bankName: matchedBankAccount?.bank_name || '',
+                                subAccountId: l.sub_account_id || matchedBankAccount?.sub_account_id || ''
                             });
                         });
                     }
                     if (newLines.length > 0) setLines(newLines);
                     else setLines([{
                         id: uuidv4(), type: 'CASH', lineCurrency: 'ILS', amountForeign: 0, amountLocal: 0,
-                        accountId: null, accountName: '', amount: 0, description: ''
+                        accountId: null, accountName: '', amount: 0, description: '', subAccountId: ''
                     }]); // Ensure at least one line
 
                     if (data.debits && data.debits.length > 0) {
@@ -804,6 +811,7 @@ export const PaymentVoucher = () => {
                         accountId: account.id,
                         accountName: account.name_ar || account.name || '',
                         bankAccountId: lineType === 'TRANSFER' ? (matchedBankAccount?.id || l.bankAccountId || '') : lineType === 'CHEQUE' ? (l.bankAccountId || '') : '',
+                        subAccountId: lineType === 'TRANSFER' ? (matchedBankAccount?.sub_account_id || '') : '',
                         bankName: lineType === 'TRANSFER' ? (matchedBankAccount?.bank_name || l.bankName || '') : lineType === 'CHEQUE' ? (l.bankName || '') : '',
                         chequeNo: lineType === 'CHEQUE' ? l.chequeNo || '' : '',
                         dueDate: lineType === 'CHEQUE' ? l.dueDate || '' : '',
@@ -838,7 +846,7 @@ export const PaymentVoucher = () => {
         setLines(prev => [...prev, {
             id: uuidv4(), type: 'CASH', accountId: null, accountName: '',
             lineCurrency: 'ILS', amountForeign: 0, amountLocal: 0,
-            amount: 0, description: header.description || '', costCenterId: header.costCenterId
+            amount: 0, description: header.description || '', costCenterId: header.costCenterId, subAccountId: ''
         }]);
     };
 
@@ -970,12 +978,11 @@ export const PaymentVoucher = () => {
             }
             if (field === 'bankAccountId') {
                 const bankAccount = bankAccounts.find((row) => normalizeText(row.id) === normalizeText(value));
-                if (bankAccount) {
-                    updated.bankName = bankAccount.bank_name;
-                    if (updated.type === 'TRANSFER') {
-                        updated.accountId = bankAccount.gl_account_id || updated.accountId;
-                        updated.accountName = bankAccount.gl_account_name || bankAccount.account_name || updated.accountName;
-                    }
+                updated.bankName = bankAccount?.bank_name || '';
+                updated.subAccountId = bankAccount?.sub_account_id || '';
+                if (bankAccount && updated.type === 'TRANSFER') {
+                    updated.accountId = bankAccount.gl_account_id || updated.accountId;
+                    updated.accountName = bankAccount.gl_account_name || bankAccount.account_name || updated.accountName;
                 }
             }
             return updated;
@@ -1053,12 +1060,14 @@ export const PaymentVoucher = () => {
                     description: l.description, cost_center_id: l.costCenterId,
                     currency: l.lineCurrency,
                     foreign_amount: l.amountForeign,
+                    sub_account_id: l.subAccountId || (l.type === 'TRANSFER' ? l.bankAccountId : null) || null,
                     bank_account_id: l.type === 'TRANSFER' ? l.bankAccountId : null // Pass for transfers
                 })),
                 checks: lines.filter(l => l.type === 'CHEQUE').map(l => ({
                     cheque_no: l.chequeNo,
                     bank_name: l.bankName,
                     bank_account_id: l.bankAccountId, // Send this!
+                    sub_account_id: l.subAccountId || l.bankAccountId || null,
                     amount: l.amountLocal,
                     currency: l.lineCurrency,
                     foreign_amount: l.amountForeign,
@@ -1083,7 +1092,7 @@ export const PaymentVoucher = () => {
                 await loadData();
                 setLines([{
                     id: uuidv4(), type: 'CASH', lineCurrency: 'ILS', amountForeign: 0, amountLocal: 0,
-                    accountId: null, accountName: '', amount: 0, description: ''
+                    accountId: null, accountName: '', amount: 0, description: '', subAccountId: ''
                 }]);
                 setAgainstLines([emptyAgainstLine()]);
                 setAdditionalInfo(emptyAdditionalInfo());
@@ -1266,7 +1275,7 @@ export const PaymentVoucher = () => {
                                                 <td className="p-2"><input type="number" step="0.01" value={line.amountForeign} onChange={e => updateLine(line.id, 'amountForeign', e.target.value)} disabled={!line.accountId} className={`w-full p-2 border border-slate-200 rounded-lg text-center font-bold outline-none focus:border-red-500 ${line.accountId ? 'bg-white text-slate-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`} /></td>
                                                 <td className="p-2"><input type="number" step="0.01" value={line.amountLocal} readOnly className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-center font-bold text-red-600 outline-none" title="يتم احتساب المبلغ المحلي تلقائياً حسب سعر الصرف في تاريخ السند" /></td>
                                                 <td className="p-2"><input type="text" value={line.chequeNo || ''} onChange={e => updateLine(line.id, 'chequeNo', e.target.value)} disabled={line.type !== 'CHEQUE'} className={`w-full p-2 border border-slate-200 rounded-lg text-sm font-mono outline-none focus:border-red-500 ${line.type === 'CHEQUE' ? 'bg-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`} /></td>
-                                                <td className="p-2"><BankAccountSelect value={line.bankAccountId} onChange={(acc) => { updateLine(line.id, 'bankAccountId', acc?.id); updateLine(line.id, 'bankName', acc?.bank_name); if (line.type === 'TRANSFER') { updateLine(line.id, 'accountId', acc?.gl_account_id); updateLine(line.id, 'accountName', acc?.gl_account_name || acc?.account_name); } }} error={!line.bankAccountId && (line.type === 'CHEQUE' || line.type === 'TRANSFER')} placeholder={line.type === 'CHEQUE' ? 'اختر بنك الشيك...' : line.type === 'TRANSFER' ? 'اختر الحساب البنكي...' : 'غير مطلوب للصندوق'} className={line.type === 'CASH' ? 'pointer-events-none opacity-50' : ''} /></td>
+                                                <td className="p-2"><BankAccountSelect value={line.bankAccountId} onChange={(acc) => updateLine(line.id, 'bankAccountId', acc?.id || '')} error={!line.bankAccountId && (line.type === 'CHEQUE' || line.type === 'TRANSFER')} placeholder={line.type === 'CHEQUE' ? 'اختر بنك الشيك...' : line.type === 'TRANSFER' ? 'اختر الحساب البنكي...' : 'غير مطلوب للصندوق'} className={line.type === 'CASH' ? 'pointer-events-none opacity-50' : ''} /></td>
                                                 <td className="p-2"><input type="date" value={line.dueDate || ''} onChange={e => updateLine(line.id, 'dueDate', e.target.value)} disabled={line.type !== 'CHEQUE'} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-red-500" /></td>
                                                 <td className="p-2"><input type="text" value={line.description} onChange={e => updateLine(line.id, 'description', e.target.value)} list="payment-line-description-list" disabled={!line.accountId} className={`w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-red-500 ${line.accountId ? 'bg-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`} placeholder="ملاحظات..." /></td>
                                                 <td className="p-2 text-center"><button onClick={() => removeLine(line.id)} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={18} /></button></td>

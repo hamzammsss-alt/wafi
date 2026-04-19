@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Banknote, FileText, Search, Filter, RotateCcw, Columns3, ChevronDown, Bookmark, Star, Trash2, ArrowDownAZ, ArrowUpZA, Copy, Maximize2, RefreshCw, Pencil, FolderOpen, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Banknote, Search, Filter, RotateCcw, Columns3, ChevronDown, Bookmark, Star, Trash2, ArrowDownAZ, ArrowUpZA, Copy, Maximize2, RefreshCw, Pencil, FolderOpen, CheckCircle2 } from 'lucide-react';
 import { useTabs } from '../../../src/contexts/TabsContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import ReceiptVoucherToolbar from './ReceiptVoucherToolbar';
 import { FloatingDropdown } from '../../../src/components/ui/FloatingDropdown';
 import { FloatingMenuLayout, getFloatingMenuPositionFromPoint, getFloatingMenuPositionFromRect } from '../../../src/lib/floatingMenu';
+import { WafiDataGrid, WafiColumnDef, WafiDataGridHandle } from './WafiDataGrid';
 
 interface Receipt {
     id: string;
@@ -44,6 +45,7 @@ interface ReceiptSavedView {
         quickSearchOperator: QuickSearchOperator;
         statusFilter: 'all' | 'POSTED' | 'DRAFT';
         columnFilters: ColumnFilters;
+        groupBy?: string | null;
     };
 }
 
@@ -97,6 +99,24 @@ function matchesWithOperator(source: string, query: string, op: QuickSearchOpera
     }
 }
 
+function renderHighlightedText(text: string | number, highlight: string) {
+    if (!highlight || !highlight.trim() || text === null || text === undefined) return <>{text}</>;
+    const strText = String(text);
+    const escapedHighlight = highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = strText.split(new RegExp(`(${escapedHighlight})`, 'gi'));
+    return (
+        <>
+            {parts.map((part, i) =>
+                part.toLowerCase() === highlight.toLowerCase() ? (
+                    <mark key={i} className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5 shadow-sm font-bold">{part}</mark>
+                ) : (
+                    <span key={i}>{part}</span>
+                )
+            )}
+        </>
+    );
+}
+
 const RECEIPT_COLUMNS: ReceiptColumnDef[] = [
     { key: 'voucher_no', label: 'رقم السند' },
     { key: 'date', label: 'التاريخ' },
@@ -114,7 +134,7 @@ export const ReceiptVoucherList = () => {
     const [vouchers, setVouchers] = useState<Receipt[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'POSTED' | 'DRAFT'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'POSTED' | 'DRAFT'>('DRAFT');
     const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
     const [showFilters, setShowFilters] = useState(false);
     const [rowDensity, setRowDensity] = useState<'comfortable' | 'compact'>('comfortable');
@@ -126,14 +146,15 @@ export const ReceiptVoucherList = () => {
     const [columnFilters, setColumnFilters] = useState<ColumnFilters>(DEFAULT_COLUMN_FILTERS);
     const [visibleColumns, setVisibleColumns] = useState<ReceiptColumnKey[]>(DEFAULT_VISIBLE_COLUMNS);
     const [openMenu, setOpenMenu] = useState<'columns' | 'views' | null>(null);
+    const [groupBy, setGroupBy] = useState<string | null>(null);
     const [sortKey, setSortKey] = useState<ReceiptColumnKey>('date');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-    const [draggedCol, setDraggedCol] = useState<ReceiptColumnKey | null>(null);
     const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
     const [activeColumnMenu, setActiveColumnMenu] = useState<ReceiptContextMenuState | null>(null);
     const [savedViews, setSavedViews] = useState<ReceiptSavedView[]>([]);
     const [activeViewId, setActiveViewId] = useState<string | null>(null);
     const { navigateInTab } = useTabs();
+    const gridRef = useRef<WafiDataGridHandle>(null);
     const api = (window as any).electronAPI?.treasury;
 
     useEffect(() => {
@@ -176,10 +197,20 @@ export const ReceiptVoucherList = () => {
     useEffect(() => {
         if (!activeColumnMenu) return;
 
-        const closeMenu = () => setActiveColumnMenu(null);
-        window.addEventListener('resize', closeMenu);
-        window.addEventListener('scroll', closeMenu, true);
+        const closeMenu = (e: Event) => {
+            if (e.type === 'scroll') {
+                const target = (e.target as Document).documentElement || e.target;
+                if ((target as HTMLElement).closest && (target as HTMLElement).closest('[data-receipt-context-menu="1"]')) return;
+            }
+            setActiveColumnMenu(null);
+        };
+
+        const timer = setTimeout(() => {
+            window.addEventListener('resize', closeMenu);
+            window.addEventListener('scroll', closeMenu, true);
+        }, 50);
         return () => {
+            clearTimeout(timer);
             window.removeEventListener('resize', closeMenu);
             window.removeEventListener('scroll', closeMenu, true);
         };
@@ -206,7 +237,8 @@ export const ReceiptVoucherList = () => {
             setQuickSearch(s.quickSearch || '');
             setQuickSearchField(s.quickSearchField || 'all');
             setQuickSearchOperator(s.quickSearchOperator || 'contains');
-            setStatusFilter(s.statusFilter || 'all');
+            setStatusFilter(s.statusFilter || 'DRAFT');
+            setGroupBy(s.groupBy || null);
             setColumnWidths(s.columnWidths || {});
             setColumnFilters({
                 ...DEFAULT_COLUMN_FILTERS,
@@ -300,6 +332,7 @@ export const ReceiptVoucherList = () => {
         });
 
         const sorted = [...rows].sort((a, b) => {
+            if (sortKey === ('manual' as any)) return 0;
             const aVal = (() => {
                 if (sortKey === 'amount') return Number(a.amount || 0);
                 return String((a as any)[sortKey] || '').toLowerCase();
@@ -523,6 +556,20 @@ export const ReceiptVoucherList = () => {
         openVoucherById(selectedRowIds[0]);
     };
 
+    const handleRowReorder = (sourceId: string, targetId: string) => {
+        setSortKey('manual' as any); // تجميد الترتيب التلقائي للحفاظ على الترتيب اليدوي
+        setVouchers(prev => {
+            const newVouchers = [...prev];
+            const sourceIndex = newVouchers.findIndex(v => v.id === sourceId);
+            const targetIndex = newVouchers.findIndex(v => v.id === targetId);
+            if (sourceIndex === -1 || targetIndex === -1) return prev;
+
+            const [removed] = newVouchers.splice(sourceIndex, 1);
+            newVouchers.splice(targetIndex, 0, removed);
+            return newVouchers;
+        });
+    };
+
     const handleDuplicate = async () => {
         if (selectedRowIds.length !== 1) return;
         await duplicateVoucherById(selectedRowIds[0]);
@@ -537,39 +584,14 @@ export const ReceiptVoucherList = () => {
     };
 
     const handleExport = (format: 'excel' | 'pdf') => {
-        const headers = ['رقم السند', 'التاريخ', 'الحالة', 'المستلم منه', 'البيان', 'المبلغ', 'العملة'];
-        const records = filteredVouchers.map(v => ({
-            'رقم السند': v.voucher_no,
-            'التاريخ': v.date,
-            'الحالة': v.status === 'POSTED' ? 'مرحل' : v.status,
-            'المستلم منه': v.payer_name || '-',
-            'البيان': v.description || '',
-            'المبلغ': Number(v.amount).toLocaleString(undefined, { minimumFractionDigits: 2 }),
-            'العملة': v.currency_id,
-        }));
-
         if (format === 'excel') {
-            const ws = XLSX.utils.json_to_sheet(records);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'سندات القبض');
-            XLSX.writeFile(wb, 'سندات-القبض.xlsx');
+            gridRef.current?.exportToExcel('سندات-القبض.xlsx', 'سندات القبض');
             return;
         }
 
         if (format === 'pdf') {
-            const escapeHtml = (value: string) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const headerRow = headers.map((label) => `<th>${escapeHtml(label)}</th>`).join('');
-            const bodyRows = records
-                .map((record) => `<tr>${headers.map((label) => `<td>${escapeHtml(String(record[label] ?? ''))}</td>`).join('')}</tr>`)
-                .join('');
-            const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>سندات القبض</title><style>body{font-family:system-ui, sans-serif;padding:24px;color:#0f172a;}table{width:100%;border-collapse:collapse;margin-top:16px;}th,td{border:1px solid #cbd5e1;padding:10px;text-align:right;}th{background:#f8fafc;font-weight:700;}tr:nth-child(even){background:#f8fafc;}</style></head><body><h1>سندات القبض</h1><table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
-            const printWindow = window.open('', '_blank');
-            if (printWindow) {
-                printWindow.document.write(html);
-                printWindow.document.close();
-                printWindow.focus();
-                setTimeout(() => printWindow.print(), 200);
-            }
+            gridRef.current?.exportToPdf('سندات القبض');
+            return;
         }
     };
 
@@ -595,7 +617,7 @@ export const ReceiptVoucherList = () => {
 
     const clearAllFilters = () => {
         setSearchTerm('');
-        setStatusFilter('all');
+        setStatusFilter('DRAFT');
         setQuickSearch('');
         setQuickSearchField('all');
         setQuickSearchOperator('contains');
@@ -646,6 +668,7 @@ export const ReceiptVoucherList = () => {
                 quickSearchOperator,
                 statusFilter,
                 columnFilters,
+                groupBy,
             },
         };
 
@@ -670,32 +693,12 @@ export const ReceiptVoucherList = () => {
     const resetTableView = () => {
         setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
         setColumnWidths({});
+        setGroupBy(null);
         setSortKey('date');
         setSortDir('desc');
         setRowDensity('comfortable');
         clearAllFilters();
         setActiveViewId(null);
-    };
-
-    const handleResizeStart = (e: React.MouseEvent, key: string) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const th = (e.target as HTMLElement).closest('th');
-        if (!th) return;
-        const startX = e.clientX;
-        const startWidth = th.getBoundingClientRect().width;
-
-        const onMouseMove = (moveEvent: MouseEvent) => {
-            const delta = startX - moveEvent.clientX; // حركة الماوس لليسار تزيد العرض في RTL
-            const newWidth = Math.max(60, startWidth + delta);
-            setColumnWidths(prev => ({ ...prev, [key]: newWidth }));
-        };
-        const onMouseUp = () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
     };
 
     const openFilterMenu = (
@@ -773,20 +776,6 @@ export const ReceiptVoucherList = () => {
         });
     };
 
-    const handleCellDoubleClick = (e: React.MouseEvent, text: string) => {
-        e.stopPropagation();
-        if (!text || text === '-') return;
-        navigator.clipboard.writeText(text).catch(() => {});
-        const el = e.currentTarget as HTMLElement;
-        const prevBg = el.style.backgroundColor;
-        el.style.backgroundColor = '#dcfce7'; // لون أخضر فاتح لتأكيد النسخ
-        el.style.transition = 'background-color 0.3s ease';
-        setTimeout(() => {
-            el.style.backgroundColor = prevBg;
-            setTimeout(() => { el.style.transition = ''; }, 300);
-        }, 300);
-    };
-
     const hasActiveFilters =
         quickSearch.trim().length > 0 ||
         statusFilter !== 'all' ||
@@ -799,18 +788,54 @@ export const ReceiptVoucherList = () => {
         columnFilters.currency_id.trim().length > 0 ||
         columnFilters.amount.trim().length > 0;
 
-    const rowClass = rowDensity === 'compact' ? 'px-3 py-1.5' : 'px-3 py-2.5';
-    const thCls = `${rowClass} border-b border-l border-slate-200 bg-slate-50 align-middle first:border-r`;
-    const filterThCls = `${rowClass} border-b border-l border-slate-200 bg-white align-middle first:border-r`;
-    const tdCls = `${rowClass} border border-[#d7e9fb] text-[13px]`;
     const contextMenuSectionTitle = 'px-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400';
     const contextMenuItemClass = 'flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-right text-[12px] font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-800';
     const contextMenuDangerItemClass = 'flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-right text-[12px] font-semibold text-rose-700 transition hover:bg-rose-50 hover:text-rose-800';
     const contextMenuReceipt = activeColumnMenu?.rowId ? getVoucherById(activeColumnMenu.rowId) : null;
     const contextMenuCanPost = contextMenuReceipt?.status === 'DRAFT';
 
+    const gridColumns: WafiColumnDef<Receipt>[] = RECEIPT_COLUMNS.map(col => ({
+        key: col.key,
+        label: col.label,
+        align: col.align,
+        getValue: (v) => getCellTextValue(v, col.key),
+        renderCell: (v) => {
+            const text = getCellTextValue(v, col.key);
+            const activeSearch = quickSearch.trim() || searchTerm.trim();
+            const highlighted = renderHighlightedText(text, activeSearch);
+
+            switch (col.key) {
+                    case 'voucher_no':
+                    return (
+                        <span
+                            className="font-mono text-emerald-600 font-bold cursor-pointer"
+                            title="نقر مزدوج لفتح سند القبض"
+                            onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                openVoucherById(v.id);
+                            }}
+                        >
+                            {highlighted}
+                        </span>
+                    );
+                case 'date': return <span className="text-slate-600 font-mono text-xs">{highlighted}</span>;
+                case 'status': return <span className={`px-3 py-1 rounded-full text-xs font-bold inline-block ${v.status === 'POSTED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{v.status === 'POSTED' ? renderHighlightedText('مرحل', activeSearch) : renderHighlightedText('مسودة', activeSearch)}</span>;
+                case 'payer_name': return <span className="font-medium text-slate-700">{highlighted}</span>;
+                case 'description': return <span className="text-slate-600 text-sm max-w-xs truncate block" title={v.description}>{highlighted}</span>;
+                case 'amount': return <span className="font-bold text-slate-800 font-mono">{renderHighlightedText(Number(v.amount).toLocaleString(undefined, { minimumFractionDigits: 2 }), activeSearch)}</span>;
+                case 'currency_id': return <span className="text-center text-xs text-slate-600">{highlighted}</span>;
+                default: return <span>{highlighted}</span>;
+            }
+        },
+        renderFooter: col.key === 'amount'
+            ? (rows) => <span className="text-emerald-700 font-black font-mono text-sm">{rows.reduce((sum, r) => sum + Number(r.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            : col.key === 'description'
+            ? () => <span className="text-slate-500 font-bold">الإجمالي:</span>
+            : undefined
+    }));
+
     return (
-        <div className="p-6 bg-[#f8fafc] h-full flex flex-col gap-4 overflow-y-auto" dir="rtl">
+        <div className="p-6 bg-[#f8fafc] h-full min-h-0 flex flex-col gap-4 overflow-x-hidden overflow-y-auto lg:overflow-hidden" dir="rtl">
             {/* Header with Icon */}
             <motion.div
                 initial={{ opacity: 0, y: -12 }}
@@ -850,10 +875,18 @@ export const ReceiptVoucherList = () => {
                 onOpenFilters={() => setShowFilters(!showFilters)}
                 onRefresh={loadVouchers}
                 onSetRowDensity={setRowDensity}
+                groupBy={groupBy}
+                onSetGroupBy={setGroupBy}
+                groupableColumns={[
+                    { key: 'status', label: 'الحالة' },
+                    { key: 'currency_id', label: 'العملة' },
+                    { key: 'date', label: 'التاريخ' },
+                    { key: 'payer_name', label: 'المستلم منه' }
+                ]}
             />
 
             {/* Stats Cards */}
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.15 }} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm hover:shadow-md">
                     <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">الإجمالي</div>
                     <div className="mt-1 text-2xl font-black text-slate-800">{stats.total}</div>
@@ -1050,6 +1083,27 @@ export const ReceiptVoucherList = () => {
                     </FloatingDropdown>
                 </div>
 
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                    {[
+                        { value: 'DRAFT', label: 'محفوظ' },
+                        { value: 'POSTED', label: 'مرحل' },
+                        { value: 'all', label: 'الكل' },
+                    ].map((option) => (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setStatusFilter(option.value as 'all' | 'POSTED' | 'DRAFT')}
+                            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                statusFilter === option.value
+                                    ? 'bg-sky-600 text-white shadow-lg shadow-sky-900/10'
+                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                            }`}
+                        >
+                            {option.label}
+                        </button>
+                    ))}
+                </div>
+
                 <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr_auto]">
                     <select
                         value={quickFilterColumn}
@@ -1165,157 +1219,41 @@ export const ReceiptVoucherList = () => {
             </AnimatePresence>
 
             {/* Table */}
-            <div className="bg-white rounded-[20px] shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col">
-                <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full border-separate border-spacing-0 text-right text-[13px] text-slate-700">
-                        <thead className="sticky top-0 z-20 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
-                            <tr>
-                                <th className={`${thCls} text-center w-12`}>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedRowIds.length === filteredVouchers.length && filteredVouchers.length > 0}
-                                        onChange={toggleSelectAll}
-                                        className="h-4 w-4 rounded border-slate-300 text-sky-600"
-                                    />
-                                </th>
-                                {visibleColumns.map((colKey) => {
-                                    const column = RECEIPT_COLUMNS.find(c => c.key === colKey);
-                                    if (!column) return null;
-                                    const alignClass = column.align === 'center' ? 'text-center' : column.align === 'right' ? 'text-right' : '';
-                                    const activeSort = sortKey === column.key;
-                                    const isFilterable = true;
-                                    const columnFilterValue = columnFilters[column.key];
-                                    const hasFilter = isFilterable && columnFilterValue && columnFilterValue !== 'all';
-
-                                    return (
-                                        <th
-                                            key={column.key}
-                                            draggable
-                                            onDragStart={() => setDraggedCol(column.key)}
-                                            onDragOver={(e) => e.preventDefault()}
-                                            onDrop={(e) => {
-                                                e.preventDefault();
-                                                if (!draggedCol || draggedCol === column.key) return;
-                                                setVisibleColumns((prev) => {
-                                                    const newCols = [...prev];
-                                                    const draggedIdx = newCols.indexOf(draggedCol);
-                                                    const targetIdx = newCols.indexOf(column.key);
-                                                    newCols.splice(draggedIdx, 1);
-                                                    newCols.splice(targetIdx, 0, draggedCol);
-                                                    return newCols;
-                                                });
-                                                setDraggedCol(null);
-                                            }}
-                                            onDragEnd={() => setDraggedCol(null)}
-                                            className={`group relative ${thCls} text-xs font-bold text-slate-600 ${alignClass} cursor-move select-none hover:bg-sky-50 hover:text-sky-700 ${draggedCol === column.key ? 'opacity-50 bg-sky-100' : ''}`}
-                                            style={{ width: columnWidths[column.key], minWidth: columnWidths[column.key] }}
-                                            onClick={() => handleSort(column.key)}
-                                            onContextMenu={(e) => {
-                                                if (isFilterable) {
-                                                    openFilterMenu(e, column.key, column.label, 'header');
-                                                }
-                                            }}
-                                        >
-                                            <div
-                                                className="absolute top-0 left-0 h-full w-1.5 cursor-col-resize opacity-0 group-hover:opacity-100 bg-sky-300 hover:bg-sky-500 active:bg-sky-600 z-10 transition-opacity"
-                                                onMouseDown={(e) => handleResizeStart(e, column.key)}
-                                                onClick={(e) => e.stopPropagation()}
-                                                onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                                            />
-                                            <div className="flex items-center justify-between gap-1">
-                                                <span className="inline-flex items-center gap-1">
-                                                    {column.label}
-                                                    {activeSort && <span className="text-[10px] text-sky-600">{sortDir === 'asc' ? '▲' : '▼'}</span>}
-                                                </span>
-                                                {isFilterable && (
-                                                    <button
-                                                        type="button"
-                                                        data-column-filter-trigger="1"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            if (activeColumnMenu?.colKey === column.key && activeColumnMenu.source === 'header' && !activeColumnMenu.rowId) {
-                                                                setActiveColumnMenu(null);
-                                                                return;
-                                                            }
-                                                            openFilterMenu(e, column.key, column.label, 'header');
-                                                        }}
-                                                        className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition ${hasFilter ? 'border-sky-300 bg-sky-100 text-sky-700 shadow-sm' : 'border-transparent text-slate-400 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700'}`}
-                                                    >
-                                                        <Filter size={12} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </th>
-                                    );
-                                })}
-                            </tr>
-                        </thead>
-                        <tbody>
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={visibleColumns.length + 1} className={`${tdCls} py-8 text-center text-slate-500`}>
-                                            جاري التحميل...
-                                        </td>
-                                    </tr>
-                                ) : filteredVouchers.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={visibleColumns.length + 1} className={`${tdCls} py-12 text-center text-slate-400`}>
-                                            <div className="flex flex-col items-center justify-center">
-                                                <FileText size={48} className="mb-2 opacity-20" />
-                                                <p>لا توجد سندات قبض</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredVouchers.map((v) => (
-                                        <tr
-                                            key={v.id}
-                                            onClick={(e) => {
-                                                if ((e.target as any).type !== 'checkbox') {
-                                                    toggleRowSelection(v.id, e.ctrlKey || e.metaKey);
-                                                }
-                                            }}
-                                            className={`cursor-pointer transition-colors ${selectedRowIds.includes(v.id) ? 'bg-sky-50' : 'bg-white hover:bg-sky-50/60'}`}
-                                            onDoubleClick={() => navigateInTab(`/treasury/receipt/${v.id}`, `سند قبض ${v.voucher_no}`)}
-                                        >
-                                        <td className={`${tdCls} text-center`}>
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedRowIds.includes(v.id)}
-                                                onChange={(e) => {
-                                                    e.stopPropagation();
-                                                    toggleRowSelection(v.id, true);
-                                                }}
-                                                onClick={(e) => e.stopPropagation()}
-                                                className="h-4 w-4 rounded border-slate-300 text-sky-600"
-                                            />
-                                        </td>
-                                        {visibleColumns.map((colKey) => {
-                                            const label = getColumnLabel(colKey);
-                                            const cellText = getCellTextValue(v, colKey);
-                                            const handleContextMenu = (e: React.MouseEvent) => {
-                                                if (e.button === 2) {
-                                                    openFilterMenu(e, colKey, label, 'cell', cellText, v.id);
-                                                }
-                                            };
-                                            const handleDoubleClick = (e: React.MouseEvent, text: string) => handleCellDoubleClick(e, text);
-                                            switch (colKey) {
-                                                case 'voucher_no': return <td key={colKey} onContextMenu={handleContextMenu} onDoubleClick={(e) => handleDoubleClick(e, v.voucher_no)} className={`${tdCls} font-mono text-emerald-600 font-bold cursor-context-menu hover:bg-emerald-50/50`} title="نقر مزدوج للنسخ">{v.voucher_no}</td>;
-                                                case 'date': return <td key={colKey} onContextMenu={handleContextMenu} onDoubleClick={(e) => handleDoubleClick(e, v.date)} className={`${tdCls} text-slate-600 font-mono text-xs cursor-context-menu hover:bg-slate-50/80`} title="نقر مزدوج للنسخ">{v.date}</td>;
-                                                case 'status': return <td key={colKey} onContextMenu={handleContextMenu} onDoubleClick={(e) => handleDoubleClick(e, v.status === 'POSTED' ? 'مرحل' : 'مسودة')} className={`${tdCls} cursor-context-menu hover:bg-slate-50/80`} title="نقر مزدوج للنسخ"><span className={`px-3 py-1 rounded-full text-xs font-bold inline-block ${v.status === 'POSTED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{v.status === 'POSTED' ? 'مرحل' : 'مسودة'}</span></td>;
-                                                case 'payer_name': return <td key={colKey} onContextMenu={handleContextMenu} onDoubleClick={(e) => handleDoubleClick(e, v.payer_name || '')} className={`${tdCls} font-medium text-slate-700 cursor-context-menu hover:bg-slate-50/80`} title="نقر مزدوج للنسخ">{v.payer_name || '-'}</td>;
-                                                case 'description': return <td key={colKey} onContextMenu={handleContextMenu} onDoubleClick={(e) => handleDoubleClick(e, v.description || '')} className={`${tdCls} text-slate-600 text-sm max-w-xs truncate cursor-context-menu hover:bg-slate-50/80`} title={`نقر مزدوج للنسخ\n${v.description || ''}`}>{v.description || '-'}</td>;
-                                                case 'amount': return <td key={colKey} onContextMenu={handleContextMenu} onDoubleClick={(e) => handleDoubleClick(e, String(v.amount))} className={`${tdCls} font-bold text-slate-800 font-mono text-right cursor-context-menu hover:bg-slate-50/80`} title="نقر مزدوج للنسخ">{Number(v.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>;
-                                                case 'currency_id': return <td key={colKey} onContextMenu={handleContextMenu} onDoubleClick={(e) => handleDoubleClick(e, v.currency_id || '')} className={`${tdCls} text-center text-xs text-slate-600 cursor-context-menu hover:bg-slate-50/80`} title="نقر مزدوج للنسخ">{v.currency_id || '-'}</td>;
-                                                default: return <td key={colKey} className={tdCls}>-</td>;
-                                            }
-                                        })}
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+            <div className="bg-white rounded-[20px] shadow-sm border border-slate-200 flex-1 min-h-[18rem] lg:min-h-0 overflow-hidden flex flex-col">
+                <WafiDataGrid
+                    ref={gridRef}
+                    data={filteredVouchers}
+                    columns={gridColumns}
+                    keyExtractor={(v) => v.id}
+                    loading={loading}
+                    selectedRowIds={selectedRowIds}
+                    onSelectionChange={setSelectedRowIds as any}
+                    visibleColumns={visibleColumns as string[]}
+                    onVisibleColumnsChange={setVisibleColumns as any}
+                    columnWidths={columnWidths}
+                    onColumnWidthsChange={setColumnWidths}
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSortChange={(key, dir) => { setSortKey(key as any); setSortDir(dir); }}
+                    rowDensity={rowDensity}
+                    onHeaderContextMenu={(e, colKey, label) => openFilterMenu(e, colKey as any, label, 'header')}
+                    onCellContextMenu={(e, colKey, label, val, rowId) => openFilterMenu(e, colKey as any, label, 'cell', val, rowId)}
+                    onRowDoubleClick={(v) => navigateInTab(`/treasury/receipt/${v.id}`, `سند قبض ${v.voucher_no}`)}
+                    emptyMessage="لا توجد سندات قبض"
+                    columnFilters={columnFilters}
+                    onFilterClick={(e, colKey, label) => {
+                        if (activeColumnMenu?.colKey === colKey && activeColumnMenu.source === 'header' && !activeColumnMenu.rowId) {
+                            setActiveColumnMenu(null);
+                        } else {
+                            openFilterMenu(e, colKey as any, label, 'header');
+                        }
+                    }}
+                    activeFilterColumn={activeColumnMenu?.source === 'header' ? activeColumnMenu.colKey : null}
+                    groupBy={groupBy}
+                    virtualized={true}
+                    onRowReorder={handleRowReorder}
+                    showRowNumbers={true}
+                />
                 <div className="bg-slate-50/80 border-t border-slate-200 px-5 py-3 flex justify-between items-center text-xs font-bold text-slate-600 shrink-0">
                     <div className="flex items-center gap-4">
                         <span className="flex items-center gap-2">

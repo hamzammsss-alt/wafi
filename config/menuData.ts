@@ -12,7 +12,7 @@ import {
     CheckSquare, Filter, Grip, BookOpen, PenTool, Hash, Server,
     TrendingUp, TrendingDown, PlusCircle, Image, Table, Upload, Monitor,
     FileMinus, FilePlus, StickyNote, Activity, Scale, Receipt, BarChart3,
-    Network, Package, AlertTriangle, Clock, Sparkles, GitMerge, Book, BadgeCheck, Building2, ShieldCheck
+    Network, Package, AlertTriangle, Clock, Sparkles, GitMerge, Book, BadgeCheck, Building2, ShieldCheck, Wallet
 } from 'lucide-react';
 
 // --- TYPE DEFINITIONS ---
@@ -76,6 +76,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
         { label: 'مراكز التكلفة', icon: Layers, path: '/master/cost-centers' },
         { label: 'الضرائب', icon: Percent, path: '/master/taxes' },
         { label: 'طرق الدفع', icon: CreditCard, path: '/master/payment-methods' },
+        { label: 'الصناديق', icon: Wallet, path: '/master/cash-boxes' },
         { divider: true, label: '' },
         { header: true, label: 'تعاريف المخزون' },
         { label: 'الوحدات', icon: Box, path: '/master/units' },
@@ -509,6 +510,7 @@ export const RIBBON_CONTENT: Record<string, RibbonGroup[]> = {
             label: 'الحسابات',
             items: [
                 { label: 'ادارة الحسابات', icon: Settings, path: '/gl/chart-of-accounts' },
+                { label: 'الصناديق', icon: Wallet, path: '/master/cash-boxes' },
                 { label: 'الحسابات الرئيسية', icon: Layers, path: '/gl/main-accounts' },
                 { label: 'مجموعات الحسابات', icon: FolderOpen, path: '/gl/account-groups' },
                 { label: 'جميع الحسابات', icon: List, path: '/gl/all-accounts' },

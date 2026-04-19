@@ -115,7 +115,7 @@ export const PaymentVoucherList = () => {
     const [vouchers, setVouchers] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'POSTED' | 'DRAFT'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'POSTED' | 'DRAFT'>('DRAFT');
     const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
     const [showFilters, setShowFilters] = useState(false);
     const [rowDensity, setRowDensity] = useState<'comfortable' | 'compact'>('comfortable');
@@ -193,7 +193,7 @@ export const PaymentVoucherList = () => {
             setQuickSearch(s.quickSearch || '');
             setQuickSearchField(s.quickSearchField || 'all');
             setQuickSearchOperator(s.quickSearchOperator || 'contains');
-            setStatusFilter(s.statusFilter || 'all');
+            setStatusFilter(s.statusFilter || 'DRAFT');
             setColumnWidths(s.columnWidths || {});
             setColumnFilters({
                 ...DEFAULT_COLUMN_FILTERS,
@@ -545,7 +545,7 @@ export const PaymentVoucherList = () => {
 
     const clearAllFilters = () => {
         setSearchTerm('');
-        setStatusFilter('all');
+        setStatusFilter('DRAFT');
         setQuickSearch('');
         setQuickSearchField('all');
         setQuickSearchOperator('contains');
@@ -760,13 +760,13 @@ export const PaymentVoucherList = () => {
     const contextMenuCanPost = contextMenuPayment?.status === 'DRAFT';
 
     return (
-        <div className="p-6 bg-[#f8fafc] h-full flex flex-col gap-4 overflow-y-auto" dir="rtl">
+        <div className="bg-[#f8fafc] h-full min-h-0 flex flex-col gap-4 overflow-x-hidden overflow-y-auto lg:overflow-hidden" dir="rtl">
             {/* Header with Icon */}
             <motion.div
                 initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.28 }}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                className="rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm flex-shrink-0"
             >
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3">
@@ -780,7 +780,7 @@ export const PaymentVoucherList = () => {
                     </div>
                     <button
                         onClick={() => navigateInTab('/treasury/payment/new', 'سند صرف جديد')}
-                        className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-colors h-fit"
+                        className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm transition-colors h-fit flex-shrink-0"
                     >
                         <Plus size={18} /> سند صرف جديد
                     </button>
@@ -803,7 +803,7 @@ export const PaymentVoucherList = () => {
             />
 
             {/* Stats Cards */}
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 flex-shrink-0">
                 <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.15 }} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm hover:shadow-md">
                     <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">الإجمالي</div>
                     <div className="mt-1 text-2xl font-black text-slate-800">{stats.total}</div>
@@ -827,8 +827,8 @@ export const PaymentVoucherList = () => {
             </div>
 
             {/* Filters Bar */}
-            <div className="rounded-2xl border border-sky-100 bg-[#f5fbff] p-3 shadow-sm">
-                <div className="mb-3 flex flex-wrap items-center gap-3">
+            <div className="rounded-2xl border border-sky-100 bg-[#f5fbff] px-4 py-3 shadow-sm flex-shrink-0">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                     <button
                         type="button"
                         onClick={loadVouchers}
@@ -1000,6 +1000,27 @@ export const PaymentVoucherList = () => {
                     </FloatingDropdown>
                 </div>
 
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                    {[
+                        { value: 'DRAFT', label: 'محفوظ' },
+                        { value: 'POSTED', label: 'مرحل' },
+                        { value: 'all', label: 'الكل' },
+                    ].map((option) => (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setStatusFilter(option.value as 'all' | 'POSTED' | 'DRAFT')}
+                            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                statusFilter === option.value
+                                    ? 'bg-sky-600 text-white shadow-lg shadow-sky-900/10'
+                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                            }`}
+                        >
+                            {option.label}
+                        </button>
+                    ))}
+                </div>
+
                 <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr_auto]">
                     <select
                         value={quickFilterColumn}
@@ -1115,7 +1136,7 @@ export const PaymentVoucherList = () => {
             </AnimatePresence>
 
             {/* Table */}
-            <div className="bg-white rounded-[20px] shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col">
+            <div className="bg-white rounded-[20px] shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-[18rem] lg:min-h-0">
                 <div className="overflow-auto flex-1 custom-scrollbar">
                     <table className="w-full border-separate border-spacing-0 text-right text-[13px] text-slate-700">
                         <thead className="sticky top-0 z-20 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
@@ -1298,9 +1319,9 @@ export const PaymentVoucherList = () => {
                         data-payment-context-menu="1"
                         initial={{ opacity: 0, scale: 0.96, y: 8 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.98, y: 4 }}
-                        transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                        className="fixed z-[9999] flex w-[20rem] flex-col overflow-hidden rounded-[20px] border border-sky-100/80 bg-white/95 text-right shadow-[0_24px_60px_rgba(15,23,42,0.16)] ring-1 ring-slate-900/5 backdrop-blur-xl"
+                        exit={{ opacity: 0, scale: 0.96, y: 6 }}
+                        transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+                        className="fixed z-[9999] flex w-[14rem] flex-col overflow-hidden rounded-lg border border-sky-100/80 bg-white/98 text-right shadow-[0_20px_45px_rgba(15,23,42,0.2)] ring-1 ring-slate-900/5 backdrop-blur-sm"
                         style={{
                             top: activeColumnMenu.position.top,
                             left: activeColumnMenu.position.left,
@@ -1310,182 +1331,155 @@ export const PaymentVoucherList = () => {
                         dir="rtl"
                         onContextMenu={(event) => event.preventDefault()}
                     >
-                        <div className="border-b border-slate-100 bg-gradient-to-l from-sky-50/90 via-white to-cyan-50/80 px-4 py-3">
-                            <div className="flex items-start justify-between gap-3">
+                        <div className="border-b border-sky-50/80 bg-gradient-to-l from-sky-40/50 via-white to-cyan-40/30 px-2.5 py-2">
+                            <div className="flex items-start justify-between gap-2">
                                 <div>
-                                    <div className="text-sm font-extrabold text-slate-800">{activeColumnMenu.label}</div>
-                                    <div className="mt-0.5 text-[11px] text-slate-500">
-                                        {activeColumnMenu.source === 'cell' ? 'أوامر سريعة على الخلية والسند الحالي.' : 'إدارة الفرز والفلترة والعمود الحالي.'}
-                                    </div>
+                                    <div className="text-xs font-black text-slate-800 truncate">{activeColumnMenu.label}</div>
                                     {activeColumnMenu.source === 'cell' && activeColumnMenu.cellValue && activeColumnMenu.cellValue !== '-' && (
-                                        <div className="mt-2 max-w-[220px] truncate rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold text-sky-700">
+                                        <div className="mt-1 max-w-[120px] truncate rounded-md bg-sky-100 px-1.5 py-0.5 text-[8px] font-bold text-sky-700">
                                             {activeColumnMenu.cellValue}
                                         </div>
                                     )}
-                                    <div className="mt-0.5 text-[11px] text-slate-500">اكتب قيمة لتصفية هذا العمود مباشرة.</div>
                                 </div>
                             </div>
                         </div>
-                        <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                        <div className="custom-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
                             {activeColumnMenu.source === 'cell' && (
-                                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-2">
-                                    <div className={contextMenuSectionTitle}>عمليات السند</div>
+                                <div className="rounded-lg border border-slate-200/60 bg-slate-50/50 p-1">
+                                    <div className="px-1 text-[7px] font-black uppercase tracking-[0.12em] text-slate-400">إجراءات</div>
                                     <button
                                         type="button"
-                                        className={contextMenuItemClass}
+                                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100 hover:text-sky-800"
                                         onClick={() => {
                                             openVoucherById(activeColumnMenu.rowId);
                                             setActiveColumnMenu(null);
                                         }}
                                     >
-                                        <span>فتح السند</span>
-                                        <FolderOpen size={14} className="text-slate-400" />
+                                        <span>فتح</span>
+                                        <FolderOpen size={10} className="text-slate-400" />
                                     </button>
                                     <button
                                         type="button"
-                                        className={contextMenuItemClass}
+                                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100 hover:text-sky-800"
                                         onClick={() => {
                                             void duplicateVoucherById(activeColumnMenu.rowId);
                                             setActiveColumnMenu(null);
                                         }}
                                     >
-                                        <span>نسخ السند</span>
-                                        <Copy size={14} className="text-slate-400" />
+                                        <span>نسخ</span>
+                                        <Copy size={10} className="text-slate-400" />
                                     </button>
                                     {contextMenuCanPost && (
                                         <button
                                             type="button"
-                                            className={contextMenuItemClass}
+                                            className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-emerald-700 transition hover:bg-emerald-100 hover:text-emerald-800"
                                             onClick={() => {
                                                 void postPaymentIds(activeColumnMenu.rowId ? [activeColumnMenu.rowId] : []);
                                                 setActiveColumnMenu(null);
                                             }}
                                         >
-                                            <span>ترحيل السند</span>
-                                            <CheckCircle2 size={14} className="text-slate-400" />
+                                            <span>ترحيل</span>
+                                            <CheckCircle2 size={10} className="text-emerald-400" />
                                         </button>
                                     )}
                                     <button
                                         type="button"
-                                        className={contextMenuDangerItemClass}
+                                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-rose-700 transition hover:bg-rose-100 hover:text-rose-800"
                                         onClick={() => {
                                             void deletePaymentIds(activeColumnMenu.rowId ? [activeColumnMenu.rowId] : []);
                                             setActiveColumnMenu(null);
                                         }}
                                     >
-                                        <span>حذف السند</span>
-                                        <Trash2 size={14} className="text-rose-400" />
+                                        <span>حذف</span>
+                                        <Trash2 size={10} className="text-rose-400" />
                                     </button>
-                                    {activeColumnMenu.cellValue && activeColumnMenu.cellValue !== '-' && (
-                                        <button
-                                            type="button"
-                                            className={contextMenuItemClass}
-                                            onClick={() => {
-                                                void navigator.clipboard.writeText(activeColumnMenu.cellValue || '');
-                                                setActiveColumnMenu(null);
-                                            }}
-                                        >
-                                            <span>نسخ قيمة الخلية</span>
-                                            <Copy size={14} className="text-slate-400" />
-                                        </button>
-                                    )}
                                 </div>
                             )}
 
-                            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-2">
-                                <div className={contextMenuSectionTitle}>الترتيب</div>
-                                <button type="button" className={contextMenuItemClass} onClick={() => setContextMenuSort(activeColumnMenu.colKey, 'asc')}>
-                                    <span>ترتيب تصاعدي</span>
-                                    <ArrowDownAZ size={14} className="text-slate-400" />
+                            <div className="rounded-lg border border-slate-200/60 bg-slate-50/50 p-1">
+                                <div className="px-1 text-[7px] font-black uppercase tracking-[0.12em] text-slate-400">ترتيب</div>
+                                <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => setContextMenuSort(activeColumnMenu.colKey, 'asc')}>
+                                    <span>تصاعدي</span>
+                                    <ArrowDownAZ size={10} className="text-slate-400" />
                                 </button>
-                                <button type="button" className={contextMenuItemClass} onClick={() => setContextMenuSort(activeColumnMenu.colKey, 'desc')}>
-                                    <span>ترتيب تنازلي</span>
-                                    <ArrowUpZA size={14} className="text-slate-400" />
+                                <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => setContextMenuSort(activeColumnMenu.colKey, 'desc')}>
+                                    <span>تنازلي</span>
+                                    <ArrowUpZA size={10} className="text-slate-400" />
                                 </button>
                                 <button
                                     type="button"
-                                    className={contextMenuItemClass}
+                                    className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100"
                                     onClick={() => {
                                         clearSort();
                                         setActiveColumnMenu(null);
                                     }}
                                 >
-                                    <span>إلغاء الترتيب</span>
-                                    <RefreshCw size={14} className="text-slate-400" />
+                                    <span>إلغاء</span>
+                                    <RefreshCw size={10} className="text-slate-400" />
                                 </button>
                             </div>
 
                             {activeColumnMenu.source === 'cell' && activeColumnMenu.cellValue && activeColumnMenu.cellValue !== '-' && (
-                                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-2">
-                                    <div className={contextMenuSectionTitle}>الفلترة السريعة</div>
-                                    <button type="button" className={contextMenuItemClass} onClick={() => applyFilterFromCellValue('equals')}>
-                                        <span>تصفية بهذه القيمة</span>
-                                        <Filter size={14} className="text-slate-400" />
+                                <div className="rounded-lg border border-slate-200/60 bg-slate-50/50 p-1">
+                                    <div className="px-1 text-[7px] font-black uppercase tracking-[0.12em] text-slate-400">فلتر</div>
+                                    <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => applyFilterFromCellValue('equals')}>
+                                        <span>بهذه القيمة</span>
+                                        <Filter size={10} className="text-slate-400" />
                                     </button>
                                     {activeColumnMenu.colKey === 'amount' && (
                                         <>
-                                            <button type="button" className={contextMenuItemClass} onClick={() => applyFilterFromCellValue('greaterThan')}>
-                                                <span>أكبر من هذه القيمة</span>
-                                                <Filter size={14} className="text-slate-400" />
+                                            <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => applyFilterFromCellValue('greaterThan')}>
+                                                <span>أكبر من</span>
+                                                <Filter size={10} className="text-slate-400" />
                                             </button>
-                                            <button type="button" className={contextMenuItemClass} onClick={() => applyFilterFromCellValue('lessThan')}>
-                                                <span>أصغر من هذه القيمة</span>
-                                                <Filter size={14} className="text-slate-400" />
+                                            <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => applyFilterFromCellValue('lessThan')}>
+                                                <span>أقل من</span>
+                                                <Filter size={10} className="text-slate-400" />
                                             </button>
                                         </>
                                     )}
-                                    <button type="button" className={contextMenuItemClass} onClick={() => clearFilter(activeColumnMenu.colKey)}>
-                                        <span>مسح فلتر العمود</span>
-                                        <Filter size={14} className="text-slate-400" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={contextMenuItemClass}
-                                        onClick={() => {
-                                            setShowFilters(true);
-                                            setActiveColumnMenu(null);
-                                        }}
-                                    >
-                                        <span>ظپطھط­ ظ„ظˆحة التصفية</span>
-                                        <Pencil size={14} className="text-slate-400" />
+                                    <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => clearFilter(activeColumnMenu.colKey)}>
+                                        <span>مسح الفلتر</span>
+                                        <Filter size={10} className="text-slate-400" />
                                     </button>
                                 </div>
                             )}
 
-                            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-2">
-                                <div className={contextMenuSectionTitle}>الأعمدة</div>
-                                <button type="button" className={contextMenuItemClass} onClick={() => hideColumn(activeColumnMenu.colKey)}>
-                                    <span>ط¥ط®ظپط§ط، ط§ظ„ط¹ظ…ظˆد</span>
-                                    <Columns3 size={14} className="text-slate-400" />
+                            <div className="rounded-lg border border-slate-200/60 bg-slate-50/50 p-1">
+                                <div className="px-1 text-[7px] font-black uppercase tracking-[0.12em] text-slate-400">أعمدة</div>
+                                <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => hideColumn(activeColumnMenu.colKey)}>
+                                    <span>إخفاء</span>
+                                    <Columns3 size={10} className="text-slate-400" />
                                 </button>
                                 <button
                                     type="button"
-                                    className={contextMenuItemClass}
+                                    className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100"
                                     onClick={() => {
                                         showAllColumns();
                                         setActiveColumnMenu(null);
                                     }}
                                 >
-                                    <span>ط¥ط¸ظ‡ط§ط± ظƒل الأعمدة</span>
-                                    <Columns3 size={14} className="text-slate-400" />
+                                    <span>إظهار الكل</span>
+                                    <Columns3 size={10} className="text-slate-400" />
                                 </button>
                             </div>
 
-                            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-2">
-                                <div className={contextMenuSectionTitle}>ط¹ط±ط¶ ط§ظ„ط¹ظ…ظˆد</div>
-                                <button type="button" className={contextMenuItemClass} onClick={() => adjustColumnWidth(activeColumnMenu.colKey, 20)}>
-                                    <span>زيادة العرض 20px</span>
-                                    <Maximize2 size={14} className="text-slate-400" />
+                            <div className="rounded-lg border border-slate-200/60 bg-slate-50/50 p-1">
+                                <div className="px-1 text-[7px] font-black uppercase tracking-[0.12em] text-slate-400">عرض</div>
+                                <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => adjustColumnWidth(activeColumnMenu.colKey, 20)}>
+                                    <span>+20px</span>
+                                    <Maximize2 size={10} className="text-slate-400" />
                                 </button>
-                                <button type="button" className={contextMenuItemClass} onClick={() => adjustColumnWidth(activeColumnMenu.colKey, -20)}>
-                                    <span>تقليل العرض 20px</span>
-                                    <Maximize2 size={14} className="text-slate-400" />
+                                <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => adjustColumnWidth(activeColumnMenu.colKey, -20)}>
+                                    <span>-20px</span>
+                                    <Maximize2 size={10} className="text-slate-400" />
                                 </button>
-                                <button type="button" className={contextMenuItemClass} onClick={() => autoFitColumnWidth(activeColumnMenu.colKey)}>
-                                    <span>ملاءمة تلقائية</span>
-                                    <Maximize2 size={14} className="text-slate-400" />
+                                <button type="button" className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 text-right text-[10px] font-semibold text-slate-700 transition hover:bg-sky-100" onClick={() => autoFitColumnWidth(activeColumnMenu.colKey)}>
+                                    <span>ملاءمة</span>
+                                    <Maximize2 size={10} className="text-slate-400" />
                                 </button>
                             </div>
+                        </div>
 
                             <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-2">
                                 <div className={contextMenuSectionTitle}>ط£ظˆامر عامة</div>
@@ -1565,11 +1559,6 @@ export const PaymentVoucherList = () => {
                                         onChange={(e) => setColumnFilters(prev => ({ ...prev, [activeColumnMenu.colKey]: e.target.value }))}
                                     />
                                 )}
-                            </div>
-                            <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-                                <button type="button" onClick={() => clearFilter(activeColumnMenu.colKey)} className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-[11px] font-bold text-rose-700 transition hover:bg-rose-100">مسح</button>
-                                <button type="button" onClick={() => setActiveColumnMenu(null)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[11px] font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900">إغلاق</button>
-                            </div>
                         </div>
                     </motion.div>,
                     document.body

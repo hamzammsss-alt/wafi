@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Search, Folder, FolderOpen, FileText, ChevronRight, ChevronDown, Check, X } from 'lucide-react';
 import { Account } from '../types';
+import { loadUnifiedAccountTree } from '../src/utils/unifiedAccountTree';
 
 interface AccountPickerProps {
     isOpen: boolean;
@@ -67,6 +68,9 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
             const nodeCode = node.account_code || node.code || '';
             const nodeName = (node.name || node.name_ar || '').toLowerCase();
             const nodeIsTransactional = Boolean(node.is_transactional);
+            const nodeIsActive =
+                String((node as any).status || '').toUpperCase() !== 'INACTIVE' &&
+                Number((node as any).is_active ?? 1) !== 0;
 
             const effectiveMode: 'all' | 'posting' | 'header' = selectableMode || (showTransactionalOnly ? 'posting' : 'all');
             const modeMatch =
@@ -88,7 +92,11 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
             if (!isPrefixValid) return null;
 
             // Search Validation (combined with currency)
-            const isMatch = (!term || nodeCode.includes(term) || nodeName.includes(term)) && isCurrencyValid && modeMatch;
+            const isMatch =
+                (!term || nodeCode.includes(term) || nodeName.includes(term)) &&
+                isCurrencyValid &&
+                modeMatch &&
+                nodeIsActive;
 
             // Process Children
             let filteredChildren: Account[] = [];
@@ -124,7 +132,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
             autoExpand(filtered, expandedMap);
             setExpanded(expandedMap);
         }
-    }, [search, treeData, allowedPrefixes, currencyId]);
+    }, [search, treeData, allowedPrefixes, currencyId, selectableMode, showTransactionalOnly]);
 
     const loadAccounts = async () => {
         setLoading(true);
@@ -132,7 +140,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
             // @ts-ignore
             if (window.electronAPI) {
                 // @ts-ignore
-                const fullTree = await window.electronAPI.getAccountTree();
+                const fullTree = await loadUnifiedAccountTree(window.electronAPI, true);
 
                 let targetNodes = fullTree;
 
@@ -186,6 +194,9 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
             const nodeName = node.name || node.name_ar || 'بدون اسم';
             const hasChildren = node.children && node.children.length > 0;
             const isExpanded = expanded[nodeCode];
+            const isActive =
+                String((node as any).status || '').toUpperCase() !== 'INACTIVE' &&
+                Number((node as any).is_active ?? 1) !== 0;
 
             // Selectable Rule:
             // 1. Must satisfy showTransactionalOnly
@@ -198,7 +209,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
                         ? Boolean(node.is_transactional)
                         : !Boolean(node.is_transactional);
             const isCurrencyMatch = matchesCurrency(node);
-            const isSelectable = isTransactionalMatch && isCurrencyMatch;
+            const isSelectable = isTransactionalMatch && isCurrencyMatch && isActive;
             const isSelected = selectableAccounts[selectedIndex]?.id === node.id;
 
             if (hideNonSelectableRows && !isSelectable && !hasChildren) {
@@ -237,8 +248,11 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
                         <span className="font-mono text-gray-500 text-xs bg-gray-50 border px-1 rounded mx-1">{nodeCode}</span>
                         <span className="flex-1 text-sm text-gray-800 font-medium">{nodeName}</span>
 
-                        {node.is_transactional && (
+                        {node.is_transactional && isActive && (
                             <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full border border-green-100">اختيار</span>
+                        )}
+                        {!isActive && (
+                            <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200">غير نشط</span>
                         )}
                     </div>
 

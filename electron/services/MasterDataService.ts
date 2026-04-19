@@ -2,6 +2,263 @@ import { db } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 
 export class MasterDataService {
+    private static normalizeName(value: any): string {
+        return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
+    }
+
+    private static normalizeCurrencyCode(value: any): string {
+        const code = String(value || '').trim().toUpperCase();
+        if (!code) return 'NIS';
+        if (code === 'ILS') return 'NIS';
+        return code;
+    }
+
+    private static currencyCodesMatch(left: any, right: any): boolean {
+        return this.normalizeCurrencyCode(left) === this.normalizeCurrencyCode(right);
+    }
+
+    private static resolveCurrencyValue(value: any) {
+        const incoming = String(value || '').trim();
+        const normalized = this.normalizeCurrencyCode(incoming);
+        const codeCandidates = Array.from(new Set([
+            normalized,
+            normalized === 'NIS' ? 'ILS' : normalized,
+            normalized === 'ILS' ? 'NIS' : normalized
+        ]));
+
+        for (const codeCandidate of codeCandidates) {
+            const byCode = db.prepare("SELECT id, code, name_ar, name_en FROM currencies WHERE UPPER(code) = ?").get(codeCandidate);
+            if (byCode) {
+                return {
+                    id: byCode.id as string,
+                    code: this.normalizeCurrencyCode(byCode.code),
+                    name: byCode.name_ar || byCode.name_en || byCode.code
+                };
+            }
+        }
+
+        if (incoming) {
+            const byId = db.prepare("SELECT id, code, name_ar, name_en FROM currencies WHERE id = ?").get(incoming);
+            if (byId) {
+                return {
+                    id: byId.id as string,
+                    code: this.normalizeCurrencyCode(byId.code),
+                    name: byId.name_ar || byId.name_en || byId.code
+                };
+            }
+        }
+
+        const fallback = db.prepare("SELECT id, code, name_ar, name_en FROM currencies ORDER BY code LIMIT 1").get();
+        if (fallback) {
+            return {
+                id: fallback.id as string,
+                code: this.normalizeCurrencyCode(fallback.code),
+                name: fallback.name_ar || fallback.name_en || fallback.code
+            };
+        }
+
+        return { id: null, code: normalized, name: normalized };
+    }
+
+    private static resolveLegacyAccountId(inputId: string | null | undefined, preferredCurrencyCode = 'NIS'): string | null {
+        const normalizedId = String(inputId || '').trim();
+        if (!normalizedId) return null;
+
+        const direct = db.prepare("SELECT id FROM accounts WHERE id = ?").get(normalizedId) as { id: string } | undefined;
+        if (direct?.id) return direct.id;
+
+        const chart = db.prepare(`
+            SELECT
+                g.id,
+                g.account_code,
+                COALESCE(g.name_ar, g.name_en, g.account_code) AS account_name,
+                g.parent_id,
+                g.account_type,
+                g.is_transactional,
+                COALESCE(cur.code, ?) AS currency_code
+            FROM gl_chart_of_accounts g
+            LEFT JOIN currencies cur ON cur.id = g.currency_id
+            WHERE g.id = ?
+        `).get(preferredCurrencyCode, normalizedId) as {
+            id: string;
+            account_code: string;
+            account_name: string;
+            parent_id: string | null;
+            account_type: string;
+            is_transactional: number;
+            currency_code: string;
+        } | undefined;
+
+        if (!chart) return null;
+
+        const byCode = db.prepare("SELECT id FROM accounts WHERE code = ? LIMIT 1").get(chart.account_code) as { id: string } | undefined;
+        if (byCode?.id) return byCode.id;
+
+        let parentLegacyId: string | null = null;
+        if (chart.parent_id) {
+            parentLegacyId = this.resolveLegacyAccountId(chart.parent_id, chart.currency_code || preferredCurrencyCode);
+        }
+
+        db.prepare(`
+            INSERT INTO accounts (
+                id, code, account_code, name, type, balance,
+                parent_id, account_level, posting_allowed, is_transactional, is_group,
+                currency, currency_code, currency_behavior, reference_type, scope_type,
+                status, is_active, requires_cost_center, requires_analysis_code
+            ) VALUES (
+                @id, @code, @account_code, @name, @type, '0',
+                @parent_id, @account_level, @posting_allowed, @is_transactional, @is_group,
+                @currency, @currency_code, 'FIXED_CURRENCY', 'NONE', 'COMPANY',
+                'ACTIVE', 1, 0, 0
+            )
+            ON CONFLICT(id) DO NOTHING
+        `).run({
+            id: chart.id,
+            code: chart.account_code,
+            account_code: chart.account_code,
+            name: chart.account_name,
+            type: String(chart.account_type || 'ASSET').charAt(0) + String(chart.account_type || 'ASSET').slice(1).toLowerCase(),
+            parent_id: parentLegacyId,
+            account_level: String(chart.account_code || '').length || 1,
+            posting_allowed: chart.is_transactional ? 1 : 0,
+            is_transactional: chart.is_transactional ? 1 : 0,
+            is_group: chart.is_transactional ? 0 : 1,
+            currency: this.normalizeCurrencyCode(chart.currency_code || preferredCurrencyCode),
+            currency_code: this.normalizeCurrencyCode(chart.currency_code || preferredCurrencyCode)
+        });
+
+        return chart.id;
+    }
+
+    private static getAccountIdentity(accountId: string) {
+        return db.prepare(`
+            SELECT
+                a.id,
+                COALESCE(a.code, a.account_code, g.account_code) AS account_code,
+                COALESCE(a.name, g.name_ar, g.name_en, g.account_code) AS account_name,
+                COALESCE(NULLIF(a.currency_code, ''), NULLIF(a.currency, ''), cur.code, 'NIS') AS currency_code,
+                COALESCE(a.is_transactional, g.is_transactional, 1) AS is_transactional
+            FROM accounts a
+            LEFT JOIN gl_chart_of_accounts g
+                ON g.id = a.id OR g.account_code = COALESCE(a.account_code, a.code)
+            LEFT JOIN currencies cur
+                ON cur.id = g.currency_id
+            WHERE a.id = ?
+            LIMIT 1
+        `).get(accountId) as {
+            id: string;
+            account_code: string;
+            account_name: string;
+            currency_code: string;
+            is_transactional: number;
+        } | undefined;
+    }
+
+    private static buildBankSubAccountName(data: {
+        account_name?: any;
+        bank_name?: any;
+        account_number?: any;
+    }): string {
+        const explicitName = String(data?.account_name || '').trim();
+        const bankName = String(data?.bank_name || '').trim();
+        const accountNumber = String(data?.account_number || '').trim();
+
+        if (explicitName && accountNumber) {
+            return explicitName.includes(accountNumber) ? explicitName : `${explicitName} - ${accountNumber}`;
+        }
+        if (explicitName) return explicitName;
+        if (bankName && accountNumber) return `${bankName} - ${accountNumber}`;
+        return bankName || accountNumber || 'حساب بنكي';
+    }
+
+    private static buildBankSubAccountCode(data: {
+        id?: any;
+        code?: any;
+        account_number?: any;
+    }): string {
+        const explicitCode = String(data?.code || '').trim().toUpperCase();
+        if (explicitCode) return explicitCode;
+
+        const accountNumber = String(data?.account_number || '').trim().toUpperCase();
+        if (accountNumber) return accountNumber;
+
+        const fallbackId = String(data?.id || '').trim().replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        if (fallbackId) return `BANK-${fallbackId.slice(0, 8)}`;
+
+        return `BANK-${uuidv4().slice(0, 8).toUpperCase()}`;
+    }
+
+    private static syncBankAccountSubAccount(
+        data: {
+            id: string;
+            gl_account_id?: string | null;
+            code?: any;
+            account_number?: any;
+            account_name?: any;
+            bank_name?: any;
+            currency?: any;
+            currency_id?: any;
+            is_active?: any;
+        },
+        options: { strict?: boolean } = {}
+    ) {
+        const bankAccountId = String(data?.id || '').trim();
+        if (!bankAccountId) return;
+
+        const currencyInfo = this.resolveCurrencyValue(data?.currency_id || data?.currency);
+        const linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code);
+        if (!linkedLegacyAccountId) return;
+
+        const subAccountName = this.buildBankSubAccountName(data);
+        const normalizedName = this.normalizeName(subAccountName);
+        const subAccountCode = this.buildBankSubAccountCode(data);
+        const isActive = data?.is_active === false || Number(data?.is_active ?? 1) === 0 ? 0 : 1;
+
+        db.prepare(`
+            UPDATE accounts
+            SET requires_sub_account = 1
+            WHERE id = ?
+        `).run(linkedLegacyAccountId);
+
+        const duplicateSubAccount = db.prepare(`
+            SELECT id
+            FROM ae_sub_accounts
+            WHERE account_id = ?
+              AND id != ?
+              AND (
+                UPPER(TRIM(COALESCE(code, ''))) = ?
+                OR UPPER(TRIM(COALESCE(normalized_name, ''))) = ?
+              )
+            LIMIT 1
+        `).get(linkedLegacyAccountId, bankAccountId, subAccountCode, normalizedName) as { id: string } | undefined;
+
+        if (duplicateSubAccount) {
+            if (options.strict) {
+                throw new Error('يوجد حساب فرعي بنكي بنفس الرمز أو الاسم لهذا الحساب');
+            }
+            return;
+        }
+
+        const existingSubAccount = db.prepare(`
+            SELECT id
+            FROM ae_sub_accounts
+            WHERE id = ?
+            LIMIT 1
+        `).get(bankAccountId) as { id: string } | undefined;
+
+        if (existingSubAccount) {
+            db.prepare(`
+                UPDATE ae_sub_accounts
+                SET account_id = ?, code = ?, name = ?, normalized_name = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `).run(linkedLegacyAccountId, subAccountCode, subAccountName, normalizedName, isActive, bankAccountId);
+        } else {
+            db.prepare(`
+                INSERT INTO ae_sub_accounts (id, account_id, code, name, normalized_name, is_active)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(bankAccountId, linkedLegacyAccountId, subAccountCode, subAccountName, normalizedName, isActive);
+        }
+    }
 
     // ================================================================
     // 1. BANKS
@@ -224,6 +481,33 @@ export class MasterDataService {
             console.error("MasterDataService.getBankAccounts self-heal failed:", e);
         }
 
+        try {
+            const rows = db.prepare(`
+                SELECT
+                    ba.id,
+                    ba.gl_account_id,
+                    ba.code,
+                    ba.account_number,
+                    ba.account_name,
+                    ba.currency,
+                    ba.currency_id,
+                    COALESCE(ba.is_active, 1) AS is_active,
+                    COALESCE(b.name_ar, b.name_en, ba.bank_name) AS bank_name
+                FROM bank_accounts ba
+                LEFT JOIN banks b ON b.id = ba.bank_id
+            `).all();
+
+            const syncBankSubAccounts = db.transaction((bankRows: any[]) => {
+                for (const row of bankRows) {
+                    this.syncBankAccountSubAccount(row, { strict: false });
+                }
+            });
+
+            syncBankSubAccounts(rows);
+        } catch (e) {
+            console.error("MasterDataService.getBankAccounts sub-account sync failed:", e);
+        }
+
         return db.prepare(`
             SELECT
                 ba.*,
@@ -232,7 +516,10 @@ export class MasterDataService {
                 COALESCE(b.name_ar, b.name_en, ba.bank_name) AS bank_name,
                 COALESCE(acc.name, gl.name_ar, gl.name_en) AS gl_account_name,
                 COALESCE(acc.code, gl.account_code) AS gl_account_code,
-                COALESCE(comm_acc.name, comm_gl.name_ar, comm_gl.name_en) AS commission_account_name
+                COALESCE(comm_acc.name, comm_gl.name_ar, comm_gl.name_en) AS commission_account_name,
+                sa.id AS sub_account_id,
+                COALESCE(sa.code, '') AS sub_account_code,
+                COALESCE(sa.name, '') AS sub_account_name
             FROM bank_accounts ba
             LEFT JOIN banks b ON ba.bank_id = b.id
             LEFT JOIN currencies cur ON ba.currency_id = cur.id
@@ -240,6 +527,7 @@ export class MasterDataService {
             LEFT JOIN gl_chart_of_accounts gl ON ba.gl_account_id = gl.id
             LEFT JOIN accounts comm_acc ON ba.commission_account_id = comm_acc.id
             LEFT JOIN gl_chart_of_accounts comm_gl ON ba.commission_account_id = comm_gl.id
+            LEFT JOIN ae_sub_accounts sa ON sa.id = ba.id
             ORDER BY ba.created_at
         `).all();
     }
@@ -790,27 +1078,43 @@ export class MasterDataService {
                 is_active: data.is_active !== false ? 1 : 0
             };
 
-            if (!data.id) {
-                db.prepare(`
-                    INSERT INTO bank_accounts (
-                        id, bank_id, branch, account_number, iban, 
-                        currency, currency_id, gl_account_id, commission_account_id, account_name, bank_name, code, is_active
-                    )
-                    VALUES (
-                        @id, @bank_id, @branch, @account_number, @iban, 
-                        @currency, @currency_id, @gl_account_id, @commission_account_id, @account_name, @bank_name, @code, @is_active
-                    )
-                `).run(params);
-            } else {
-                db.prepare(`
-                    UPDATE bank_accounts SET 
-                        bank_id=@bank_id, branch=@branch, account_number=@account_number, 
-                        iban=@iban, currency=@currency, currency_id=@currency_id,
-                        gl_account_id=@gl_account_id, commission_account_id=@commission_account_id,
-                        account_name=@account_name, bank_name=@bank_name, code=@code, is_active=@is_active
-                    WHERE id=@id
-                `).run(params);
-            }
+            const saveTx = db.transaction(() => {
+                if (!data.id) {
+                    db.prepare(`
+                        INSERT INTO bank_accounts (
+                            id, bank_id, branch, account_number, iban, 
+                            currency, currency_id, gl_account_id, commission_account_id, account_name, bank_name, code, is_active
+                        )
+                        VALUES (
+                            @id, @bank_id, @branch, @account_number, @iban, 
+                            @currency, @currency_id, @gl_account_id, @commission_account_id, @account_name, @bank_name, @code, @is_active
+                        )
+                    `).run(params);
+                } else {
+                    db.prepare(`
+                        UPDATE bank_accounts SET 
+                            bank_id=@bank_id, branch=@branch, account_number=@account_number, 
+                            iban=@iban, currency=@currency, currency_id=@currency_id,
+                            gl_account_id=@gl_account_id, commission_account_id=@commission_account_id,
+                            account_name=@account_name, bank_name=@bank_name, code=@code, is_active=@is_active
+                        WHERE id=@id
+                    `).run(params);
+                }
+
+                this.syncBankAccountSubAccount({
+                    id,
+                    gl_account_id: glAccountId,
+                    code: params.code,
+                    account_number: params.account_number,
+                    account_name: params.account_name,
+                    bank_name: params.bank_name,
+                    currency: params.currency,
+                    currency_id: params.currency_id,
+                    is_active: params.is_active
+                }, { strict: true });
+            });
+
+            saveTx();
             return { success: true, id };
         } catch (err: any) {
             console.error("MasterDataService.saveBankAccount Error:", err);
@@ -819,12 +1123,198 @@ export class MasterDataService {
     }
 
     static deleteBankAccount(id: string) {
+        db.prepare(`
+            UPDATE ae_sub_accounts
+            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(id);
         db.prepare('DELETE FROM bank_accounts WHERE id = ?').run(id);
         return { success: true };
     }
 
     // ================================================================
-    // 3. COST CENTERS
+    // 3. CASH BOXES
+    // ================================================================
+    static getCashBoxes() {
+        return db.prepare(`
+            SELECT
+                cb.*,
+                COALESCE(cur.code, cb.currency_code) AS currency_code,
+                COALESCE(cur.name_ar, cur.name_en, cb.currency_code) AS currency_name,
+                COALESCE(acc.code, acc.account_code, gl.account_code) AS gl_account_code,
+                COALESCE(acc.name, gl.name_ar, gl.name_en, gl.account_code) AS gl_account_name
+            FROM cash_boxes cb
+            LEFT JOIN currencies cur ON cur.id = cb.currency_id
+            LEFT JOIN accounts acc ON acc.id = cb.gl_account_id
+            LEFT JOIN gl_chart_of_accounts gl
+                ON gl.id = cb.gl_account_id
+                OR gl.account_code = COALESCE(acc.account_code, acc.code)
+            WHERE COALESCE(cb.is_active, 1) = 1
+            ORDER BY COALESCE(cb.code, ''), cb.name_ar
+        `).all();
+    }
+
+    static saveCashBox(data: any) {
+        const normalizedName = this.normalizeName(data?.name_ar);
+        if (!normalizedName) throw new Error('اسم الصندوق مطلوب');
+
+        const normalizedCode = String(data?.code || '').trim().toUpperCase();
+        if (!normalizedCode) throw new Error('رمز الصندوق مطلوب');
+
+        const currencyInfo = this.resolveCurrencyValue(data?.currency_id || data?.currency_code || data?.currency);
+        const linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code);
+        if (!linkedLegacyAccountId) throw new Error('يجب اختيار حساب صندوق صالح');
+
+        const accountIdentity = this.getAccountIdentity(linkedLegacyAccountId);
+        if (!accountIdentity) throw new Error('تعذر قراءة حساب الصندوق المختار');
+        if (!String(accountIdentity.account_code || '').startsWith('111')) {
+            throw new Error('يمكن ربط الصندوق فقط بحسابات الصندوق النقدية من مجموعة 111');
+        }
+        if (Number(accountIdentity.is_transactional || 0) !== 1) {
+            throw new Error('حساب الصندوق يجب أن يكون حساباً حركياً');
+        }
+        if (!this.currencyCodesMatch(accountIdentity.currency_code, currencyInfo.code)) {
+            throw new Error('عملة الصندوق يجب أن تطابق عملة الحساب المرتبط');
+        }
+
+        if (!data?.id) {
+            const duplicateCode = db.prepare(`
+                SELECT id
+                FROM cash_boxes
+                WHERE UPPER(TRIM(COALESCE(code, ''))) = ?
+                LIMIT 1
+            `).get(normalizedCode);
+            if (duplicateCode) throw new Error('رمز الصندوق مستخدم مسبقاً');
+
+            const duplicateName = db.prepare(`
+                SELECT id
+                FROM cash_boxes
+                WHERE UPPER(TRIM(COALESCE(name_ar, ''))) = ?
+                  AND UPPER(TRIM(COALESCE(currency_code, ''))) = ?
+                  AND COALESCE(is_active, 1) = 1
+                LIMIT 1
+            `).get(normalizedName, currencyInfo.code);
+            if (duplicateName) throw new Error('اسم الصندوق موجود مسبقاً بنفس العملة');
+        } else {
+            const duplicateCode = db.prepare(`
+                SELECT id
+                FROM cash_boxes
+                WHERE UPPER(TRIM(COALESCE(code, ''))) = ?
+                  AND id != ?
+                LIMIT 1
+            `).get(normalizedCode, data.id);
+            if (duplicateCode) throw new Error('رمز الصندوق مستخدم مسبقاً');
+
+            const duplicateName = db.prepare(`
+                SELECT id
+                FROM cash_boxes
+                WHERE UPPER(TRIM(COALESCE(name_ar, ''))) = ?
+                  AND UPPER(TRIM(COALESCE(currency_code, ''))) = ?
+                  AND id != ?
+                  AND COALESCE(is_active, 1) = 1
+                LIMIT 1
+            `).get(normalizedName, currencyInfo.code, data.id);
+            if (duplicateName) throw new Error('اسم الصندوق موجود مسبقاً بنفس العملة');
+        }
+
+        const id = data?.id || uuidv4();
+        const payload = {
+            id,
+            code: normalizedCode,
+            name_ar: String(data?.name_ar || '').trim(),
+            name_en: String(data?.name_en || '').trim() || null,
+            currency_id: currencyInfo.id,
+            currency_code: currencyInfo.code,
+            gl_account_id: linkedLegacyAccountId,
+            note: String(data?.note || '').trim() || null,
+            is_active: data?.is_active === false ? 0 : 1
+        };
+
+        const saveTx = db.transaction(() => {
+            if (!data?.id) {
+                db.prepare(`
+                    INSERT INTO cash_boxes (
+                        id, code, name_ar, name_en, currency_id, currency_code,
+                        gl_account_id, note, is_active
+                    ) VALUES (
+                        @id, @code, @name_ar, @name_en, @currency_id, @currency_code,
+                        @gl_account_id, @note, @is_active
+                    )
+                `).run(payload);
+            } else {
+                db.prepare(`
+                    UPDATE cash_boxes SET
+                        code = @code,
+                        name_ar = @name_ar,
+                        name_en = @name_en,
+                        currency_id = @currency_id,
+                        currency_code = @currency_code,
+                        gl_account_id = @gl_account_id,
+                        note = @note,
+                        is_active = @is_active,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = @id
+                `).run(payload);
+            }
+
+            db.prepare(`
+                UPDATE accounts
+                SET requires_sub_account = 1
+                WHERE id = ?
+            `).run(linkedLegacyAccountId);
+
+            const duplicateSubAccount = db.prepare(`
+                SELECT id
+                FROM ae_sub_accounts
+                WHERE account_id = ?
+                  AND id != ?
+                  AND (
+                    UPPER(TRIM(COALESCE(code, ''))) = ?
+                    OR UPPER(TRIM(COALESCE(normalized_name, ''))) = ?
+                  )
+                LIMIT 1
+            `).get(linkedLegacyAccountId, id, normalizedCode, normalizedName);
+            if (duplicateSubAccount) {
+                throw new Error('يوجد حساب فرعي بنفس الرمز أو الاسم لهذا الحساب');
+            }
+
+            const existingSubAccount = db.prepare(`SELECT id FROM ae_sub_accounts WHERE id = ? LIMIT 1`).get(id);
+            if (existingSubAccount) {
+                db.prepare(`
+                    UPDATE ae_sub_accounts
+                    SET account_id = ?, code = ?, name = ?, normalized_name = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                `).run(linkedLegacyAccountId, normalizedCode, payload.name_ar, normalizedName, id);
+            } else {
+                db.prepare(`
+                    INSERT INTO ae_sub_accounts (id, account_id, code, name, normalized_name, is_active)
+                    VALUES (?, ?, ?, ?, ?, 1)
+                `).run(id, linkedLegacyAccountId, normalizedCode, payload.name_ar, normalizedName);
+            }
+        });
+
+        saveTx();
+        return { success: true, id };
+    }
+
+    static deleteCashBox(id: string) {
+        db.prepare(`
+            UPDATE cash_boxes
+            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(id);
+
+        db.prepare(`
+            UPDATE ae_sub_accounts
+            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(id);
+
+        return { success: true, id };
+    }
+
+    // ================================================================
+    // 4. COST CENTERS
     // ================================================================
     static getCostCenters() {
         // Return hierarchy or flat list? Flat list for now, UI builds tree
@@ -865,7 +1355,7 @@ export class MasterDataService {
     }
 
     // ================================================================
-    // 4. PAYMENT METHODS
+    // 5. PAYMENT METHODS
     // ================================================================
     static getPaymentMethods() {
         return db.prepare('SELECT * FROM payment_methods ORDER BY name_ar').all();
@@ -897,7 +1387,7 @@ export class MasterDataService {
     }
 
     // ================================================================
-    // 5. BRANCHES
+    // 6. BRANCHES
     // ================================================================
     static getBranches() {
         return db.prepare('SELECT * FROM branches ORDER BY is_main DESC, name_ar').all();

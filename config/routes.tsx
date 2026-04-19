@@ -25,6 +25,7 @@ import { ReceiptVoucherList } from '../pages/treasury/operations/ReceiptVoucherL
 import { PaymentVoucher } from '../pages/treasury/operations/PaymentVoucher';
 import { PaymentVoucherList } from '../pages/treasury/operations/PaymentVoucherList';
 import { BanksPage } from '../pages/definitions/financial/BanksPage';
+import { CashBoxesPage } from '../pages/definitions/financial/CashBoxesPage';
 
 
 
@@ -329,6 +330,7 @@ const APP_ROUTES_RAW: RouteConfig[] = [
     { path: '/master/taxes', description: 'الضرائب', component: <TaxList /> },
     { path: '/master/payment-methods', description: 'طرق الدفع', component: <PaymentMethods /> },
     { path: '/master/banks', description: 'البنوك والحسابات', component: <BanksPage /> },
+    { path: '/master/cash-boxes', description: 'الصناديق', component: <CashBoxesPage /> },
 
     // Master Data - Inventory
     { path: '/master/units', description: 'الوحدات', component: <UnitsPage /> },

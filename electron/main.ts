@@ -1394,6 +1394,11 @@ const registerIPCHandlers = (db: any) => {
   safeHandle('md-save-bank-account', (event, data) => MasterDataService.saveBankAccount(data));
   safeHandle('md-delete-bank-account', (event, id) => MasterDataService.deleteBankAccount(id));
 
+  // Cash Boxes
+  safeHandle('md-get-cash-boxes', () => MasterDataService.getCashBoxes());
+  safeHandle('md-save-cash-box', (event, data) => MasterDataService.saveCashBox(data));
+  safeHandle('md-delete-cash-box', (event, id) => MasterDataService.deleteCashBox(id));
+
   // Cost Centers
   safeHandle('md-get-cost-centers', () => MasterDataService.getCostCenters());
   safeHandle('md-save-cost-center', (event, data) => MasterDataService.saveCostCenter(data));

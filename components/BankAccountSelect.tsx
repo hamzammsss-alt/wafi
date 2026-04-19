@@ -10,6 +10,9 @@ interface BankAccount {
     currency_id: string;
     gl_account_id?: string;
     gl_account_name?: string;
+    sub_account_id?: string;
+    sub_account_code?: string;
+    sub_account_name?: string;
     is_active: number;
 }
 

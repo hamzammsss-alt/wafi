@@ -2,8 +2,8 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-    Save, Printer, Search, Plus, Trash2,
-    ArrowRight, Hash, DollarSign, AlertTriangle, CheckCircle2, Filter
+    Save, Printer, Search, Plus, Trash2, RefreshCw,
+    ArrowRight, Hash, AlertTriangle, CheckCircle2, Copy, X, Filter
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { UnifiedPartnerPicker, UnifiedPartner } from '../../../components/UnifiedPartnerPicker';
@@ -11,10 +11,10 @@ import { AccountPicker } from '../../../components/AccountPicker';
 import { v4 as uuidv4 } from 'uuid';
 import { toArabicWords } from '../../../src/utils/tafqeet';
 import { useEnterNavigation } from '../../../src/hooks/useEnterNavigation';
-import { useTabs } from '../../../src/contexts/TabsContext';
 import { DocumentSupportDock } from '../../../src/components/workspace/DocumentSupportDock';
 import { getTreasurySupportSections } from '../../../src/components/workspace/documentSupportSections';
 import { getFloatingMenuPositionFromRect, getFloatingMenuPositionFromPoint } from '../../../src/lib/floatingMenu';
+import { flattenUnifiedAccountTree, loadUnifiedAccountTree } from '../../../src/utils/unifiedAccountTree';
 
 // ============ Types ============
 
@@ -78,6 +78,15 @@ interface AgainstLine {
     credit: number;
     taxRef: string;
     invoiceDate: string;
+    permitNo: string;
+    permitHolderName: string;
+}
+
+interface ReceiptAdditionalInfo {
+    customerReference: string;
+    deliveryDate: string;
+    recipientName: string;
+    notes: string;
 }
 
 interface Bank { id: string; name_ar: string; bank_code?: string; }
@@ -102,6 +111,7 @@ interface SalesRepOption {
 const normalizeText = (value: unknown): string => String(value ?? '').trim();
 const toUniqueTextList = (rows: unknown[]): string[] =>
     Array.from(new Set(rows.map(normalizeText).filter(Boolean)));
+const RECEIPT_ACCOUNT_PREFIXES = ['111', '112', '1141'];
 
 const inferReferenceTypeFromAgainstLine = (line: AgainstLine, header: ReceiptHeader): string => {
     const ref = normalizeText(line.lineRef).toLowerCase();
@@ -128,27 +138,44 @@ const emptyAgainstLine = (): AgainstLine => ({
     id: uuidv4(), accountId: null, accountCode: '', accountName: '',
     lineCurrency: 'ILS', subAccountId: '', subAccountName: '', subAccountCode: '', lineRef: '',
     debitForeign: 0, debit: 0, creditForeign: 0, credit: 0,
-    taxRef: '', invoiceDate: ''
+    taxRef: '', invoiceDate: '', permitNo: '', permitHolderName: ''
 });
+
+const emptyAdditionalInfo = (): ReceiptAdditionalInfo => ({
+    customerReference: '',
+    deliveryDate: '',
+    recipientName: '',
+    notes: ''
+});
+
+const SummaryField = ({ label, value }: { label: string; value?: string }) => (
+    <div>
+        <label className="mb-1 block text-[11px] font-bold text-slate-400">{label}</label>
+        <input
+            readOnly
+            value={value || ''}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none"
+        />
+    </div>
+);
 
 // ============ Component ============
 
 export const ReceiptVoucher = () => {
     const navigate = useNavigate();
-    const { openTab } = useTabs();
     const containerRef = useRef<HTMLDivElement>(null);
     useEnterNavigation(containerRef);
     const helperSections = useMemo(() => getTreasurySupportSections(), []);
 
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const [activeTab, setActiveTab] = useState<'RECEIPT' | 'AGAINST'>('RECEIPT');
+    const [activeTab, setActiveTab] = useState<'RECEIPT' | 'AGAINST' | 'ADDITIONAL'>('RECEIPT');
     const [lastSavedVoucherNo, setLastSavedVoucherNo] = useState<string | null>(null);
     const [isPosted, setIsPosted] = useState(false);
     const [saveNotice, setSaveNotice] = useState<string | null>(null);
     const [showOptionalHeader, setShowOptionalHeader] = useState(false);
     const [showSupportDock, setShowSupportDock] = useState(false);
-    const [showChequeColumns, setShowChequeColumns] = useState(false);
+    const [showChequeColumns, setShowChequeColumns] = useState(true);
     const [autoSyncAgainst, setAutoSyncAgainst] = useState(true);
 
     // Master Data
@@ -171,6 +198,9 @@ export const ReceiptVoucher = () => {
 
     const [receiptLines, setReceiptLines] = useState<ReceiptLine[]>([emptyReceiptLine()]);
     const [againstLines, setAgainstLines] = useState<AgainstLine[]>([emptyAgainstLine()]);
+    const [additionalInfo, setAdditionalInfo] = useState<ReceiptAdditionalInfo>(emptyAdditionalInfo());
+    const [selectedReceiptLineId, setSelectedReceiptLineId] = useState<string | null>(null);
+    const [selectedAgainstLineId, setSelectedAgainstLineId] = useState<string | null>(null);
 
     // Pickers
     const [partnerPickerOpen, setPartnerPickerOpen] = useState(false);
@@ -188,6 +218,7 @@ export const ReceiptVoucher = () => {
     } | null>(null);
     const [receiptFilters, setReceiptFilters] = useState<Record<string, string>>({});
     const [againstFilters, setAgainstFilters] = useState<Record<string, string>>({});
+    const [focusOnNewLineId, setFocusOnNewLineId] = useState<string | null>(null);
 
     const handleFilterChange = (tab: 'RECEIPT' | 'AGAINST', colKey: string, value: string) => {
         if (tab === 'RECEIPT') setReceiptFilters(prev => ({ ...prev, [colKey]: value }));
@@ -212,6 +243,28 @@ export const ReceiptVoucher = () => {
         };
     }, []);
 
+    const filteredReceiptLines = useMemo(() => receiptLines.filter(line => Object.entries(receiptFilters).every(([key, val]) => !val || String((line as any)[key] || '').toLowerCase().includes(val.toLowerCase()))), [receiptLines, receiptFilters]);
+    const filteredAgainstLines = useMemo(() => againstLines.filter(line => Object.entries(againstFilters).every(([key, val]) => !val || String((line as any)[key] || '').toLowerCase().includes(val.toLowerCase()))), [againstLines, againstFilters]);
+
+    useEffect(() => {
+        if (!focusOnNewLineId || !containerRef.current) return;
+
+        const newRow = containerRef.current.querySelector(`tr[data-row-id='${focusOnNewLineId}']`);
+        if (newRow) {
+            const firstInput = newRow.querySelector('input:not([disabled]):not([type="hidden"]), select:not([disabled])') as HTMLElement;
+            if (firstInput) {
+                firstInput.focus();
+                if (firstInput.tagName === 'INPUT' && (firstInput as HTMLInputElement).type !== 'date') {
+                    setTimeout(() => { try { (firstInput as HTMLInputElement).select(); } catch (err) { /* ignore */ } }, 0);
+                }
+            }
+        }
+
+        // Reset the state to prevent re-focusing on every render
+        setFocusOnNewLineId(null);
+
+    }, [filteredReceiptLines, filteredAgainstLines, focusOnNewLineId]);
+
     const openFilterMenu = (e: React.MouseEvent, tab: 'RECEIPT' | 'AGAINST', colKey: string, label: string) => {
         e.preventDefault();
         e.stopPropagation();
@@ -230,18 +283,6 @@ export const ReceiptVoucher = () => {
         if (tab === 'RECEIPT') setReceiptFilters(prev => { const n = { ...prev }; delete n[colKey]; return n; });
         else setAgainstFilters(prev => { const n = { ...prev }; delete n[colKey]; return n; });
         setActiveColumnMenu(null);
-    };
-
-    const filteredReceiptLines = useMemo(() => receiptLines.filter(line => Object.entries(receiptFilters).every(([key, val]) => !val || String((line as any)[key] || '').toLowerCase().includes(val.toLowerCase()))), [receiptLines, receiptFilters]);
-    const filteredAgainstLines = useMemo(() => againstLines.filter(line => Object.entries(againstFilters).every(([key, val]) => !val || String((line as any)[key] || '').toLowerCase().includes(val.toLowerCase()))), [againstLines, againstFilters]);
-
-    const openPortalTab = (path: string, title: string) => {
-        openTab({
-            id: path,
-            path,
-            title,
-            isClosable: true
-        });
     };
 
     // ============ Load Data ============
@@ -339,15 +380,29 @@ export const ReceiptVoucher = () => {
                 const data = await api.treasury.getReceipt(id);
                 if (data && data.header) {
                     const h = data.header;
+                    let extraData: any = {};
+                    try {
+                        extraData = h?.extra_data ? JSON.parse(h.extra_data || '{}') : {};
+                    } catch (error) {
+                        console.error('Failed to parse receipt voucher extra_data', error);
+                        extraData = {};
+                    }
+
                     setHeader({
                         voucherNo: h.voucher_no, date: h.date,
                         partnerId: h.partner_id, partnerCode: '', // Need to find code from partners list if not in header
                         partnerName: h.customer_name || h.description || '', // Fallback
                         payeeType: 'CUSTOMER',
                         salesRepCode: h.sales_rep_code || '', salesRepName: '',
-                        outstandingBalance: 0, currentBalance: 0, collectionRate: 0,
+                        outstandingBalance: 0, currentBalance: 0, collectionRate: Number(extraData?.collectionRate || 0) || 0,
                         description: h.description, branchId: h.branch_id,
                         costCenterId: h.cost_center_id || '', manualRef: h.manual_ref || ''
+                    });
+                    setAdditionalInfo({
+                        customerReference: extraData?.customerReference || '',
+                        deliveryDate: extraData?.deliveryDate || '',
+                        recipientName: extraData?.recipientName || '',
+                        notes: extraData?.notes || ''
                     });
 
                     // Map Partner Code
@@ -413,24 +468,46 @@ export const ReceiptVoucher = () => {
                             });
                         });
                     }
-                    if (newLines.length > 0) setReceiptLines(newLines);
+                    if (newLines.length > 0) {
+                        setReceiptLines(newLines);
+                        setSelectedReceiptLineId(newLines[0]?.id || null);
+                    } else {
+                        const fallbackReceiptLine = emptyReceiptLine();
+                        setReceiptLines([fallbackReceiptLine]);
+                        setSelectedReceiptLineId(fallbackReceiptLine.id);
+                    }
 
                     // Map Against Lines (Credit Side)
                     if (data.against && data.against.length > 0) {
-                        const agLines: AgainstLine[] = data.against.map((l: any) => ({
+                        const againstExtras = Array.isArray(extraData?.againstExtras) ? extraData.againstExtras : [];
+                        const agLines: AgainstLine[] = data.against.map((l: any, index: number) => ({
                             id: uuidv4(),
                             accountId: l.account_id,
                             accountCode: l.account_code || '',
                             accountName: l.account_name || '',
                             lineCurrency: 'ILS', subAccountId: l.sub_account_id || '', lineRef: l.invoice_ref || '',
                             debitForeign: 0, debit: 0, creditForeign: l.credit, credit: l.credit,
-                            taxRef: l.tax_ref || '', invoiceDate: l.due_date || ''
+                            taxRef: l.tax_ref || '', invoiceDate: l.due_date || '',
+                            permitNo: againstExtras[index]?.permitNo || '',
+                            permitHolderName: againstExtras[index]?.permitHolderName || ''
                         }));
                         setAgainstLines(agLines);
+                        setSelectedAgainstLineId(agLines[0]?.id || null);
+                    } else {
+                        const fallbackAgainstLine = emptyAgainstLine();
+                        setAgainstLines([fallbackAgainstLine]);
+                        setSelectedAgainstLineId(fallbackAgainstLine.id);
                     }
                 }
             } else {
                 setHeader(prev => ({ ...prev, voucherNo: nextNo }));
+                setAdditionalInfo(emptyAdditionalInfo());
+                const fallbackReceiptLine = emptyReceiptLine();
+                const fallbackAgainstLine = emptyAgainstLine();
+                setReceiptLines([fallbackReceiptLine]);
+                setAgainstLines([fallbackAgainstLine]);
+                setSelectedReceiptLineId(fallbackReceiptLine.id);
+                setSelectedAgainstLineId(fallbackAgainstLine.id);
             }
 
         } catch (e) { console.error(e); }
@@ -462,6 +539,14 @@ export const ReceiptVoucher = () => {
             || Boolean(line.originalSource) || Boolean(line.bankAccountType) || Boolean(line.bankAccountNo)
         ));
     }, [receiptLines]);
+    const selectedReceiptLine = useMemo(
+        () => receiptLines.find((line) => line.id === selectedReceiptLineId) || receiptLines[0] || null,
+        [receiptLines, selectedReceiptLineId]
+    );
+    const selectedAgainstLine = useMemo(
+        () => againstLines.find((line) => line.id === selectedAgainstLineId) || againstLines[0] || null,
+        [againstLines, selectedAgainstLineId]
+    );
 
     const canSave = useMemo(() => {
         if (!header.partnerId) return false;
@@ -471,17 +556,17 @@ export const ReceiptVoucher = () => {
         return true;
     }, [header.partnerId, totalReceiptDebit, difference, invalidReceiptRows, invalidAgainstRows]);
 
-    const systemSignals = useMemo(() => {
-        const signals: Array<{ tone: 'ok' | 'warn' | 'error'; text: string }> = [];
-        if (!header.partnerId) signals.push({ tone: 'warn', text: 'لم يتم اختيار العميل/الدافع بعد.' });
-        if (totalReceiptDebit <= 0) signals.push({ tone: 'warn', text: 'لا يوجد مبلغ قبض فعلي.' });
-        if (invalidReceiptRows > 0) signals.push({ tone: 'error', text: `يوجد ${invalidReceiptRows} سطر غير مكتمل في تبويب قبض.` });
-        if (invalidAgainstRows > 0) signals.push({ tone: 'error', text: `يوجد ${invalidAgainstRows} سطر غير مكتمل في تبويب مقابل.` });
-        if (Math.abs(difference) > 0.01) signals.push({ tone: 'error', text: `القيد غير متوازن. الفرق الحالي = ${difference.toLocaleString()}` });
-        if (chequeLinesCount > 0) signals.push({ tone: 'ok', text: `تم اكتشاف ${chequeLinesCount} سطر شيك مع تتبع تاريخ الاستحقاق.` });
-        if (signals.length === 0) signals.push({ tone: 'ok', text: 'السند جاهز للحفظ والترحيل.' });
-        return signals;
-    }, [header.partnerId, totalReceiptDebit, invalidReceiptRows, invalidAgainstRows, difference, chequeLinesCount]);
+    useEffect(() => {
+        if (receiptLines.length > 0 && !receiptLines.some((line) => line.id === selectedReceiptLineId)) {
+            setSelectedReceiptLineId(receiptLines[0].id);
+        }
+    }, [receiptLines, selectedReceiptLineId]);
+
+    useEffect(() => {
+        if (againstLines.length > 0 && !againstLines.some((line) => line.id === selectedAgainstLineId)) {
+            setSelectedAgainstLineId(againstLines[0].id);
+        }
+    }, [againstLines, selectedAgainstLineId]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -507,12 +592,18 @@ export const ReceiptVoucher = () => {
                 return;
             }
 
+            if (event.altKey && event.key === '3') {
+                event.preventDefault();
+                setActiveTab('ADDITIONAL');
+                return;
+            }
+
             if (withCtrl && event.key === 'Enter') {
                 event.preventDefault();
                 if (activeTab === 'RECEIPT') {
                     setReceiptLines((prev) => [...prev, emptyReceiptLine()]);
                     setReceiptFilters({});
-                } else {
+                } else if (activeTab === 'AGAINST') {
                     setAgainstLines((prev) => [...prev, emptyAgainstLine()]);
                     setAgainstFilters({});
                 }
@@ -534,13 +625,16 @@ export const ReceiptVoucher = () => {
 
     // ============ Grid Keyboard Navigation ============
     const handleGridKeyDown = (e: React.KeyboardEvent<HTMLTableSectionElement>) => {
-        if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+        if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) return;
 
         const target = e.target as HTMLElement;
         if (!['INPUT', 'SELECT', 'BUTTON'].includes(target.tagName)) return;
 
+        // السماح بالضغط على الأزرار باستخدام Enter
+        if (target.tagName === 'BUTTON' && e.key === 'Enter') return;
+
         // عدم التعارض مع القوائم المنسدلة (Datalists)
-        if (target.tagName === 'INPUT' && target.hasAttribute('list') && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
+        if (target.tagName === 'INPUT' && target.hasAttribute('list') && ['ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) return;
 
         const cell = target.closest('td');
         const row = target.closest('tr');
@@ -552,13 +646,13 @@ export const ReceiptVoucher = () => {
         const allCells = Array.from(row.querySelectorAll('td'));
         const colIndex = allCells.indexOf(cell);
 
-        // التنقل العامودي (أعلى / أسفل)
-        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // التنقل العامودي (أعلى / أسفل / Enter)
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter') {
             let nextRowIndex = rowIndex;
             if (e.key === 'ArrowUp') {
                 nextRowIndex = Math.max(0, rowIndex - 1);
                 e.preventDefault();
-            } else if (e.key === 'ArrowDown') {
+            } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
                 nextRowIndex = Math.min(allRows.length - 1, rowIndex + 1);
                 e.preventDefault();
             }
@@ -576,6 +670,18 @@ export const ReceiptVoucher = () => {
                             }
                         }
                     }
+                }
+            } else if (e.key === 'Enter') {
+                // إضافة سطر جديد تلقائياً إذا ضغطنا Enter في السطر الأخير
+                e.preventDefault();
+                if (activeTab === 'RECEIPT') {
+                    const newLine = emptyReceiptLine();
+                    setReceiptLines(prev => [...prev, newLine]);
+                    setFocusOnNewLineId(newLine.id);
+                } else if (activeTab === 'AGAINST') {
+                    const newLine = emptyAgainstLine();
+                    setAgainstLines(prev => [...prev, newLine]);
+                    setFocusOnNewLineId(newLine.id);
                 }
             }
             return;
@@ -642,16 +748,79 @@ export const ReceiptVoucher = () => {
             try {
                 const acc = await (window as any).electronAPI.account.getAccount(partner.linked_account_id);
                 if (acc) {
-                    setAgainstLines([{
-                        ...emptyAgainstLine(),
-                        accountId: acc.id,
-                        accountCode: acc.account_code || acc.code || '',
-                        accountName: acc.name_ar || '',
-                        lineRef: partner.code,
-                        lineCurrency: 'ILS',
-                        credit: totalReceiptDebit, // Auto-fill credit with receipt total
-                        creditForeign: totalReceiptDebit
-                    }]);
+                    // محاولة جلب الفواتير غير المسددة للعميل من الباك إند
+                    const unpaidInvoices = await (window as any).electronAPI.sales?.getUnpaidInvoices?.(partner.id);
+                    
+                    if (unpaidInvoices && unpaidInvoices.length > 0) {
+                        let remainingReceiptAmount = totalReceiptDebit;
+                        const distributedLines: AgainstLine[] = [];
+                        const sortedInvoices = [...unpaidInvoices].sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+
+                        // إذا لم يقم المستخدم بإدخال مبلغ القبض بعد، اعرض كل الفواتير بقيمتها الكاملة ليختار منها يدوياً
+                        if (remainingReceiptAmount === 0) {
+                            const invoiceLines = sortedInvoices.map((inv: any) => ({
+                                ...emptyAgainstLine(),
+                                accountId: acc.id,
+                                accountCode: acc.account_code || acc.code || '',
+                                accountName: acc.name_ar || '',
+                                lineRef: inv.invoice_no || inv.voucher_no,
+                                lineCurrency: inv.currency || 'ILS',
+                                credit: inv.remaining_amount || inv.amount || 0,
+                                creditForeign: inv.remaining_amount || inv.amount || 0,
+                                invoiceDate: inv.date || ''
+                            }));
+                            setAgainstLines(invoiceLines);
+                        } else {
+                            // التوزيع التلقائي (FIFO) على الفواتير الأقدم فالأحدث بناءً على مبلغ القبض
+                            for (const inv of sortedInvoices) {
+                                if (remainingReceiptAmount <= 0) break;
+                                
+                                const invAmount = Number(inv.remaining_amount || inv.amount || 0);
+                                const allocatedAmount = Math.min(invAmount, remainingReceiptAmount);
+                                
+                                distributedLines.push({
+                                    ...emptyAgainstLine(),
+                                    accountId: acc.id,
+                                    accountCode: acc.account_code || acc.code || '',
+                                    accountName: acc.name_ar || '',
+                                    lineRef: inv.invoice_no || inv.voucher_no,
+                                    lineCurrency: inv.currency || 'ILS',
+                                    credit: allocatedAmount,
+                                    creditForeign: allocatedAmount,
+                                    invoiceDate: inv.date || ''
+                                });
+                                
+                                remainingReceiptAmount -= allocatedAmount;
+                            }
+
+                            // إذا تبقى مبلغ قبض لم يوزع (مثلاً دفعة مقدمة تفوق إجمالي الفواتير المفتوحة)
+                            if (remainingReceiptAmount > 0) {
+                                distributedLines.push({
+                                    ...emptyAgainstLine(),
+                                    accountId: acc.id,
+                                    accountCode: acc.account_code || acc.code || '',
+                                    accountName: acc.name_ar || '',
+                                    lineRef: partner.code, // نضع كود العميل كمرجع عام للمبلغ المتبقي
+                                    lineCurrency: 'ILS',
+                                    credit: remainingReceiptAmount,
+                                    creditForeign: remainingReceiptAmount
+                                });
+                            }
+                            setAgainstLines(distributedLines);
+                        }
+                    } else {
+                        // السلوك الافتراضي إذا لم تكن هناك فواتير معلقة
+                        setAgainstLines([{
+                            ...emptyAgainstLine(),
+                            accountId: acc.id,
+                            accountCode: acc.account_code || acc.code || '',
+                            accountName: acc.name_ar || '',
+                            lineRef: partner.code,
+                            lineCurrency: 'ILS',
+                            credit: totalReceiptDebit,
+                            creditForeign: totalReceiptDebit
+                        }]);
+                    }
                 }
             } catch (e) { console.error(e); }
         }
@@ -724,6 +893,12 @@ export const ReceiptVoucher = () => {
     const handleAccountSelect = (account: any) => {
         if (!activeLineId) return;
 
+        // منع اختيار الحسابات التجميعية (الأب)
+        if (!pickingSubAccount && !account.is_transactional) {
+            alert('عفواً، هذا حساب تجميعي (أب). الرجاء اختيار حساب حركي لتسجيل المعاملة.');
+            return;
+        }
+
         if (pickingSubAccount) {
             // Sub Account Selection
             if (pickerTarget === 'RECEIPT') {
@@ -779,15 +954,8 @@ export const ReceiptVoucher = () => {
         if (!code || !code.trim()) return;
         try {
             // @ts-ignore
-            const tree = await window.electronAPI.getAccountTree();
-            const flat: any[] = [];
-            const flatten = (nodes: any[]) => {
-                for (const n of nodes) {
-                    flat.push(n);
-                    if (n.children) flatten(n.children);
-                }
-            };
-            flatten(tree);
+            const tree = await loadUnifiedAccountTree(window.electronAPI, true);
+            const flat = flattenUnifiedAccountTree(tree);
             const acc = flat.find((a: any) => (a.account_code || a.code) === code.trim());
             if (acc && acc.is_transactional) {
                 if (target === 'RECEIPT') {
@@ -810,6 +978,14 @@ export const ReceiptVoucher = () => {
                     setAgainstLines(prev => prev.map(l => l.id === lineId
                         ? { ...l, accountId: acc.id, accountCode: acc.account_code || acc.code || '', accountName: acc.name_ar }
                         : l));
+                }
+            } else if (acc && !acc.is_transactional) {
+                // تنبيه المستخدم وتفريغ الحقل إذا كان الحساب أباً
+                alert('عفواً، الحساب المدخل هو حساب تجميعي (أب). لا يمكن استخدامه في السندات.');
+                if (target === 'RECEIPT') {
+                    setReceiptLines(prev => prev.map(l => l.id === lineId ? { ...l, accountCode: '' } : l));
+                } else {
+                    setAgainstLines(prev => prev.map(l => l.id === lineId ? { ...l, accountCode: '' } : l));
                 }
             }
         } catch (err) {
@@ -852,21 +1028,102 @@ export const ReceiptVoucher = () => {
 
     // ============ Save ============
 
+    const handleAutoDistribute = async () => {
+        if (!header.partnerId) {
+            alert('الرجاء اختيار العميل أولاً لربط الفواتير.');
+            return;
+        }
+        if (totalReceiptDebit <= 0) {
+            alert('الرجاء إدخال إجمالي مبلغ القبض أولاً في تبويب "القبض".');
+            return;
+        }
+
+        const partner = allPartners.find(p => p.id === header.partnerId);
+        if (!partner || !partner.linked_account_id) {
+            alert('العميل المحدد ليس لديه حساب مرتبط.');
+            return;
+        }
+
+        try {
+            const acc = await (window as any).electronAPI.account.getAccount(partner.linked_account_id);
+            if (!acc) return;
+
+            const unpaidInvoices = await (window as any).electronAPI.sales?.getUnpaidInvoices?.(partner.id);
+            
+            if (unpaidInvoices && unpaidInvoices.length > 0) {
+                let remainingReceiptAmount = totalReceiptDebit;
+                const distributedLines: AgainstLine[] = [];
+                const sortedInvoices = [...unpaidInvoices].sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+
+                for (const inv of sortedInvoices) {
+                    if (remainingReceiptAmount <= 0) break;
+                    
+                    const invAmount = Number(inv.remaining_amount || inv.amount || 0);
+                    const allocatedAmount = Math.min(invAmount, remainingReceiptAmount);
+                    
+                    distributedLines.push({
+                        ...emptyAgainstLine(),
+                        accountId: acc.id,
+                        accountCode: acc.account_code || acc.code || '',
+                        accountName: acc.name_ar || '',
+                        lineRef: inv.invoice_no || inv.voucher_no,
+                        lineCurrency: inv.currency || 'ILS',
+                        credit: allocatedAmount,
+                        creditForeign: allocatedAmount,
+                        invoiceDate: inv.date || ''
+                    });
+                    
+                    remainingReceiptAmount -= allocatedAmount;
+                }
+
+                if (remainingReceiptAmount > 0) {
+                    distributedLines.push({
+                        ...emptyAgainstLine(),
+                        accountId: acc.id,
+                        accountCode: acc.account_code || acc.code || '',
+                        accountName: acc.name_ar || '',
+                        lineRef: partner.code,
+                        lineCurrency: 'ILS',
+                        credit: remainingReceiptAmount,
+                        creditForeign: remainingReceiptAmount
+                    });
+                }
+                setAgainstLines(distributedLines);
+            } else {
+                alert('لا توجد فواتير معلقة لهذا العميل لتوزيع المبلغ عليها.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('حدث خطأ أثناء جلب الفواتير المفتوحة والتوزيع.');
+        }
+    };
+
     const handleSave = async () => {
         if (!header.partnerId) { alert('الرجاء اختيار العميل / الدافع'); return; }
         if (totalReceiptDebit <= 0) { alert('الرجاء إدخال مبالغ القبض'); return; }
         if (Math.abs(difference) > 0.01) { alert(`السند غير متوازن! الفرق = ${difference.toLocaleString()}`); return; }
 
         const invalidReceipt = receiptLines.find(l => !l.accountId || l.debitLocal <= 0);
-        if (invalidReceipt) { alert('الرجاء تعبئة جميع حقول تبويب قبض (الحساب والمبلغ)'); return; }
+        if (invalidReceipt) { alert('الرجاء تعبئة جميع حقول تبويب قبض (الحساب والمبلغ)'); setActiveTab('RECEIPT'); return; }
         const invalidAgainst = againstLines.find(l => !l.accountId || l.credit <= 0);
-        if (invalidAgainst) { alert('الرجاء تعبئة جميع حقول تبويب مقابل (الحساب والمبلغ)'); return; }
+        if (invalidAgainst) { alert('الرجاء تعبئة جميع حقول تبويب مقابل (الحساب والمبلغ)'); setActiveTab('AGAINST'); return; }
 
         setSubmitting(true);
         try {
             // ALL receipt lines produce debit journal entries
             // Cheque lines also need cheque-table inserts
             const chequeLines = receiptLines.filter(l => l.chequeNo);
+            const extraData = {
+                collectionRate: header.collectionRate || 0,
+                customerReference: additionalInfo.customerReference,
+                deliveryDate: additionalInfo.deliveryDate,
+                recipientName: additionalInfo.recipientName,
+                notes: additionalInfo.notes,
+                againstExtras: againstLines.map((line) => ({
+                    permitNo: line.permitNo || '',
+                    permitHolderName: line.permitHolderName || ''
+                }))
+            };
 
             const payload = {
                 header: {
@@ -881,7 +1138,8 @@ export const ReceiptVoucher = () => {
                     manual_ref: header.manualRef,
                     cost_center_id: header.costCenterId,
                     sales_rep_code: header.salesRepCode,
-                    payee_type: header.payeeType
+                    payee_type: header.payeeType,
+                    extra_data: JSON.stringify(extraData)
                 },
                 // All receipt lines → debit journal entries
                 details: receiptLines.map(l => ({
@@ -938,12 +1196,66 @@ export const ReceiptVoucher = () => {
                     description: '', manualRef: '', salesRepCode: '', salesRepName: '',
                     outstandingBalance: 0, currentBalance: 0, collectionRate: 0
                 }));
+                setAdditionalInfo(emptyAdditionalInfo());
                 setActiveTab('RECEIPT');
             }
         } catch (e: any) {
             console.error(e);
             alert(`❌ خطأ: ${e.message}`);
         } finally { setSubmitting(false); }
+    };
+
+    const findReceiptIdByVoucherNo = async (voucherNo: string): Promise<string | null> => {
+        try {
+            const api = (window as any).electronAPI;
+            if (!api?.treasury?.getReceipts) return null;
+            const receipts = await api.treasury.getReceipts({});
+            const match = Array.isArray(receipts)
+                ? receipts.find((r: any) => String(r.voucher_no) === String(voucherNo))
+                : null;
+            return match?.id || null;
+        } catch (e) {
+            console.error(e);
+            return null;
+        }
+    };
+
+    const handlePost = async () => {
+        if (!header.voucherNo) { alert('لا يوجد رقم سند للترحيل'); return; }
+        setSubmitting(true);
+        try {
+            const api = (window as any).electronAPI;
+            if (!api?.treasury?.postReceipt) { alert('لا يمكن الوصول لخدمة الترحيل'); return; }
+            const receiptId = id && id !== 'new' ? id : await findReceiptIdByVoucherNo(header.voucherNo);
+            if (!receiptId) { alert('يرجى حفظ السند أولاً ثم محاولة الترحيل'); return; }
+            const res = await api.treasury.postReceipt(receiptId);
+            if (res?.success) {
+                alert(`✅ تم ترحيل السند ${res.voucher_no}`);
+                setIsPosted(true);
+                setSaveNotice(`تم الترحيل بنجاح • رقم السند ${res.voucher_no}`);
+            }
+        } catch (e: any) {
+            console.error(e);
+            alert(`❌ خطأ أثناء الترحيل: ${e?.message || e}`);
+        } finally { setSubmitting(false); }
+    };
+
+    const handleCopyVoucher = async () => {
+        const value = header.voucherNo || lastSavedVoucherNo;
+        if (!value) { alert('لا يوجد رقم سند للنسخ'); return; }
+        try {
+            await navigator.clipboard.writeText(String(value));
+            alert(`تم نسخ رقم السند ${value}`);
+        } catch (e) {
+            console.error(e);
+            alert('فشل نسخ رقم السند');
+        }
+    };
+
+    const handleCancel = () => {
+        const confirmed = window.confirm('لا يمكن تغيير أي مستند بعد أن يُطبع. هل تريد الاستمرار؟');
+        if (!confirmed) return;
+        navigate(-1);
     };
 
     // ============ Render ============
@@ -992,11 +1304,20 @@ export const ReceiptVoucher = () => {
                 .tab-btn { padding: 10px 24px; font-weight: 700; font-size: 14px; border-bottom: 3px solid transparent; transition: all 0.15s; cursor: pointer; }
                 .tab-btn:hover { background: #f1f5f9; }
                 .tab-active { border-bottom-color: #6366f1; color: #4338ca; background: #eef2ff; }
+                @media (max-width: 1024px) {
+                    .tab-btn { padding: 10px 16px; }
+                }
+                @media (max-width: 640px) {
+                    .tab-btn { padding: 8px 12px; font-size: 12px; }
+                    .grid-input, .grid-select { font-size: 12px; }
+                }
             `}</style>
 
             <UnifiedPartnerPicker isOpen={partnerPickerOpen} onClose={() => setPartnerPickerOpen(false)} onSelect={handlePartnerSelect} />
             <AccountPicker isOpen={accountPickerOpen} onClose={() => setAccountPickerOpen(false)} onSelect={handleAccountSelect}
                 parentId={getActiveParentId()}
+                showTransactionalOnly={!pickingSubAccount}
+                allowedPrefixes={pickerTarget === 'RECEIPT' && !pickingSubAccount ? RECEIPT_ACCOUNT_PREFIXES : undefined}
             />
 
             {/* ===== Top Bar ===== */}
@@ -1004,9 +1325,9 @@ export const ReceiptVoucher = () => {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
-                className="no-print sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/95 px-6 py-3 shadow-sm backdrop-blur"
+                className="no-print sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur"
             >
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                     <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ArrowRight size={22} /></button>
                     <div>
                         <h1 className="text-xl font-black text-slate-800 tracking-tight">سند قبض (Receipt Voucher)</h1>
@@ -1024,11 +1345,25 @@ export const ReceiptVoucher = () => {
                         {Math.abs(difference) < 0.01 ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
                         <span>الفرق: {difference.toLocaleString()}</span>
                     </div>
-                    <button onClick={() => window.print()} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2"><Printer size={18} /><span>طباعة</span></button>
-                    <button onClick={handleSave} disabled={submitting || !canSave}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-emerald-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <CheckCircle2 size={18} /><span>{submitting ? 'جاري التنفيذ...' : 'حفظ + ترحيل'}</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2 justify-end">
+                        <button onClick={handleCancel} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 md:px-4 rounded-xl font-bold flex items-center gap-2">
+                            <X size={18} /><span>إلغاء</span>
+                        </button>
+                        <button onClick={handleCopyVoucher} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 md:px-4 rounded-xl font-bold flex items-center gap-2">
+                            <Copy size={18} /><span>نسخ</span>
+                        </button>
+                        <button onClick={() => window.print()} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 md:px-4 rounded-xl font-bold flex items-center gap-2">
+                            <Printer size={18} /><span>طباعة</span>
+                        </button>
+                        <button onClick={handlePost} disabled={submitting || isPosted || !header.voucherNo}
+                            className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 md:px-4 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-amber-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <CheckCircle2 size={18} /><span>{isPosted ? 'مرحل' : 'ترحيل'}</span>
+                        </button>
+                        <button onClick={handleSave} disabled={submitting || !canSave || isPosted}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 md:px-4 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-emerald-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <Save size={18} /><span>{submitting ? 'جاري التنفيذ...' : 'حفظ'}</span>
+                        </button>
+                    </div>
                 </div>
             </motion.div>
 
@@ -1038,7 +1373,7 @@ export const ReceiptVoucher = () => {
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.25, ease: 'easeOut' }}
-                    className="mx-auto max-w-[1600px] space-y-4"
+                    className="mx-auto w-full max-w-[1600px] space-y-4"
                 >
                     {saveNotice && (
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700">
@@ -1047,7 +1382,8 @@ export const ReceiptVoucher = () => {
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                         <div className="rounded-2xl border border-indigo-100 bg-white px-4 py-3 shadow-sm">
                             <div className="text-[11px] text-slate-400 font-bold">حالة القيد</div>
                             <div className={`mt-1 text-xl font-black ${Math.abs(difference) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -1108,7 +1444,8 @@ export const ReceiptVoucher = () => {
                                 إعادة مزامنة المقابل تلقائيًا
                             </button>
                         )}
-                    </div>
+                            </div>
+                    </>
 
                     {showSupportDock && (
                         <DocumentSupportDock
@@ -1118,42 +1455,12 @@ export const ReceiptVoucher = () => {
                         />
                     )}
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <div className="mb-2 text-xs font-black text-slate-500">الإشعارات والقواعد</div>
-                        <div className="space-y-1.5">
-                            {systemSignals.map((signal, index) => (
-                                <div
-                                    key={`${signal.text}-${index}`}
-                                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${signal.tone === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : signal.tone === 'warn' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}
-                                >
-                                    {signal.text}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
                     {/* ===== Header Card ===== */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
                         <div className="grid grid-cols-12 gap-4">
                             {/* Partner */}
                             <div className="col-span-12 md:col-span-5">
                                 <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">دليل (كود العميل)</label>
-                                <div className="mb-2 flex flex-wrap items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => openPortalTab('/master/partners', 'بوابة الشركاء')}
-                                        className="px-2.5 py-1 text-xs border border-slate-300 rounded-md text-slate-700 hover:bg-slate-100 transition-colors"
-                                    >
-                                        بوابة الشركاء
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => openPortalTab('/master/customer-card', 'بطاقة عميل')}
-                                        className="px-2.5 py-1 text-xs border border-indigo-200 bg-indigo-50 rounded-md text-indigo-700 hover:bg-indigo-100 transition-colors"
-                                    >
-                                        بطاقة عميل
-                                    </button>
-                                </div>
                                 <div className="flex gap-2">
                                     <input type="text" placeholder="الكود" value={header.partnerCode}
                                         list="receipt-partner-code-list"
@@ -1179,15 +1486,6 @@ export const ReceiptVoucher = () => {
                             {/* Sales Rep */}
                             <div className="col-span-6 md:col-span-3">
                                 <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">مندوب مبيعات</label>
-                                <div className="mb-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => openPortalTab('/master/salesmen', 'بوابة المندوبين')}
-                                        className="px-2.5 py-1 text-xs border border-slate-300 rounded-md text-slate-700 hover:bg-slate-100 transition-colors"
-                                    >
-                                        قائمة المندوبين
-                                    </button>
-                                </div>
                                 <div className="flex gap-2">
                                     <input type="text" placeholder="كود" value={header.salesRepCode}
                                         list="receipt-sales-rep-code-list"
@@ -1318,6 +1616,10 @@ export const ReceiptVoucher = () => {
                                 <span className="mr-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-700">{againstLines.length}</span>
                                 {invalidAgainstRows > 0 && <span className="mr-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700">{invalidAgainstRows}!</span>}
                             </button>
+                            <button className={`tab-btn ${activeTab === 'ADDITIONAL' ? 'tab-active' : 'text-slate-500'}`}
+                                onClick={() => setActiveTab('ADDITIONAL')}>
+                                إضافي
+                            </button>
                             {/* Totals in tabs bar */}
                             <div className="mr-auto flex items-center gap-6 px-6 text-sm">
                                 <span className="text-slate-400">مجموع القبض: <b className="text-indigo-600 font-mono">{totalReceiptDebit.toLocaleString()}</b></span>
@@ -1336,7 +1638,7 @@ export const ReceiptVoucher = () => {
                                 transition={{ duration: 0.2, ease: 'easeOut' }}
                                 className="overflow-x-auto"
                             >
-                                <table className="w-full border-separate border-spacing-0 text-right text-[13px] text-slate-700" style={{ minWidth: '1400px' }}>
+                                <table className="w-full min-w-[980px] table-auto border-separate border-spacing-0 text-right text-[13px] text-slate-700">
                                     <thead className="sticky top-0 z-20 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
                                         <tr>
                                             <FilterableHeader tab="RECEIPT" colKey="accountCode" label="حساب" widthClass="first:border-r w-[160px]" />
@@ -1359,13 +1661,20 @@ export const ReceiptVoucher = () => {
                                     </thead>
                                     <tbody onKeyDown={handleGridKeyDown}>
                                         {filteredReceiptLines.map(line => (
-                                            <tr key={line.id} className="bg-white hover:bg-sky-50 transition-colors group">
+                                            <tr
+                                                key={line.id}
+                                                data-row-id={line.id}
+                                                className="bg-white hover:bg-sky-50 transition-colors group"
+                                                onFocusCapture={() => setSelectedReceiptLineId(line.id)}
+                                                onMouseDown={() => setSelectedReceiptLineId(line.id)}
+                                            >
                                                 {/* حساب */}
                                                 <td className="border border-[#d7e9fb] p-1 relative">
                                                     <div className="flex gap-1">
                                                         <input value={line.accountCode || ''}
                                                             onChange={e => updateReceiptLine(line.id, 'accountCode', e.target.value)}
                                                             onBlur={e => handleAccountCodeBlur(line.id, e.target.value, 'RECEIPT')}
+                                                            onDoubleClick={() => openAccountPicker(line.id, 'RECEIPT')}
                                                             placeholder="كود..."
                                                             className={`grid-input font-mono flex-1 ${!line.accountId ? 'border-red-300 bg-red-50/40' : ''}`} title={line.accountName} />
                                                         <button onClick={() => openAccountPicker(line.id, 'RECEIPT')}
@@ -1454,12 +1763,31 @@ export const ReceiptVoucher = () => {
                                 </table>
                                 <div className="p-3 border-t border-slate-100">
                                     <button onClick={() => {
-                                        setReceiptLines(prev => [...prev, emptyReceiptLine()]);
+                                        const newLine = emptyReceiptLine();
+                                        setReceiptLines(prev => [...prev, newLine]);
                                         setReceiptFilters({});
+                                        setSelectedReceiptLineId(newLine.id);
+                                        setFocusOnNewLineId(newLine.id);
                                     }}
                                         className="flex items-center gap-2 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-lg transition-all text-sm">
                                         <Plus size={16} /><span>إضافة سطر</span>
                                     </button>
+                                </div>
+                                <div className="grid gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-4 sm:grid-cols-2 lg:grid-cols-5">
+                                    <SummaryField label="مرجع" value={selectedReceiptLine?.lineRef} />
+                                    <SummaryField
+                                        label="بنك"
+                                        value={selectedReceiptLine?.bankName || banks.find((bank) => bank.id === selectedReceiptLine?.bankId)?.name_ar || ''}
+                                    />
+                                    <SummaryField
+                                        label="حساب"
+                                        value={selectedReceiptLine ? `${selectedReceiptLine.accountCode || ''} ${selectedReceiptLine.accountName || ''}`.trim() : ''}
+                                    />
+                                    <SummaryField label="عملة" value={selectedReceiptLine?.lineCurrency} />
+                                    <SummaryField
+                                        label="حساب فرعي"
+                                        value={selectedReceiptLine?.subAccountName || selectedReceiptLine?.subAccountId || ''}
+                                    />
                                 </div>
                             </motion.div>
                             )}
@@ -1474,7 +1802,7 @@ export const ReceiptVoucher = () => {
                                 transition={{ duration: 0.2, ease: 'easeOut' }}
                                 className="overflow-x-auto"
                             >
-                                <table className="w-full border-separate border-spacing-0 text-right text-[13px] text-slate-700" style={{ minWidth: '900px' }}>
+                                <table className="w-full min-w-[980px] table-auto border-separate border-spacing-0 text-right text-[13px] text-slate-700">
                                     <thead className="sticky top-0 z-20 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
                                         <tr>
                                             <FilterableHeader tab="AGAINST" colKey="accountCode" label="حساب" widthClass="first:border-r w-[220px]" />
@@ -1487,17 +1815,26 @@ export const ReceiptVoucher = () => {
                                             <FilterableHeader tab="AGAINST" colKey="credit" label="دائن" widthClass="w-[120px]" />
                                             <FilterableHeader tab="AGAINST" colKey="taxRef" label="مرجع ضريبي" widthClass="w-[120px]" />
                                             <FilterableHeader tab="AGAINST" colKey="invoiceDate" label="تاريخ الفاتورة" widthClass="w-[120px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="permitNo" label="مشغل مرخص" widthClass="w-[120px]" />
+                                            <FilterableHeader tab="AGAINST" colKey="permitHolderName" label="اسم المشغل المرخص" widthClass="w-[190px]" />
                                             <th className="border-b border-l border-slate-200 bg-slate-50 p-2.5 align-middle w-[50px] text-center"></th>
                                         </tr>
                                     </thead>
                                     <tbody onKeyDown={handleGridKeyDown}>
                                         {filteredAgainstLines.map(line => (
-                                            <tr key={line.id} className="bg-white hover:bg-sky-50 transition-colors group">
+                                            <tr
+                                                key={line.id}
+                                                data-row-id={line.id}
+                                                className="bg-white hover:bg-sky-50 transition-colors group"
+                                                onFocusCapture={() => setSelectedAgainstLineId(line.id)}
+                                                onMouseDown={() => setSelectedAgainstLineId(line.id)}
+                                            >
                                                 <td className="border border-[#d7e9fb] p-1 relative">
                                                     <div className="flex gap-1">
                                                         <input value={line.accountCode || ''}
                                                             onChange={e => updateAgainstLine(line.id, 'accountCode', e.target.value)}
                                                             onBlur={e => handleAccountCodeBlur(line.id, e.target.value, 'AGAINST')}
+                                                            onDoubleClick={() => openAccountPicker(line.id, 'AGAINST')}
                                                             placeholder="كود..." className="grid-input font-mono flex-1" title={line.accountName} />
                                                         <button onClick={() => openAccountPicker(line.id, 'AGAINST')}
                                                             className="px-1.5 text-slate-400 hover:text-indigo-600 transition-colors" title="بحث">
@@ -1529,6 +1866,8 @@ export const ReceiptVoucher = () => {
                                                 <td className="border border-[#d7e9fb] p-1 relative"><input type="number" value={line.credit || ''} onChange={e => updateAgainstLine(line.id, 'credit', Number(e.target.value))} className={`grid-input grid-input-num text-emerald-700 font-bold ${(!line.accountId || Number(line.credit) <= 0) ? 'border-red-300 bg-red-50/40' : ''}`} /></td>
                                                 <td className="border border-[#d7e9fb] p-1 relative"><input type="text" value={line.taxRef} onChange={e => updateAgainstLine(line.id, 'taxRef', e.target.value)} className="grid-input" /></td>
                                                 <td className="border border-[#d7e9fb] p-1 relative"><input type="date" value={line.invoiceDate} onChange={e => updateAgainstLine(line.id, 'invoiceDate', e.target.value)} className="grid-input" /></td>
+                                                <td className="border border-[#d7e9fb] p-1 relative"><input type="text" value={line.permitNo} onChange={e => updateAgainstLine(line.id, 'permitNo', e.target.value)} className="grid-input font-mono" /></td>
+                                                <td className="border border-[#d7e9fb] p-1 relative"><input type="text" value={line.permitHolderName} onChange={e => updateAgainstLine(line.id, 'permitHolderName', e.target.value)} className="grid-input" /></td>
                                                 <td className="border border-[#d7e9fb] p-1 relative text-center">
                                                     <button onClick={() => { if (againstLines.length > 1) setAgainstLines(prev => prev.filter(x => x.id !== line.id)); }}
                                                         className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
@@ -1543,18 +1882,88 @@ export const ReceiptVoucher = () => {
                                             <td className="border-t border-[#d7e9fb] p-2 text-center font-mono">{againstLines.reduce((s, l) => s + (Number(l.debit) || 0), 0).toLocaleString()}</td>
                                             <td className="border-t border-[#d7e9fb] p-2 text-center font-mono">{againstLines.reduce((s, l) => s + (Number(l.creditForeign) || 0), 0).toLocaleString()}</td>
                                             <td className="border-t border-[#d7e9fb] p-2 text-center font-mono text-emerald-700 text-base">{totalAgainstCredit.toLocaleString()}</td>
-                                            <td colSpan={3} className="border-t border-[#d7e9fb]"></td>
+                                            <td colSpan={5} className="border-t border-[#d7e9fb]"></td>
                                         </tr>
                                     </tfoot>
                                 </table>
-                                <div className="p-3 border-t border-slate-100">
+                            <div className="p-3 border-t border-slate-100 flex flex-wrap items-center gap-3">
                                     <button onClick={() => {
-                                        setAgainstLines(prev => [...prev, emptyAgainstLine()]);
+                                        const newLine = emptyAgainstLine();
+                                        setAgainstLines(prev => [...prev, newLine]);
                                         setAgainstFilters({});
+                                        setSelectedAgainstLineId(newLine.id);
+                                        setFocusOnNewLineId(newLine.id);
                                     }}
                                         className="flex items-center gap-2 text-indigo-600 font-bold hover:bg-indigo-50 px-4 py-2 rounded-lg transition-all text-sm">
                                         <Plus size={16} /><span>إضافة سطر</span>
                                     </button>
+                                <button onClick={handleAutoDistribute} disabled={!header.partnerId || totalReceiptDebit <= 0}
+                                    className="flex items-center gap-2 text-emerald-600 font-bold hover:bg-emerald-50 px-4 py-2 rounded-lg transition-all text-sm border border-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <RefreshCw size={16} /><span>إعادة التوزيع الآلي للفواتير</span>
+                                </button>
+                                </div>
+                                <div className="grid gap-3 border-t border-slate-100 bg-slate-50/70 px-4 py-4 sm:grid-cols-2 lg:grid-cols-6">
+                                    <SummaryField label="حساب فرعي" value={selectedAgainstLine?.subAccountName || selectedAgainstLine?.subAccountId || ''} />
+                                    <SummaryField label="مرجع" value={selectedAgainstLine?.lineRef} />
+                                    <SummaryField
+                                        label="حساب"
+                                        value={selectedAgainstLine ? `${selectedAgainstLine.accountCode || ''} ${selectedAgainstLine.accountName || ''}`.trim() : ''}
+                                    />
+                                    <SummaryField label="عملة" value={selectedAgainstLine?.lineCurrency} />
+                                    <SummaryField label="مشغل مرخص" value={selectedAgainstLine?.permitNo} />
+                                    <SummaryField label="اسم المشغل المرخص" value={selectedAgainstLine?.permitHolderName} />
+                                </div>
+                            </motion.div>
+                            )}
+
+                            {activeTab === 'ADDITIONAL' && (
+                            <motion.div
+                                key="ADDITIONAL"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                transition={{ duration: 0.2, ease: 'easeOut' }}
+                                className="p-5"
+                            >
+                                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
+                                        <div>
+                                            <label className="mb-1 block text-[11px] font-bold text-slate-400">مرجع الزبون</label>
+                                            <input
+                                                type="text"
+                                                value={additionalInfo.customerReference}
+                                                onChange={(e) => setAdditionalInfo((prev) => ({ ...prev, customerReference: e.target.value }))}
+                                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1 block text-[11px] font-bold text-slate-400">تاريخ التسليم</label>
+                                            <input
+                                                type="date"
+                                                value={additionalInfo.deliveryDate}
+                                                onChange={(e) => setAdditionalInfo((prev) => ({ ...prev, deliveryDate: e.target.value }))}
+                                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1 block text-[11px] font-bold text-slate-400">اسم المستلم</label>
+                                            <input
+                                                type="text"
+                                                value={additionalInfo.recipientName}
+                                                onChange={(e) => setAdditionalInfo((prev) => ({ ...prev, recipientName: e.target.value }))}
+                                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400"
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2 lg:col-span-1">
+                                            <label className="mb-1 block text-[11px] font-bold text-slate-400">ملاحظة</label>
+                                            <textarea
+                                                value={additionalInfo.notes}
+                                                onChange={(e) => setAdditionalInfo((prev) => ({ ...prev, notes: e.target.value }))}
+                                                rows={3}
+                                                className="min-h-[96px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-400 resize-y"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </motion.div>
                             )}
@@ -1597,7 +2006,7 @@ export const ReceiptVoucher = () => {
             {/* Print Template */}
             <div className="printable">
                 <PrintTemplate header={header} receiptLines={receiptLines} againstLines={againstLines}
-                    totalDebit={totalReceiptDebit} totalCredit={totalAgainstCredit} branches={branches} />
+                    totalDebit={totalReceiptDebit} totalCredit={totalAgainstCredit} branches={branches} additionalInfo={additionalInfo} />
             </div>
 
                 <AnimatePresence>
@@ -1651,7 +2060,7 @@ export const ReceiptVoucher = () => {
 
 // ============ Print Template ============
 
-const PrintTemplate = ({ header, receiptLines, againstLines, totalDebit, totalCredit, branches }: any) => {
+const PrintTemplate = ({ header, receiptLines, againstLines, totalDebit, totalCredit, branches, additionalInfo }: any) => {
     const branchName = branches?.find((b: any) => b.id === header.branchId)?.name_ar || 'الرئيسي';
     return (
         <div className="p-6 border-2 border-gray-800" dir="rtl">
@@ -1671,6 +2080,22 @@ const PrintTemplate = ({ header, receiptLines, againstLines, totalDebit, totalCr
                 <b>استلمنا من:</b> {header.partnerName} ({header.partnerCode})
                 {header.salesRepCode && <span className="mr-4">| مندوب: {header.salesRepName} ({header.salesRepCode})</span>}
             </div>
+
+            {(additionalInfo?.customerReference || additionalInfo?.deliveryDate || additionalInfo?.recipientName || additionalInfo?.notes) && (
+                <div className="mb-4 rounded border border-gray-300 p-3 text-sm">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div><b>مرجع الزبون:</b> {additionalInfo?.customerReference || '-'}</div>
+                        <div><b>تاريخ التسليم:</b> {additionalInfo?.deliveryDate || '-'}</div>
+                        <div><b>اسم المستلم:</b> {additionalInfo?.recipientName || '-'}</div>
+                        <div><b>معدل التحصيل:</b> {Number(header.collectionRate || 0).toLocaleString()}</div>
+                    </div>
+                    {additionalInfo?.notes && (
+                        <div className="mt-3 border-t border-gray-200 pt-3">
+                            <b>ملاحظة:</b> {additionalInfo.notes}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <h3 className="font-bold text-sm mb-2 bg-gray-100 p-2">تفاصيل القبض (مدين)</h3>
             <table className="w-full border-collapse border border-gray-300 text-xs mb-4">
@@ -1714,6 +2139,8 @@ const PrintTemplate = ({ header, receiptLines, againstLines, totalDebit, totalCr
                     <th className="border border-gray-300 p-1">حساب</th>
                     <th className="border border-gray-300 p-1">عملة</th>
                     <th className="border border-gray-300 p-1">مرجع</th>
+                    <th className="border border-gray-300 p-1">مشغل مرخص</th>
+                    <th className="border border-gray-300 p-1">اسم المشغل المرخص</th>
                     <th className="border border-gray-300 p-1">دائن</th>
                 </tr></thead>
                 <tbody>
@@ -1723,12 +2150,14 @@ const PrintTemplate = ({ header, receiptLines, againstLines, totalDebit, totalCr
                             <td className="border border-gray-300 p-1">{l.accountCode} {l.accountName}</td>
                             <td className="border border-gray-300 p-1 text-center">{l.lineCurrency}</td>
                             <td className="border border-gray-300 p-1">{l.lineRef}</td>
+                            <td className="border border-gray-300 p-1 text-center">{l.permitNo || '-'}</td>
+                            <td className="border border-gray-300 p-1">{l.permitHolderName || '-'}</td>
                             <td className="border border-gray-300 p-1 text-center font-mono font-bold">{Number(l.credit).toLocaleString()}</td>
                         </tr>
                     ))}
                 </tbody>
                 <tfoot><tr className="bg-gray-50 font-bold">
-                    <td colSpan={4} className="border border-gray-300 p-1 text-left">إجمالي</td>
+                    <td colSpan={6} className="border border-gray-300 p-1 text-left">إجمالي</td>
                     <td className="border border-gray-300 p-1 text-center font-mono">{Number(totalCredit).toLocaleString()}</td>
                 </tr></tfoot>
             </table>

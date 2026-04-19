@@ -9,6 +9,10 @@ export interface ElectronAPI {
         saveBankAccount: (data: any) => Promise<any>;
         deleteBankAccount: (id: string) => Promise<any>;
 
+        getCashBoxes: () => Promise<any[]>;
+        saveCashBox: (data: any) => Promise<any>;
+        deleteCashBox: (id: string) => Promise<any>;
+
         getCostCenters: () => Promise<any[]>;
         getPaymentMethods: () => Promise<any[]>;
     };

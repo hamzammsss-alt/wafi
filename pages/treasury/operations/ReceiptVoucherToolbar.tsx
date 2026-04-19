@@ -14,6 +14,9 @@ interface ReceiptVoucherToolbarProps {
     onOpenFilters: () => void;
     onRefresh: () => void;
     onSetRowDensity: (density: 'comfortable' | 'compact') => void;
+    groupBy?: string | null;
+    onSetGroupBy?: (key: string | null) => void;
+    groupableColumns?: { key: string; label: string }[];
 }
 
 const ReceiptVoucherToolbar: React.FC<ReceiptVoucherToolbarProps> = ({
@@ -28,6 +31,9 @@ const ReceiptVoucherToolbar: React.FC<ReceiptVoucherToolbarProps> = ({
     onOpenFilters,
     onRefresh,
     onSetRowDensity,
+    groupBy,
+    onSetGroupBy,
+    groupableColumns
 }) => {
     const [openMenu, setOpenMenu] = React.useState<'export' | 'properties' | null>(null);
     const exportItemClass = 'flex w-full items-center justify-between rounded-xl px-3 py-2 text-right text-sm font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-800';
@@ -178,6 +184,21 @@ const ReceiptVoucherToolbar: React.FC<ReceiptVoucherToolbarProps> = ({
                             مدمجة
                         </button>
                     </div>
+                    {groupableColumns && groupableColumns.length > 0 && onSetGroupBy && (
+                        <>
+                            <div className="mb-2 mt-4 text-xs font-bold text-slate-500">تجميع حسب</div>
+                            <select
+                                value={groupBy || ''}
+                                onChange={(e) => onSetGroupBy(e.target.value || null)}
+                                className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-600 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-50"
+                            >
+                                <option value="">بدون تجميع</option>
+                                {groupableColumns.map(c => (
+                                    <option key={c.key} value={c.key}>{c.label}</option>
+                                ))}
+                            </select>
+                        </>
+                    )}
                 </div>
             </FloatingDropdown>
 

@@ -12,6 +12,40 @@ export class TreasuryService {
         }
     }
 
+    private static resolveBankAccountPostingDetails(bankAccountId: string | null | undefined) {
+        const normalizedBankAccountId = String(bankAccountId || '').trim();
+        if (!normalizedBankAccountId) {
+            return {
+                bankAccountId: null,
+                glAccountId: null,
+                subAccountId: null
+            };
+        }
+
+        const row = db.prepare(`
+            SELECT
+                ba.id,
+                ba.gl_account_id,
+                sa.id AS sub_account_id
+            FROM bank_accounts ba
+            LEFT JOIN ae_sub_accounts sa
+                ON sa.id = ba.id
+               AND COALESCE(sa.is_active, 1) = 1
+            WHERE ba.id = ?
+            LIMIT 1
+        `).get(normalizedBankAccountId) as {
+            id: string;
+            gl_account_id?: string | null;
+            sub_account_id?: string | null;
+        } | undefined;
+
+        return {
+            bankAccountId: row?.id || normalizedBankAccountId,
+            glAccountId: row?.gl_account_id || null,
+            subAccountId: row?.sub_account_id || null
+        };
+    }
+
     private static getApprovalInboxViewSql() {
         return `
 DROP VIEW IF EXISTS view_approval_inbox;
@@ -331,6 +365,9 @@ WHERE status LIKE 'PENDING_APPROVAL%';
             if (!cols.some((c: any) => c.name === 'sales_rep_code')) {
                 db.prepare("ALTER TABLE treasury_vouchers ADD COLUMN sales_rep_code TEXT").run();
             }
+            if (!cols.some((c: any) => c.name === 'extra_data')) {
+                db.prepare("ALTER TABLE treasury_vouchers ADD COLUMN extra_data TEXT").run();
+            }
 
             // Cheques: bank_id + endorser
             const chkCols = db.prepare("PRAGMA table_info(cheques)").all();
@@ -391,11 +428,11 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                 INSERT INTO treasury_vouchers (
                     id, voucher_no, voucher_type, date, partner_id, branch_id,
                     amount, currency_id, exchange_rate, description, status, created_by,
-                    manual_ref, cost_center_id, sales_rep_code
+                    manual_ref, cost_center_id, sales_rep_code, extra_data
                 ) VALUES (
                     @id, @voucher_no, 'RECEIPT', @date, @partner_id, @branch_id,
                     @amount, @currency_id, @exchange_rate, @description, 'POSTED', 'System',
-                    @manual_ref, @cost_center_id, @sales_rep_code
+                    @manual_ref, @cost_center_id, @sales_rep_code, @extra_data
                 )
             `).run({
                 id: voucherId,
@@ -409,7 +446,8 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                 description: header.description,
                 manual_ref: header.manual_ref || null,
                 cost_center_id: header.cost_center_id || null,
-                sales_rep_code: header.sales_rep_code || null
+                sales_rep_code: header.sales_rep_code || null,
+                extra_data: header.extra_data || null
             });
 
             // 2. Prepare Journal Lines
@@ -677,12 +715,13 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                 for (const d of details) {
                     let creditAccountId = d.account_id;
                     let bankAccountId = d.bank_account_id || null;
+                    const bankPostingDetails = TreasuryService.resolveBankAccountPostingDetails(bankAccountId);
 
                     // Logic: If bank_account_id is provided (Transfer), resolve its GL Account
                     if (bankAccountId) {
-                        const bankAcc = db.prepare("SELECT gl_account_id FROM bank_accounts WHERE id = ?").get(bankAccountId);
-                        if (bankAcc && bankAcc.gl_account_id) {
-                            creditAccountId = bankAcc.gl_account_id;
+                        if (bankPostingDetails.glAccountId) {
+                            creditAccountId = bankPostingDetails.glAccountId;
+                            bankAccountId = bankPostingDetails.bankAccountId;
                         } else {
                             // Fallback or Error? 
                             // Check if we have a valid account_id passed. If not, error.
@@ -700,7 +739,7 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                         credit: d.amount,
                         line_description: d.description || `سند صرف رقم ${header.voucher_no}`,
                         cost_center_id: d.cost_center_id || header.cost_center_id,
-                        sub_account_id: d.sub_account_id || d.cost_center_id || null,
+                        sub_account_id: d.sub_account_id || bankPostingDetails.subAccountId || d.cost_center_id || null,
                         invoice_ref: d.reference || d.line_ref || null,
                         bank_account_id: bankAccountId // Track specific source
                     });
@@ -749,13 +788,11 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                     });
 
                     // Add Journal Credit Line (Credit The Bank Account)
-                    let bankGLAccountId = null;
+                    const bankPostingDetails = TreasuryService.resolveBankAccountPostingDetails(c.bank_account_id);
+                    let bankGLAccountId = bankPostingDetails.glAccountId;
 
                     if (c.bank_account_id) {
-                        const bankAcc = db.prepare("SELECT gl_account_id FROM bank_accounts WHERE id = ?").get(c.bank_account_id);
-                        if (bankAcc && bankAcc.gl_account_id) {
-                            bankGLAccountId = bankAcc.gl_account_id;
-                        }
+                        bankGLAccountId = bankPostingDetails.glAccountId || bankGLAccountId;
                     }
 
                     // Fallback to old logic if no bank_account_id (Legacy)
@@ -777,9 +814,10 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                         credit: c.amount,
                         line_description: `شيك رقم ${c.cheque_no} - ${c.description || ''}`,
                         cost_center_id: header.cost_center_id || null,
+                        sub_account_id: c.sub_account_id || bankPostingDetails.subAccountId || null,
                         invoice_ref: c.cheque_no || null,
                         due_date: c.due_date || null,
-                        bank_account_id: c.bank_account_id || null
+                        bank_account_id: bankPostingDetails.bankAccountId || c.bank_account_id || null
                     });
                 }
             }

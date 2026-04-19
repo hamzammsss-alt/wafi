@@ -678,6 +678,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         saveBankAccount: (data: any) => invoke('md-save-bank-account', data),
         deleteBankAccount: (id: string) => invoke('md-delete-bank-account', id),
 
+        // Cash Boxes
+        getCashBoxes: () => invoke('md-get-cash-boxes'),
+        saveCashBox: (data: any) => invoke('md-save-cash-box', data),
+        deleteCashBox: (id: string) => invoke('md-delete-cash-box', id),
+
         // Cost Centers
         getCostCenters: () => invoke('md-get-cost-centers'),
         saveCostCenter: (data: any) => invoke('md-save-cost-center', data),
