@@ -1,0 +1,36 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+// @ts-ignore
+const electron_1 = require("electron");
+electron_1.contextBridge.exposeInMainWorld('electronAPI', {
+    getAccounts: () => electron_1.ipcRenderer.invoke('get-accounts'),
+    getTransactionalAccounts: () => electron_1.ipcRenderer.invoke('get-transactional-accounts'),
+    getAccountTree: () => electron_1.ipcRenderer.invoke('get-account-tree'),
+    getAccountChildren: (parentId) => electron_1.ipcRenderer.invoke('get-account-children', parentId),
+    getAccountPath: (accountId) => electron_1.ipcRenderer.invoke('get-account-path', accountId),
+    addAccount: (account) => electron_1.ipcRenderer.invoke('add-account', account),
+    getNextVoucherNo: (type) => electron_1.ipcRenderer.invoke('get-next-voucher-no', type),
+    saveTransaction: (data) => electron_1.ipcRenderer.invoke('save-transaction', data),
+    getProducts: (search) => electron_1.ipcRenderer.invoke('get-products', search),
+    saveInvoice: (data) => electron_1.ipcRenderer.invoke('save-invoice', data),
+    savePurchase: (data) => electron_1.ipcRenderer.invoke('save-purchase', data),
+    getAccountStatement: (data) => electron_1.ipcRenderer.invoke('get-account-statement', data),
+    getChecks: (status) => electron_1.ipcRenderer.invoke('get-checks', status),
+    updateCheckStatus: (data) => electron_1.ipcRenderer.invoke('update-check-status', data),
+    saveBom: (data) => electron_1.ipcRenderer.invoke('save-bom', data),
+    getBoms: () => electron_1.ipcRenderer.invoke('get-boms'),
+    executeProduction: (data) => electron_1.ipcRenderer.invoke('execute-production', data),
+    getDashboardKPIs: () => electron_1.ipcRenderer.invoke('get-dashboard-kpis'),
+    getDashboardCharts: () => electron_1.ipcRenderer.invoke('get-dashboard-charts'),
+    getReportPnL: (range) => electron_1.ipcRenderer.invoke('get-report-pnl', range),
+    getReportBalanceSheet: () => electron_1.ipcRenderer.invoke('get-report-balance-sheet'),
+    getReportAging: () => electron_1.ipcRenderer.invoke('get-report-aging'),
+    getMachineId: () => electron_1.ipcRenderer.invoke('get-machine-id'),
+    validateLicense: () => electron_1.ipcRenderer.invoke('validate-license'),
+    activateProduct: (key) => electron_1.ipcRenderer.invoke('activate-product', key),
+    getSettings: () => electron_1.ipcRenderer.invoke('get-settings'),
+    saveSettings: (settings) => electron_1.ipcRenderer.invoke('save-settings', settings),
+    importData: (type, data) => electron_1.ipcRenderer.invoke('import-data', { type, data }),
+    saveReceiptVoucher: (data) => electron_1.ipcRenderer.invoke('save-receipt-voucher', data),
+    crudOperation: (op) => electron_1.ipcRenderer.invoke('crud-operation', op),
+});
