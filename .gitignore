@@ -45,3 +45,9 @@ extracted_features.txt
 
 # Tool/AI directories
 .codex/
+
+# API Keys and sensitive files
+.env.local
+.env.local.template
+setup-api-key.ps1
+create-env.bat

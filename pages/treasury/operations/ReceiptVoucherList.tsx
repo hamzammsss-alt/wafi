@@ -134,7 +134,7 @@ export const ReceiptVoucherList = () => {
     const [vouchers, setVouchers] = useState<Receipt[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'POSTED' | 'DRAFT'>('DRAFT');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'POSTED' | 'DRAFT'>('all');
     const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
     const [showFilters, setShowFilters] = useState(false);
     const [rowDensity, setRowDensity] = useState<'comfortable' | 'compact'>('comfortable');
@@ -237,7 +237,7 @@ export const ReceiptVoucherList = () => {
             setQuickSearch(s.quickSearch || '');
             setQuickSearchField(s.quickSearchField || 'all');
             setQuickSearchOperator(s.quickSearchOperator || 'contains');
-            setStatusFilter(s.statusFilter || 'DRAFT');
+            setStatusFilter(s.statusFilter || 'all');
             setGroupBy(s.groupBy || null);
             setColumnWidths(s.columnWidths || {});
             setColumnFilters({
@@ -617,7 +617,7 @@ export const ReceiptVoucherList = () => {
 
     const clearAllFilters = () => {
         setSearchTerm('');
-        setStatusFilter('DRAFT');
+        setStatusFilter('all');
         setQuickSearch('');
         setQuickSearchField('all');
         setQuickSearchOperator('contains');

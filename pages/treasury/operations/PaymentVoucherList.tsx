@@ -115,7 +115,7 @@ export const PaymentVoucherList = () => {
     const [vouchers, setVouchers] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'POSTED' | 'DRAFT'>('DRAFT');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'POSTED' | 'DRAFT'>('all');
     const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
     const [showFilters, setShowFilters] = useState(false);
     const [rowDensity, setRowDensity] = useState<'comfortable' | 'compact'>('comfortable');
@@ -193,7 +193,7 @@ export const PaymentVoucherList = () => {
             setQuickSearch(s.quickSearch || '');
             setQuickSearchField(s.quickSearchField || 'all');
             setQuickSearchOperator(s.quickSearchOperator || 'contains');
-            setStatusFilter(s.statusFilter || 'DRAFT');
+            setStatusFilter(s.statusFilter || 'all');
             setColumnWidths(s.columnWidths || {});
             setColumnFilters({
                 ...DEFAULT_COLUMN_FILTERS,
@@ -545,7 +545,7 @@ export const PaymentVoucherList = () => {
 
     const clearAllFilters = () => {
         setSearchTerm('');
-        setStatusFilter('DRAFT');
+        setStatusFilter('all');
         setQuickSearch('');
         setQuickSearchField('all');
         setQuickSearchOperator('contains');
