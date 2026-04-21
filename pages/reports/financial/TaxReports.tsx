@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Landmark, ArrowUpRight, ArrowDownRight, Printer } from 'lucide-react';
+import { Landmark, ArrowUpRight, ArrowDownRight, Printer, Download } from 'lucide-react';
+import { exportToCSV } from '../../../utils/export';
 
 export const TaxReports = () => {
-    const [data, setData] = useState<any>({ outputTax: 0, inputTax: 0, netTax: 0 });
+    const [data, setData] = useState<any>({ outputTax: 0, inputTax: 0, netTax: 0, details: [] });
     const [loading, setLoading] = useState(false);
     const [dateRange, setDateRange] = useState({
         startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
@@ -18,12 +19,17 @@ export const TaxReports = () => {
         try {
             // @ts-ignore
             const result = await window.electronAPI.reports.getTaxReport(dateRange);
-            setData(result || { outputTax: 0, inputTax: 0, netTax: 0 });
+            setData(result || { outputTax: 0, inputTax: 0, netTax: 0, details: [] });
         } catch (error) {
             console.error(error);
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleExport = () => {
+        if (!data.details || data.details.length === 0) return alert('لا توجد بيانات لتصديرها');
+        exportToCSV(data.details, `VAT_Detailed_Report_${dateRange.startDate}_to_${dateRange.endDate}.csv`);
     };
 
     const formatCurrency = (val: number) => val?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -93,6 +99,54 @@ export const TaxReports = () => {
                     </div>
                 </div>
 
+            </div>
+
+            {/* Detailed Table Section */}
+            <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-4 border-b font-bold text-gray-700 flex justify-between items-center bg-gray-50">
+                    <span>تفاصيل الفواتير والحركات الضريبية</span>
+                    <button onClick={handleExport} className="text-green-600 hover:text-green-800 flex items-center gap-1 text-sm font-bold bg-green-50 px-3 py-1.5 rounded-lg transition-colors border border-green-100">
+                        <Download size={16} /> تصدير CSV
+                    </button>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-right text-sm">
+                        <thead className="bg-white font-bold text-gray-600 border-b border-gray-200">
+                            <tr>
+                                <th className="p-4">التاريخ</th>
+                                <th className="p-4">رقم المرجع (الفاتورة)</th>
+                                <th className="p-4">نوع الحركة</th>
+                                <th className="p-4">البيان</th>
+                                <th className="p-4">المبلغ الخاضع للضريبة</th>
+                                <th className="p-4">قيمة الضريبة</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {data.details && data.details.length > 0 ? (
+                                data.details.map((row: any, idx: number) => (
+                                    <tr key={idx} className="hover:bg-blue-50/50 transition-colors">
+                                        <td className="p-4 whitespace-nowrap text-gray-600">{row.date}</td>
+                                        <td className="p-4 font-mono text-gray-800 font-medium">{row.invoice_ref || row.reference_no || '-'}</td>
+                                        <td className="p-4">
+                                            <span className={`px-2 py-1 rounded text-xs font-bold ${row.tax_type === 'OUTPUT' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
+                                                {row.tax_type === 'OUTPUT' ? 'مبيعات (مخرجات)' : 'مشتريات (مدخلات)'}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-gray-600">{row.description}</td>
+                                        <td className="p-4 font-medium text-gray-800">{formatCurrency(row.base_amount)}</td>
+                                        <td className="p-4 font-bold text-gray-900">{formatCurrency(row.tax_amount)}</td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={6} className="p-12 text-center text-gray-400">
+                                        {loading ? 'جاري التحميل...' : 'لا توجد تفاصيل ضريبية في هذه الفترة'}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );

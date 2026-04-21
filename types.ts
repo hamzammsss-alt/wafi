@@ -111,6 +111,12 @@ export interface Unit {
   total_factor?: number;
   updated_at?: string;
   is_base?: number;
+  calculation_mode?: 'MANUAL' | 'LINEAR' | 'AREA' | 'VOLUME';
+  requires_length?: number;
+  requires_width?: number;
+  requires_height?: number;
+  requires_count?: number;
+  formula_hint?: string;
 }
 
 export interface ItemUnit {
@@ -1135,7 +1141,8 @@ declare global {
         updateCurrency: (currency: any) => Promise<any>;
         deleteCurrency: (id: string) => Promise<any>;
         updateRates: () => Promise<boolean>;
-        getCurrencyHistory: (code: string, days?: number) => Promise<{ date: string; rate: number }[]>;
+        getCurrencyHistory: (code: string, days?: number) => Promise<Array<{ date: string; rate: number; source?: string; recordedAt?: string | null; is_fixed?: number }>>;
+        getCurrencyTimeline: (code: string, limit?: number) => Promise<Array<{ date: string; rate: number; source?: string; recordedAt?: string | null; is_fixed?: number }>>;
       };
 
       branch: {

@@ -10,9 +10,9 @@ class MasterDataService {
     static normalizeCurrencyCode(value) {
         const code = String(value || '').trim().toUpperCase();
         if (!code)
-            return 'NIS';
-        if (code === 'ILS')
-            return 'NIS';
+            return 'ILS';
+        if (code === 'NIS')
+            return 'ILS';
         return code;
     }
     static currencyCodesMatch(left, right) {
@@ -56,7 +56,7 @@ class MasterDataService {
         }
         return { id: null, code: normalized, name: normalized };
     }
-    static resolveLegacyAccountId(inputId, preferredCurrencyCode = 'NIS') {
+    static resolveLegacyAccountId(inputId, preferredCurrencyCode = 'ILS') {
         const normalizedId = String(inputId || '').trim();
         if (!normalizedId)
             return null;
@@ -774,30 +774,11 @@ class MasterDataService {
                 }
                 return nextCode;
             };
-            const ensureCashBoxCurrencyParentAccount = () => {
+            const ensureBankCurrencyParentAccount = () => {
                 if (data.id)
                     return null;
-                // Map currency codes to the new cash box parent accounts
-                const currencyToParentCode = {
-                    'NIS': '1111',
-                    'ILS': '1111',
-                    'JOD': '1112',
-                    'USD': '1113',
-                    'EUR': '1113' // Default to USD for EUR if needed
-                };
-                const parentCode = currencyToParentCode[currencyCode.toUpperCase()] || '1111'; // Default to NIS
-                const parentAccount = database_1.db.prepare(`
-                    SELECT id
-                    FROM gl_chart_of_accounts
-                    WHERE account_code = ?
-                    LIMIT 1
-                `).get(parentCode);
-                if (parentAccount) {
-                    return parentAccount.id;
-                }
-                // Fallback to old logic if parent not found
-                const cashRoot = findCashRootAccount();
-                if (!cashRoot)
+                const bankRoot = findBankRootAccount();
+                if (!bankRoot)
                     return null;
                 if (currencyUUID) {
                     const existingByCurrency = database_1.db.prepare(`
@@ -806,16 +787,16 @@ class MasterDataService {
                         WHERE parent_id = ?
                           AND is_transactional = 0
                           AND currency_id = ?
-                          AND (name_ar LIKE '%صندوق%' OR name_ar LIKE '%Cash%')
+                          AND (name_ar LIKE '%بنوك%' OR name_ar LIKE '%البنوك%' OR name_en LIKE '%Bank%')
                         ORDER BY account_code
                         LIMIT 1
-                    `).get(cashRoot.id, currencyUUID);
+                    `).get(bankRoot.id, currencyUUID);
                     if (existingByCurrency)
                         return existingByCurrency.id;
                 }
                 const label = resolveCurrencyLabel(currencyCode);
-                const parentNameAr = `الصندوق - ${label}`;
-                const parentNameEn = `Cash Box - ${currencyCode}`;
+                const parentNameAr = `البنوك - ${label}`;
+                const parentNameEn = `Banks - ${currencyCode}`;
                 const existingByName = database_1.db.prepare(`
                     SELECT id
                     FROM gl_chart_of_accounts
@@ -823,12 +804,12 @@ class MasterDataService {
                       AND is_transactional = 0
                       AND (name_ar = ? OR name_en = ?)
                     LIMIT 1
-                `).get(cashRoot.id, parentNameAr, parentNameEn);
+                `).get(bankRoot.id, parentNameAr, parentNameEn);
                 if (existingByName)
                     return existingByName.id;
                 const parentId = (0, uuid_1.v4)();
-                const parentCodeFallback = getNextChildCode(cashRoot.id, cashRoot.account_code);
-                const parentLegacyId = normalizeLegacyParentId(resolveLinkedAccountId(cashRoot.id));
+                const parentCode = getNextChildCode(bankRoot.id, bankRoot.account_code);
+                const parentLegacyId = normalizeLegacyParentId(resolveLinkedAccountId(bankRoot.id));
                 database_1.db.prepare(`
                     INSERT INTO gl_chart_of_accounts (
                         id, account_code, name_ar, name_en, parent_id, account_type,
@@ -839,11 +820,11 @@ class MasterDataService {
                     )
                 `).run({
                     id: parentId,
-                    account_code: parentCodeFallback,
+                    account_code: parentCode,
                     name_ar: parentNameAr,
                     name_en: parentNameEn,
-                    parent_id: cashRoot.id,
-                    account_type: cashRoot.account_type || 'ASSET',
+                    parent_id: bankRoot.id,
+                    account_type: bankRoot.account_type || 'ASSET',
                     currency_id: currencyUUID
                 });
                 database_1.db.prepare(`
@@ -854,42 +835,25 @@ class MasterDataService {
                     )
                 `).run({
                     id: parentId,
-                    code: parentCodeFallback,
+                    code: parentCode,
                     name: parentNameAr,
-                    type: normalizeType(cashRoot.account_type || 'ASSET'),
+                    type: normalizeType(bankRoot.account_type || 'ASSET'),
                     parent_id: parentLegacyId,
-                    account_level: String(parentCodeFallback).length,
+                    account_level: String(parentCode).length,
                     currency: currencyCode
                 });
                 upsertLegacyAccountRow({
                     id: parentId,
-                    code: parentCodeFallback,
+                    code: parentCode,
                     name: parentNameAr,
-                    type: cashRoot.account_type || 'ASSET',
+                    type: bankRoot.account_type || 'ASSET',
                     parentLegacyId,
-                    level: String(parentCodeFallback).length,
+                    level: String(parentCode).length,
                     isTransactional: 0,
                     currency: currencyCode,
                     subtype: 'GENERAL',
                 });
                 return parentId;
-            };
-            const findCashRootAccount = () => {
-                return database_1.db.prepare(`
-                    SELECT id, account_code, account_type
-                    FROM gl_chart_of_accounts
-                    WHERE account_code = '111'
-                      AND is_transactional = 0
-                    LIMIT 1
-                `).get() || database_1.db.prepare(`
-                    SELECT id, account_code, account_type
-                    FROM gl_chart_of_accounts
-                    WHERE is_transactional = 0
-                      AND account_type = 'ASSET'
-                      AND (name_ar LIKE '%نقدية%' OR name_ar LIKE '%Cash%')
-                    ORDER BY LENGTH(account_code), account_code
-                    LIMIT 1
-                `).get();
             };
             const createAutoLinkedGLAccount = (parentChartId) => {
                 if (data.id || !parentChartId)
@@ -962,7 +926,7 @@ class MasterDataService {
                     isParentCompatibleWithCurrency(explicitParentChartId, currencyUUID);
                 const autoParentChartId = explicitParentIsValid
                     ? explicitParentChartId
-                    : MasterDataService.ensureBankCurrencyParentAccount(data, currencyInfo.code, currencyInfo.id);
+                    : ensureBankCurrencyParentAccount();
                 if (autoParentChartId) {
                     glAccountId = createAutoLinkedGLAccount(autoParentChartId);
                 }
@@ -1081,31 +1045,16 @@ class MasterDataService {
         if (!normalizedCode)
             throw new Error('رمز الصندوق مطلوب');
         const currencyInfo = this.resolveCurrencyValue(data?.currency_id || data?.currency_code || data?.currency);
-        const expectedParentCode = this.resolveCashBoxParentCode(currencyInfo.code);
-        // Auto-link to appropriate cash box parent account if not specified
-        let linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code);
-        if (!linkedLegacyAccountId) {
-            // Auto-create or find the appropriate cash box parent account
-            const autoParentId = this.ensureCashBoxCurrencyParentAccount(data, currencyInfo.code, currencyInfo.id);
-            if (autoParentId) {
-                linkedLegacyAccountId = autoParentId;
-            }
-        }
+        const linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code);
         if (!linkedLegacyAccountId)
             throw new Error('يجب اختيار حساب صندوق صالح');
         const accountIdentity = this.getAccountIdentity(linkedLegacyAccountId);
         if (!accountIdentity)
             throw new Error('تعذر قراءة حساب الصندوق المختار');
-        if (String(accountIdentity.account_code || '') !== expectedParentCode) {
-            throw new Error(`يجب اختيار حساب الصندوق الرئيسي المطابق للعملة (${expectedParentCode}) من شجرة الحسابات`);
-        }
-        if (false && String(accountIdentity.account_code || '') !== expectedParentCode) {
+        if (!String(accountIdentity.account_code || '').startsWith('111')) {
             throw new Error('يمكن ربط الصندوق فقط بحسابات الصندوق النقدية من مجموعة 111');
         }
-        if (Number(accountIdentity.is_transactional || 0) !== 0) {
-            throw new Error('يجب اختيار حساب صندوق رئيسي من شجرة الحسابات وليس حساباً حركياً');
-        }
-        if (false && Number(accountIdentity.is_transactional || 0) !== 0) {
+        if (Number(accountIdentity.is_transactional || 0) !== 1) {
             throw new Error('حساب الصندوق يجب أن يكون حساباً حركياً');
         }
         if (!this.currencyCodesMatch(accountIdentity.currency_code, currencyInfo.code)) {
@@ -1349,316 +1298,6 @@ class MasterDataService {
     static deleteBranch(id) {
         database_1.db.prepare('DELETE FROM branches WHERE id = ?').run(id);
         return { success: true };
-    }
-    static ensureBankCurrencyParentAccount(data, currencyCode, currencyUUID) {
-        if (data.id)
-            return null;
-        // Map currency codes to the new bank parent accounts
-        const currencyToParentCode = {
-            'NIS': '1121',
-            'ILS': '1121',
-            'JOD': '1122',
-            'USD': '1123',
-            'EUR': '1123' // Default to USD for EUR if needed
-        };
-        const parentCode = currencyToParentCode[currencyCode.toUpperCase()] || '1121'; // Default to NIS
-        const parentAccount = database_1.db.prepare(`
-            SELECT id
-            FROM gl_chart_of_accounts
-            WHERE account_code = ?
-            LIMIT 1
-        `).get(parentCode);
-        if (parentAccount) {
-            return parentAccount.id;
-        }
-        // Fallback to old logic if parent not found
-        const bankRoot = this.findBankRootAccount();
-        if (!bankRoot)
-            return null;
-        if (currencyUUID) {
-            const existingByCurrency = database_1.db.prepare(`
-                SELECT id
-                FROM gl_chart_of_accounts
-                WHERE parent_id = ?
-                  AND is_transactional = 0
-                  AND currency_id = ?
-                  AND (name_ar LIKE '%بنوك%' OR name_ar LIKE '%البنوك%' OR name_en LIKE '%Bank%')
-                ORDER BY account_code
-                LIMIT 1
-            `).get(bankRoot.id, currencyUUID);
-            if (existingByCurrency)
-                return existingByCurrency.id;
-        }
-        const label = this.resolveCurrencyLabel(currencyCode);
-        const parentNameAr = `البنوك - ${label}`;
-        const parentNameEn = `Banks - ${currencyCode}`;
-        const existingByName = database_1.db.prepare(`
-            SELECT id
-            FROM gl_chart_of_accounts
-            WHERE parent_id = ?
-              AND is_transactional = 0
-              AND (name_ar = ? OR name_en = ?)
-            LIMIT 1
-        `).get(bankRoot.id, parentNameAr, parentNameEn);
-        if (existingByName)
-            return existingByName.id;
-        const parentId = (0, uuid_1.v4)();
-        const parentCodeFallback = this.getNextChildCode(bankRoot.id, bankRoot.account_code);
-        const parentLegacyId = this.normalizeLegacyParentId(this.resolveLinkedAccountId(bankRoot.id));
-        database_1.db.prepare(`
-            INSERT INTO gl_chart_of_accounts (
-                id, account_code, name_ar, name_en, parent_id, account_type,
-                is_transactional, currency_id, requires_cost_center, balance
-            ) VALUES (
-                @id, @account_code, @name_ar, @name_en, @parent_id, @account_type,
-                0, @currency_id, 0, 0
-            )
-        `).run({
-            id: parentId,
-            account_code: parentCodeFallback,
-            name_ar: parentNameAr,
-            name_en: parentNameEn,
-            parent_id: bankRoot.id,
-            account_type: bankRoot.account_type || 'ASSET',
-            currency_id: currencyUUID
-        });
-        database_1.db.prepare(`
-            INSERT INTO accounts (
-                id, code, name, type, balance, parent_id, account_level, is_transactional, currency, is_active
-            ) VALUES (
-                @id, @code, @name, @type, '0', @parent_id, @account_level, 0, @currency, 1
-            )
-        `).run({
-            id: parentId,
-            code: parentCodeFallback,
-            name: parentNameAr,
-            type: this.normalizeType(bankRoot.account_type || 'ASSET'),
-            parent_id: parentLegacyId,
-            account_level: String(parentCodeFallback).length,
-            currency: currencyCode
-        });
-        this.upsertLegacyAccountRow({
-            id: parentId,
-            code: parentCodeFallback,
-            name: parentNameAr,
-            type: bankRoot.account_type || 'ASSET',
-            parentLegacyId,
-            level: String(parentCodeFallback).length,
-            isTransactional: 0,
-            currency: currencyCode,
-            subtype: 'GENERAL',
-        });
-        return parentId;
-    }
-    static findBankRootAccount() {
-        return database_1.db.prepare(`
-            SELECT id, account_code, account_type
-            FROM gl_chart_of_accounts
-            WHERE account_code = '112'
-              AND is_transactional = 0
-            LIMIT 1
-        `).get() || database_1.db.prepare(`
-            SELECT id, account_code, account_type
-            FROM gl_chart_of_accounts
-            WHERE is_transactional = 0
-              AND account_type = 'ASSET'
-              AND (name_ar LIKE '%بنوك%' OR name_ar LIKE '%البنوك%' OR name_en LIKE '%Bank%')
-            ORDER BY LENGTH(account_code), account_code
-            LIMIT 1
-        `).get();
-    }
-    static ensureCashBoxCurrencyParentAccount(data, currencyCode, currencyUUID) {
-        if (data.id)
-            return null;
-        const parentCode = this.resolveCashBoxParentCode(currencyCode);
-        const parentAccount = database_1.db.prepare(`
-            SELECT id
-            FROM gl_chart_of_accounts
-            WHERE account_code = ?
-            LIMIT 1
-        `).get(parentCode);
-        if (parentAccount) {
-            return parentAccount.id;
-        }
-        // Fallback to old logic if parent not found
-        const cashRoot = this.findCashRootAccount();
-        if (!cashRoot)
-            return null;
-        if (currencyUUID) {
-            const existingByCurrency = database_1.db.prepare(`
-                SELECT id
-                FROM gl_chart_of_accounts
-                WHERE parent_id = ?
-                  AND is_transactional = 0
-                  AND currency_id = ?
-                  AND (name_ar LIKE '%صندوق%' OR name_ar LIKE '%Cash%')
-                ORDER BY account_code
-                LIMIT 1
-            `).get(cashRoot.id, currencyUUID);
-            if (existingByCurrency)
-                return existingByCurrency.id;
-        }
-        const label = this.resolveCurrencyLabel(currencyCode);
-        const parentNameAr = `الصندوق - ${label}`;
-        const parentNameEn = `Cash Box - ${currencyCode}`;
-        const existingByName = database_1.db.prepare(`
-            SELECT id
-            FROM gl_chart_of_accounts
-            WHERE parent_id = ?
-              AND is_transactional = 0
-              AND (name_ar = ? OR name_en = ?)
-            LIMIT 1
-        `).get(cashRoot.id, parentNameAr, parentNameEn);
-        if (existingByName)
-            return existingByName.id;
-        const parentId = (0, uuid_1.v4)();
-        const parentCodeFallback = this.getNextChildCode(cashRoot.id, cashRoot.account_code);
-        const parentLegacyId = this.normalizeLegacyParentId(this.resolveLinkedAccountId(cashRoot.id));
-        database_1.db.prepare(`
-            INSERT INTO gl_chart_of_accounts (
-                id, account_code, name_ar, name_en, parent_id, account_type,
-                is_transactional, currency_id, requires_cost_center, balance
-            ) VALUES (
-                @id, @account_code, @name_ar, @name_en, @parent_id, @account_type,
-                0, @currency_id, 0, 0
-            )
-        `).run({
-            id: parentId,
-            account_code: parentCodeFallback,
-            name_ar: parentNameAr,
-            name_en: parentNameEn,
-            parent_id: cashRoot.id,
-            account_type: cashRoot.account_type || 'ASSET',
-            currency_id: currencyUUID
-        });
-        database_1.db.prepare(`
-            INSERT INTO accounts (
-                id, code, name, type, balance, parent_id, account_level, is_transactional, currency, is_active
-            ) VALUES (
-                @id, @code, @name, @type, '0', @parent_id, @account_level, 0, @currency, 1
-            )
-        `).run({
-            id: parentId,
-            code: parentCodeFallback,
-            name: parentNameAr,
-            type: this.normalizeType(cashRoot.account_type || 'ASSET'),
-            parent_id: parentLegacyId,
-            account_level: String(parentCodeFallback).length,
-            currency: currencyCode
-        });
-        this.upsertLegacyAccountRow({
-            id: parentId,
-            code: parentCodeFallback,
-            name: parentNameAr,
-            type: cashRoot.account_type || 'ASSET',
-            parentLegacyId,
-            level: String(parentCodeFallback).length,
-            isTransactional: 0,
-            currency: currencyCode,
-            subtype: 'GENERAL',
-        });
-        return parentId;
-    }
-    static findCashRootAccount() {
-        return database_1.db.prepare(`
-            SELECT id, account_code, account_type
-            FROM gl_chart_of_accounts
-            WHERE account_code = '111'
-              AND is_transactional = 0
-            LIMIT 1
-        `).get() || database_1.db.prepare(`
-            SELECT id, account_code, account_type
-            FROM gl_chart_of_accounts
-            WHERE is_transactional = 0
-              AND account_type = 'ASSET'
-              AND (name_ar LIKE '%نقدية%' OR name_ar LIKE '%Cash%')
-            ORDER BY LENGTH(account_code), account_code
-            LIMIT 1
-        `).get();
-    }
-    static resolveCurrencyLabel(code) {
-        const c = (code || '').toUpperCase();
-        if (c === 'JOD')
-            return 'دينار';
-        if (c === 'USD')
-            return 'دولار';
-        if (c === 'EUR')
-            return 'يورو';
-        if (c === 'ILS' || c === 'NIS')
-            return 'شيكل';
-        return code || 'متعدد العملات';
-    }
-    static resolveCashBoxParentCode(currencyCode) {
-        const normalized = String(currencyCode || '').trim().toUpperCase();
-        if (normalized === 'JOD')
-            return '1112';
-        if (normalized === 'USD' || normalized === 'EUR')
-            return '1113';
-        return '1111';
-    }
-    static getNextChildCode(parentId, parentCode) {
-        const existingChildren = database_1.db.prepare(`
-            SELECT account_code
-            FROM gl_chart_of_accounts
-            WHERE parent_id = ?
-            ORDER BY account_code DESC
-            LIMIT 1
-        `).get(parentId);
-        if (!existingChildren) {
-            return parentCode + '1';
-        }
-        const lastCode = existingChildren.account_code;
-        const lastDigit = parseInt(lastCode.slice(-1));
-        if (isNaN(lastDigit)) {
-            return lastCode + '1';
-        }
-        return lastCode.slice(0, -1) + (lastDigit + 1);
-    }
-    static normalizeLegacyParentId(parentId) {
-        if (!parentId)
-            return null;
-        // Assuming parentId is already the legacy id or needs conversion
-        return parentId;
-    }
-    static resolveLinkedAccountId(accountId) {
-        if (!accountId)
-            return null;
-        // Assuming accountId is the legacy id
-        return accountId;
-    }
-    static upsertLegacyAccountRow(data) {
-        // Implement upsert logic for legacy accounts table
-        const existing = database_1.db.prepare('SELECT id FROM accounts WHERE id = ?').get(data.id);
-        if (existing) {
-            database_1.db.prepare(`
-                UPDATE accounts SET
-                    code = ?, name = ?, type = ?, balance = ?, parent_id = ?,
-                    account_level = ?, is_transactional = ?, currency = ?, is_active = ?
-                WHERE id = ?
-            `).run(data.code, data.name, data.type, '0', data.parentLegacyId, data.level, data.isTransactional, data.currency, 1, data.id);
-        }
-        else {
-            database_1.db.prepare(`
-                INSERT INTO accounts (
-                    id, code, name, type, balance, parent_id, account_level,
-                    is_transactional, currency, is_active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(data.id, data.code, data.name, data.type, '0', data.parentLegacyId, data.level, data.isTransactional, data.currency, 1);
-        }
-    }
-    static normalizeType(type) {
-        const t = (type || '').toUpperCase();
-        if (t === 'ASSET')
-            return 'asset';
-        if (t === 'LIABILITY')
-            return 'liability';
-        if (t === 'EQUITY')
-            return 'equity';
-        if (t === 'INCOME')
-            return 'income';
-        if (t === 'EXPENSE')
-            return 'expense';
-        return 'asset';
     }
 }
 exports.MasterDataService = MasterDataService;

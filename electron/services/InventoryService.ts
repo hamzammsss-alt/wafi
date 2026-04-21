@@ -9,6 +9,8 @@ interface DefaultUnitSeed {
     name_en: string;
     code: string;
     symbol: string;
+    calculation_mode?: 'MANUAL' | 'LINEAR' | 'AREA' | 'VOLUME';
+    formula_hint?: string;
 }
 
 const DEFAULT_UNITS: DefaultUnitSeed[] = [
@@ -248,7 +250,13 @@ export class InventoryService {
             name_ar: u.name_ar || u.name,
             code: u.code || u.symbol || '',
             is_base: !!u.is_base,
-            is_active: u.is_active === undefined || u.is_active === null ? 1 : u.is_active
+            is_active: u.is_active === undefined || u.is_active === null ? 1 : u.is_active,
+            calculation_mode: u.calculation_mode || 'MANUAL',
+            requires_length: u.requires_length || 0,
+            requires_width: u.requires_width || 0,
+            requires_height: u.requires_height || 0,
+            requires_count: u.requires_count || 0,
+            formula_hint: u.formula_hint || ''
         }));
 
         // Keep current behavior for active user units, but hide old auto-seeded legacy units
@@ -283,6 +291,12 @@ export class InventoryService {
         const hasSymbol = columns.has('symbol');
         const hasIsActive = columns.has('is_active');
         const hasIsBase = columns.has('is_base');
+        const hasCalculationMode = columns.has('calculation_mode');
+        const hasRequiresLength = columns.has('requires_length');
+        const hasRequiresWidth = columns.has('requires_width');
+        const hasRequiresHeight = columns.has('requires_height');
+        const hasRequiresCount = columns.has('requires_count');
+        const hasFormulaHint = columns.has('formula_hint');
 
         if (!hasNameAr && !hasName) {
             throw new Error("units table does not support name/name_ar columns");
@@ -296,6 +310,12 @@ export class InventoryService {
         if (hasSymbol) insertColumns.push('symbol');
         if (hasIsActive) insertColumns.push('is_active');
         if (hasIsBase) insertColumns.push('is_base');
+        if (hasCalculationMode) insertColumns.push('calculation_mode');
+        if (hasRequiresLength) insertColumns.push('requires_length');
+        if (hasRequiresWidth) insertColumns.push('requires_width');
+        if (hasRequiresHeight) insertColumns.push('requires_height');
+        if (hasRequiresCount) insertColumns.push('requires_count');
+        if (hasFormulaHint) insertColumns.push('formula_hint');
 
         const insertStmt = db.prepare(`
             INSERT INTO units (${insertColumns.join(', ')})
@@ -336,6 +356,12 @@ export class InventoryService {
                 if (hasSymbol) row.symbol = unit.symbol;
                 if (hasIsActive) row.is_active = 1;
                 if (hasIsBase) row.is_base = unit.code === 'PCS' ? 1 : 0;
+                if (hasCalculationMode) row.calculation_mode = this.detectCalculationMode(unit);
+                if (hasRequiresLength) row.requires_length = this.requiresLength(unit) ? 1 : 0;
+                if (hasRequiresWidth) row.requires_width = this.requiresWidth(unit) ? 1 : 0;
+                if (hasRequiresHeight) row.requires_height = this.requiresHeight(unit) ? 1 : 0;
+                if (hasRequiresCount) row.requires_count = this.requiresCount(unit) ? 1 : 0;
+                if (hasFormulaHint) row.formula_hint = this.getFormulaHint(unit);
 
                 insertStmt.run(row);
                 inserted++;
@@ -347,20 +373,43 @@ export class InventoryService {
     }
 
     static createUnit(unit: Partial<Unit>): Unit {
+        const columns = this.getUnitsColumnSet();
         const newUnit = {
             id: uuidv4(),
             name: unit.name_ar, // Mapping ar to name for legacy compat
             name_ar: unit.name_ar,
             name_en: unit.name_en || '',
             symbol: unit.symbol || '',
-            is_base: unit.is_base ? 1 : 0
+            is_base: unit.is_base ? 1 : 0,
+            calculation_mode: String(unit.calculation_mode || 'MANUAL').toUpperCase(),
+            requires_length: unit.requires_length ? 1 : 0,
+            requires_width: unit.requires_width ? 1 : 0,
+            requires_height: unit.requires_height ? 1 : 0,
+            requires_count: unit.requires_count ? 1 : 0,
+            formula_hint: unit.formula_hint || ''
         };
 
         // Try insert with name_ar if column exists (it should per v1) or just name
         try {
             db.prepare(`
-                INSERT INTO units (id, name, name_ar, symbol, is_base)
-                VALUES (@id, @name, @name_ar, @symbol, @is_base)
+                INSERT INTO units (
+                    id, name, name_ar, symbol, is_base
+                    ${columns.has('calculation_mode') ? ', calculation_mode' : ''}
+                    ${columns.has('requires_length') ? ', requires_length' : ''}
+                    ${columns.has('requires_width') ? ', requires_width' : ''}
+                    ${columns.has('requires_height') ? ', requires_height' : ''}
+                    ${columns.has('requires_count') ? ', requires_count' : ''}
+                    ${columns.has('formula_hint') ? ', formula_hint' : ''}
+                )
+                VALUES (
+                    @id, @name, @name_ar, @symbol, @is_base
+                    ${columns.has('calculation_mode') ? ', @calculation_mode' : ''}
+                    ${columns.has('requires_length') ? ', @requires_length' : ''}
+                    ${columns.has('requires_width') ? ', @requires_width' : ''}
+                    ${columns.has('requires_height') ? ', @requires_height' : ''}
+                    ${columns.has('requires_count') ? ', @requires_count' : ''}
+                    ${columns.has('formula_hint') ? ', @formula_hint' : ''}
+                )
             `).run(newUnit);
         } catch (e) {
             // Fallback if name_ar missing in some legacy version
@@ -376,6 +425,47 @@ export class InventoryService {
     static deleteUnit(id: string) {
         db.prepare('DELETE FROM units WHERE id = ?').run(id);
         return { success: true };
+    }
+
+    private static detectCalculationMode(unit: Partial<DefaultUnitSeed | Unit>): 'MANUAL' | 'LINEAR' | 'AREA' | 'VOLUME' {
+        const explicit = String((unit as any).calculation_mode || '').trim().toUpperCase();
+        if (explicit === 'LINEAR' || explicit === 'AREA' || explicit === 'VOLUME') return explicit;
+
+        const code = String(unit.code || '').trim().toUpperCase();
+        const nameAr = String((unit as any).name_ar || '').trim();
+        const nameEn = String((unit as any).name_en || '').trim().toLowerCase();
+
+        if (['CBM', 'M3', 'CM3', 'MM3'].includes(code) || nameAr.includes('مكعب') || nameEn.includes('cubic')) return 'VOLUME';
+        if (['SQM', 'M2', 'CM2', 'MM2'].includes(code) || nameAr.includes('مربع') || nameEn.includes('square')) return 'AREA';
+        if (['M', 'MTR', 'CM', 'MM', 'KM'].includes(code)) return 'LINEAR';
+        return 'MANUAL';
+    }
+
+    private static requiresLength(unit: Partial<DefaultUnitSeed | Unit>): boolean {
+        return ['LINEAR', 'AREA', 'VOLUME'].includes(this.detectCalculationMode(unit));
+    }
+
+    private static requiresWidth(unit: Partial<DefaultUnitSeed | Unit>): boolean {
+        return ['AREA', 'VOLUME'].includes(this.detectCalculationMode(unit));
+    }
+
+    private static requiresHeight(unit: Partial<DefaultUnitSeed | Unit>): boolean {
+        return this.detectCalculationMode(unit) === 'VOLUME';
+    }
+
+    private static requiresCount(unit: Partial<DefaultUnitSeed | Unit>): boolean {
+        return ['LINEAR', 'AREA', 'VOLUME'].includes(this.detectCalculationMode(unit));
+    }
+
+    private static getFormulaHint(unit: Partial<DefaultUnitSeed | Unit>): string {
+        const explicit = String((unit as any).formula_hint || '').trim();
+        if (explicit) return explicit;
+
+        const mode = this.detectCalculationMode(unit);
+        if (mode === 'LINEAR') return 'الكمية = الطول × العدد';
+        if (mode === 'AREA') return 'الكمية = الطول × العرض × العدد';
+        if (mode === 'VOLUME') return 'الكمية = الطول × العرض × الارتفاع × العدد';
+        return 'إدخال يدوي';
     }
 
     // --- Attributes & Brands ---

@@ -687,7 +687,7 @@ const initDB = (dbPath) => {
       name_ar TEXT NOT NULL,
       name_en TEXT,
       currency_id TEXT,
-      currency_code TEXT NOT NULL DEFAULT 'NIS',
+      currency_code TEXT NOT NULL DEFAULT 'ILS',
       gl_account_id TEXT NOT NULL,
       note TEXT,
       is_active INTEGER DEFAULT 1,
@@ -713,7 +713,7 @@ const initDB = (dbPath) => {
             if (!cbCols.some((c) => c.name === 'currency_id'))
                 exports.db.prepare("ALTER TABLE cash_boxes ADD COLUMN currency_id TEXT").run();
             if (!cbCols.some((c) => c.name === 'currency_code'))
-                exports.db.prepare("ALTER TABLE cash_boxes ADD COLUMN currency_code TEXT DEFAULT 'NIS'").run();
+                exports.db.prepare("ALTER TABLE cash_boxes ADD COLUMN currency_code TEXT DEFAULT 'ILS'").run();
             if (!cbCols.some((c) => c.name === 'gl_account_id'))
                 exports.db.prepare("ALTER TABLE cash_boxes ADD COLUMN gl_account_id TEXT").run();
             if (!cbCols.some((c) => c.name === 'note'))
@@ -1593,18 +1593,10 @@ const seedCOA = () => {
         { code: '1', name: 'الأصول', type: 'Asset' },
         { code: '11', name: 'الأصول المتداولة', type: 'Asset' },
         { code: '111', name: 'النقدية وما في حكمها', type: 'Asset' },
-        // Cash Boxes (Sub-accounts under 111)
-        { code: '1111', name: 'الصناديق', type: 'Asset' },
-        { code: '11111', name: 'الصندوق الرئيسي (الخزينة)', type: 'Asset' },
-        { code: '11112', name: 'صندوق الكاشير (نقاط البيع)', type: 'Asset' },
-        { code: '11113', name: 'العهد النقدية (نثرية)', type: 'Asset' },
-        // Banks (Sub-accounts under 111)
-        { code: '1112', name: 'البنوك', type: 'Asset' },
-        { code: '11121', name: 'البنك العربي - شيكل', type: 'Asset' },
-        { code: '11122', name: 'بنك فلسطين - شيكل', type: 'Asset' },
-        { code: '11123', name: 'البنك العربي - دولار', type: 'Asset' },
-        { code: '11124', name: 'بنك فلسطين - دولار', type: 'Asset' },
-        { code: '11125', name: 'البنك العربي - دينار', type: 'Asset' },
+        { code: '1110', name: 'البنوك - شيكل', type: 'Asset' },
+        { code: '11101', name: 'البنك العربي - شيكل', type: 'Asset' },
+        { code: '11102', name: 'بنك فلسطين - شيكل', type: 'Asset' },
+        { code: '1112', name: 'البنك العربي - شيكل (قديم)', type: 'Asset' },
         // 2. Liabilities
         { code: '2', name: 'الخصوم', type: 'Liability' },
         { code: '21', name: 'الخصوم المتداولة', type: 'Liability' },

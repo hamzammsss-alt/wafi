@@ -16,6 +16,16 @@ export function registerFinanceIPC(useCases: FinanceUseCases) {
         return { success: true };
     }));
 
+    ipcMain.handle('finance:getCurrencyHistory', ipcWrap(async (event, code: string, days?: number) => {
+        const ctx = getContext(event as any);
+        return await useCases.listCurrencyHistory(code, ctx.companyId, days);
+    }));
+
+    ipcMain.handle('finance:getCurrencyTimeline', ipcWrap(async (event, code: string, limit?: number) => {
+        const ctx = getContext(event as any);
+        return await useCases.listCurrencyTimeline(code, ctx.companyId, limit);
+    }));
+
     ipcMain.handle('finance:deleteCurrency', ipcWrap(async (event, id: string) => {
         const ctx = getContext(event as any);
         await useCases.deleteCurrency(id, ctx.companyId);

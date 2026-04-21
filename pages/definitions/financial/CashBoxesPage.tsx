@@ -43,14 +43,16 @@ type CashBoxForm = {
 
 const buildEmptyForm = (currencies: CurrencyRow[]): CashBoxForm => {
     const preferredCurrency =
-        currencies.find((row) => ['NIS', 'ILS'].includes(String(row.code || '').toUpperCase())) || currencies[0];
+        currencies.find((row) => String(row.code || '').toUpperCase() === 'ILS') ||
+        currencies.find((row) => String(row.code || '').toUpperCase() === 'NIS') ||
+        currencies[0];
 
     return {
         code: '',
         name_ar: '',
         name_en: '',
         currency_id: preferredCurrency?.id || '',
-        currency_code: preferredCurrency?.code || 'NIS',
+        currency_code: preferredCurrency?.code || 'ILS',
         gl_account_id: '',
         gl_account_code: '',
         gl_account_name: '',

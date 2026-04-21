@@ -89,20 +89,72 @@ export class CurrencyScraperService {
                 return false;
             }
 
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS currency_rates_history (
+                    id TEXT PRIMARY KEY,
+                    currency_id TEXT NOT NULL,
+                    rate REAL NOT NULL,
+                    rate_date DATE NOT NULL,
+                    company_id TEXT,
+                    currency_code TEXT,
+                    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    source TEXT DEFAULT 'MANUAL',
+                    is_fixed INTEGER DEFAULT 0,
+                    FOREIGN KEY (currency_id) REFERENCES currencies(id)
+                );
+            `);
+
             // 3. Update Database
             const updateStmt = db.prepare(`
-                UPDATE currencies 
-                SET exchange_rate = @rate, last_update = CURRENT_TIMESTAMP 
-                WHERE code = @code AND is_base = 0
+                UPDATE currencies
+                SET
+                    exchange_rate = @rate,
+                    last_update = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE UPPER(TRIM(COALESCE(code, ''))) = UPPER(TRIM(@code))
+                  AND COALESCE(is_base, 0) = 0
+                  AND COALESCE(is_base_currency, 0) = 0
+                  AND COALESCE(is_fixed, 0) = 0
+            `);
+
+            const historyTimelineStmt = db.prepare(`
+                INSERT INTO currency_rates_history (
+                    id,
+                    currency_id,
+                    company_id,
+                    currency_code,
+                    rate,
+                    rate_date,
+                    recorded_at,
+                    source,
+                    is_fixed
+                )
+                SELECT
+                    lower(hex(randomblob(16))),
+                    id,
+                    COALESCE(company_id, 'COMP_01'),
+                    UPPER(TRIM(COALESCE(code, @code))),
+                    @rate,
+                    date('now', 'localtime'),
+                    datetime('now', 'localtime'),
+                    'SCRAPER',
+                    COALESCE(is_fixed, 0)
+                FROM currencies
+                WHERE UPPER(TRIM(COALESCE(code, ''))) = UPPER(TRIM(@code))
+                  AND COALESCE(is_base, 0) = 0
+                  AND COALESCE(is_base_currency, 0) = 0
+                  AND COALESCE(is_fixed, 0) = 0
             `);
 
             const transaction = db.transaction((items) => {
                 for (const item of items) {
                     const result = updateStmt.run(item);
-                    console.log(`[CurrencyScraper] Updated ${item.code}: ${result.changes > 0 ? 'Success' : 'Not Found/Base'}`);
+                    console.log(`[CurrencyScraper] Updated ${item.code}: ${result.changes > 0 ? 'Success' : 'Not Found/Base/Fixed'}`);
 
                     // Insert History
                     try {
+                        historyTimelineStmt.run(item);
+
                         const historyStmt = db.prepare(`
                              INSERT INTO currency_rate_history (currency_code, rate, date)
                              VALUES (@code, @rate, date('now', 'localtime'))

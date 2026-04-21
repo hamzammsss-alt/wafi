@@ -15,6 +15,14 @@ function registerFinanceIPC(useCases) {
         await useCases.saveCurrency(data, ctx.companyId);
         return { success: true };
     }));
+    electron_1.ipcMain.handle('finance:getCurrencyHistory', (0, ipcWrap_1.ipcWrap)(async (event, code, days) => {
+        const ctx = (0, AuthContext_1.getContext)(event);
+        return await useCases.listCurrencyHistory(code, ctx.companyId, days);
+    }));
+    electron_1.ipcMain.handle('finance:getCurrencyTimeline', (0, ipcWrap_1.ipcWrap)(async (event, code, limit) => {
+        const ctx = (0, AuthContext_1.getContext)(event);
+        return await useCases.listCurrencyTimeline(code, ctx.companyId, limit);
+    }));
     electron_1.ipcMain.handle('finance:deleteCurrency', (0, ipcWrap_1.ipcWrap)(async (event, id) => {
         const ctx = (0, AuthContext_1.getContext)(event);
         await useCases.deleteCurrency(id, ctx.companyId);

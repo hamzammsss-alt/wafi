@@ -35,6 +35,7 @@ export interface ElectronAPI {
         deleteCurrency: (id: string) => Promise<any>;
         updateRates: () => Promise<any>;
         getCurrencyHistory: (code: string, days?: number) => Promise<any>;
+        getCurrencyTimeline: (code: string, limit?: number) => Promise<any>;
     };
 
     // Accounting

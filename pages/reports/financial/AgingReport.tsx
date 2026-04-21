@@ -5,16 +5,18 @@ import { exportToCSV } from '../../../utils/export';
 const AgingReport = () => {
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    const [partnerType, setPartnerType] = useState('ALL'); // 'ALL', 'CUSTOMER', 'SUPPLIER'
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [partnerType]);
 
     const loadData = async () => {
         setLoading(true);
         try {
             // @ts-ignore
-            const result = await window.electronAPI.reports.getAgingReport();
+            // نرسل نوع الشريك للواجهة الخلفية لفلترة البيانات (حسابات 114x للعملاء أو 211x للموردين)
+            const result = await window.electronAPI.reports.getAgingReport({ type: partnerType });
             setData(result || []);
         } catch (error) {
             console.error(error);
@@ -38,7 +40,16 @@ const AgingReport = () => {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-4 border-b font-bold text-gray-700 flex justify-between">
                     <span>تحليل الذمم المستحقة حسب الفترة</span>
-                    <div className="flex gap-2">
+                    <div className="flex gap-4 items-center">
+                        <select
+                            value={partnerType}
+                            onChange={(e) => setPartnerType(e.target.value)}
+                            className="p-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 outline-none focus:border-blue-500 bg-gray-50"
+                        >
+                            <option value="ALL">الكل (عملاء وموردين)</option>
+                            <option value="CUSTOMER">العملاء فقط</option>
+                            <option value="SUPPLIER">الموردين فقط</option>
+                        </select>
                         <button onClick={handleExport} className="text-green-600 hover:text-green-800 flex items-center gap-1 text-sm font-bold bg-green-50 px-3 py-1 rounded-lg">
                             تصدير CSV
                         </button>
@@ -48,7 +59,7 @@ const AgingReport = () => {
                 <table className="w-full text-right text-sm">
                     <thead className="bg-gray-100 font-bold text-gray-700">
                         <tr>
-                            <th className="p-4">العميل</th>
+                            <th className="p-4">{partnerType === 'SUPPLIER' ? 'المورد' : (partnerType === 'CUSTOMER' ? 'العميل' : 'العميل / المورد')}</th>
                             <th className="p-4">إجمالي المستحق</th>
                             <th className="p-4 bg-green-50 text-green-800">0-30 يوم</th>
                             <th className="p-4 bg-yellow-50 text-yellow-800">31-60 يوم</th>

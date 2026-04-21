@@ -278,7 +278,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         saveCurrency: (data: any) => invokeStrict('finance:saveCurrency', data),
         deleteCurrency: (id: string) => invokeStrict('finance:deleteCurrency', id),
         updateRates: () => invoke('currency-scraper-trigger'),
-        getCurrencyHistory: (code: string, days?: number) => invoke('currency-get-history', { code, days }),
+        getCurrencyHistory: (code: string, days?: number) => invokeStrict('finance:getCurrencyHistory', code, days),
+        getCurrencyTimeline: (code: string, limit?: number) => invokeStrict('finance:getCurrencyTimeline', code, limit),
     },
 
     costCenter: {

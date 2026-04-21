@@ -835,7 +835,7 @@ export const ReceiptVoucherList = () => {
     }));
 
     return (
-        <div className="p-6 bg-[#f8fafc] h-full min-h-0 flex flex-col gap-4 overflow-x-hidden overflow-y-auto lg:overflow-hidden" dir="rtl">
+        <div className="p-6 bg-[#f8fafc] h-full min-h-0 flex flex-col gap-4 overflow-x-hidden overflow-y-auto" dir="rtl">
             {/* Header with Icon */}
             <motion.div
                 initial={{ opacity: 0, y: -12 }}

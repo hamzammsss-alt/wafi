@@ -8,8 +8,8 @@ export class MasterDataService {
 
     private static normalizeCurrencyCode(value: any): string {
         const code = String(value || '').trim().toUpperCase();
-        if (!code) return 'NIS';
-        if (code === 'ILS') return 'NIS';
+        if (!code) return 'ILS';
+        if (code === 'NIS') return 'ILS';
         return code;
     }
 
@@ -60,7 +60,7 @@ export class MasterDataService {
         return { id: null, code: normalized, name: normalized };
     }
 
-    private static resolveLegacyAccountId(inputId: string | null | undefined, preferredCurrencyCode = 'NIS'): string | null {
+    private static resolveLegacyAccountId(inputId: string | null | undefined, preferredCurrencyCode = 'ILS'): string | null {
         const normalizedId = String(inputId || '').trim();
         if (!normalizedId) return null;
 

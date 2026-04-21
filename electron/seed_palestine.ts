@@ -10,7 +10,7 @@ export const seedPalestinianData = (db: any) => {
     if (currencyCount === 0) {
         console.log('[Seed] Seeding Currencies...');
         const currencies = [
-            { code: 'NIS', name_ar: 'شيكل إسرائيلي جديد', name_en: 'New Israeli Shekel', symbol: '₪', is_base: 1, rate: 1.0 },
+            { code: 'ILS', name_ar: 'شيكل إسرائيلي جديد', name_en: 'New Israeli Shekel', symbol: '₪', is_base: 1, rate: 1.0 },
             { code: 'USD', name_ar: 'دولار أمريكي', name_en: 'US Dollar', symbol: '$', is_base: 0, rate: 3.65 },
             { code: 'JOD', name_ar: 'دينار أردني', name_en: 'Jordanian Dinar', symbol: 'JD', is_base: 0, rate: 5.15 },
             { code: 'EUR', name_ar: 'يورو', name_en: 'Euro', symbol: '€', is_base: 0, rate: 4.02 }
@@ -59,12 +59,12 @@ export const seedPalestinianData = (db: any) => {
             { code: '1', name: 'الأصول', type: 'ASSET', trans: 0 },
             { code: '11', name: 'الأصول المتداولة', type: 'ASSET', trans: 0 },
             { code: '111', name: 'النقدية وما في حكمها', type: 'ASSET', trans: 0 },
-            { code: '1111', name: 'الصندوق الرئيسي (شيكل)', type: 'ASSET', trans: 1, currency: 'NIS' },
+            { code: '1111', name: 'الصندوق الرئيسي (شيكل)', type: 'ASSET', trans: 1, currency: 'ILS' },
             { code: '1112', name: 'الصندوق الرئيسي (دولار)', type: 'ASSET', trans: 1, currency: 'USD' },
             { code: '1113', name: 'الصندوق الرئيسي (دينار)', type: 'ASSET', trans: 1, currency: 'JOD' },
             { code: '1114', name: 'العهد النقدية', type: 'ASSET', trans: 1 },
             { code: '112', name: 'البنوك', type: 'ASSET', trans: 0 },
-            { code: '1121', name: 'بنك فلسطين - جاري شيكل', type: 'ASSET', trans: 1, currency: 'NIS' },
+            { code: '1121', name: 'بنك فلسطين - جاري شيكل', type: 'ASSET', trans: 1, currency: 'ILS' },
             { code: '1122', name: 'بنك فلسطين - جاري دولار', type: 'ASSET', trans: 1, currency: 'USD' },
             { code: '1123', name: 'البنك العربي - جاري دينار', type: 'ASSET', trans: 1, currency: 'JOD' },
             { code: '113', name: 'الذمم المدينة (العملاء)', type: 'ASSET', trans: 0 },

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Edit, Building, X, Search, Loader2, Archive } from 'lucide-react';
+import { Save, Plus, Trash2, Edit, Building, X, Search, Loader2, Archive, Link as LinkIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import initialBanks from './initial_banks.json';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import { AccountPicker } from '../../../components/AccountPicker';
 
 export const BanksPage = () => {
     const navigate = useNavigate();
@@ -12,6 +13,7 @@ export const BanksPage = () => {
     const [loading, setLoading] = useState(false);
     const [search, setSearch] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isAccountPickerOpen, setIsAccountPickerOpen] = useState(false);
     const [currentBank, setCurrentBank] = useState<any>({});
 
     const api = (window as any).electronAPI?.masterData;
@@ -71,7 +73,16 @@ export const BanksPage = () => {
     );
 
     const openCreate = () => {
-        setCurrentBank({ bank_code: '', branch_code: '' });
+        setCurrentBank({
+            bank_code: '',
+            branch_code: '',
+            name_ar: '',
+            name_en: '',
+            name_he: '',
+            gl_account_id: null,
+            gl_account_code: null,
+            gl_account_name: null,
+        });
         setIsModalOpen(true);
     };
 
@@ -142,6 +153,7 @@ export const BanksPage = () => {
                                 <th className="p-3 border-l border-blue-100 w-16 text-center">بنك</th>
                                 <th className="p-3 border-l border-blue-100 w-20 text-center">فرع البنك</th>
                                 <th className="p-3 border-l border-blue-100">الاسم الكامل</th>
+                                <th className="p-3 border-l border-blue-100">الحساب المرتبط</th>
                                 <th className="p-3 w-24 text-center">إجراءات</th>
                             </tr>
                         </thead>
@@ -153,6 +165,10 @@ export const BanksPage = () => {
                                         <td className="p-3 border-l border-gray-100 text-center font-mono">{bank.bank_code}</td>
                                         <td className="p-3 border-l border-gray-100 text-center font-mono">{bank.branch_code}</td>
                                         <td className="p-3 border-l border-gray-100 font-medium text-gray-800">{bank.name_ar} {bank.name_he && `- ${bank.name_he}`}</td>
+                                        <td className="p-3 border-l border-gray-100">
+                                            <div className="font-mono text-xs text-sky-700">{bank.gl_account_code || '-'}</div>
+                                            <div className="text-slate-700 text-xs">{bank.gl_account_name || 'غير مربوط'}</div>
+                                        </td>
 
                                         <td className="p-2 flex gap-2 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                             {/* Reconcile Button */}
@@ -198,7 +214,7 @@ export const BanksPage = () => {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={5} className="p-12 text-center text-gray-400">لا توجد بنوك معرفة</td>
+                                    <td colSpan={6} className="p-12 text-center text-gray-400">لا توجد بنوك معرفة</td>
                                 </tr>
                             )}
                         </tbody>
@@ -262,6 +278,34 @@ export const BanksPage = () => {
 
                                 <div className="col-span-12 border-t border-gray-100 my-1"></div>
 
+                                {/* GL Account Linking */}
+                                <div className="col-span-12 space-y-2">
+                                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2"><LinkIcon size={16} /> الربط المحاسبي</label>
+                                    <div className="flex items-center gap-2 p-3 bg-gray-50 rounded border border-gray-200">
+                                        <div className="flex-grow">
+                                            {currentBank.gl_account_id ? (
+                                                <div>
+                                                    <div className="font-mono text-xs text-sky-700">{currentBank.gl_account_code}</div>
+                                                    <div className="font-medium text-sm text-gray-800">{currentBank.gl_account_name}</div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-sm text-gray-400">لم يتم ربط البنك بحساب بنكي من شجرة الحسابات.</div>
+                                            )}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAccountPickerOpen(true)}
+                                            className="bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-blue-50 hover:border-blue-400 transition"
+                                        >
+                                            {currentBank.gl_account_id ? 'تغيير الحساب' : 'اختيار حساب'}
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500 pr-1">يجب ربط كل بنك معرّف بحساب بنكي مقابل له في شجرة الحسابات (ضمن مجموعة 112x) لتفعيل الحركات المالية والتسويات.</p>
+                                </div>
+
+
+                                <div className="col-span-12 border-t border-gray-100 my-1"></div>
+
                                 {/* Address & Routing */}
                                 <div className="col-span-12 space-y-3">
                                     <div className="grid grid-cols-[100px_1fr] gap-2 items-center">
@@ -296,6 +340,22 @@ export const BanksPage = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <AccountPicker
+                isOpen={isAccountPickerOpen}
+                onClose={() => setIsAccountPickerOpen(false)}
+                onSelect={(account: any) => {
+                    setCurrentBank((prev: any) => ({
+                        ...prev,
+                        gl_account_id: account.id,
+                        gl_account_code: account.account_code || account.code,
+                        gl_account_name: account.name_ar || account.name,
+                    }));
+                    setIsAccountPickerOpen(false);
+                }}
+                allowedPrefixes={['112']} // حسب التوثيق، حسابات البنوك تبدأ بـ 112
+                showTransactionalOnly={true}
+            />
         </div>
     );
 };

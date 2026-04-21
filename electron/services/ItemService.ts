@@ -303,6 +303,12 @@ export class ItemService {
             name_en: u.name_en || '',
             code: u.code || u.symbol || '',
             is_active: u.is_active === undefined || u.is_active === null ? 1 : u.is_active,
+            calculation_mode: u.calculation_mode || 'MANUAL',
+            requires_length: u.requires_length || 0,
+            requires_width: u.requires_width || 0,
+            requires_height: u.requires_height || 0,
+            requires_count: u.requires_count || 0,
+            formula_hint: u.formula_hint || '',
         }));
     }
 
@@ -402,6 +408,36 @@ export class ItemService {
         if (names.has('updated_at')) {
             insertCols.push('updated_at');
             row.updated_at = new Date().toISOString();
+        }
+
+        if (names.has('calculation_mode')) {
+            insertCols.push('calculation_mode');
+            row.calculation_mode = String(data.calculation_mode || 'MANUAL').toUpperCase();
+        }
+
+        if (names.has('requires_length')) {
+            insertCols.push('requires_length');
+            row.requires_length = data.requires_length ? 1 : 0;
+        }
+
+        if (names.has('requires_width')) {
+            insertCols.push('requires_width');
+            row.requires_width = data.requires_width ? 1 : 0;
+        }
+
+        if (names.has('requires_height')) {
+            insertCols.push('requires_height');
+            row.requires_height = data.requires_height ? 1 : 0;
+        }
+
+        if (names.has('requires_count')) {
+            insertCols.push('requires_count');
+            row.requires_count = data.requires_count ? 1 : 0;
+        }
+
+        if (names.has('formula_hint')) {
+            insertCols.push('formula_hint');
+            row.formula_hint = data.formula_hint || '';
         }
 
         const sql = `INSERT INTO units (${insertCols.join(', ')}) VALUES (${insertCols.map((c) => '@' + c).join(', ')})`;

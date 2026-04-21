@@ -760,7 +760,7 @@ export const PaymentVoucherList = () => {
     const contextMenuCanPost = contextMenuPayment?.status === 'DRAFT';
 
     return (
-        <div className="bg-[#f8fafc] h-full min-h-0 flex flex-col gap-4 overflow-x-hidden overflow-y-auto lg:overflow-hidden" dir="rtl">
+        <div className="bg-[#f8fafc] h-full min-h-0 flex flex-col gap-4 overflow-x-hidden overflow-y-auto" dir="rtl">
             {/* Header with Icon */}
             <motion.div
                 initial={{ opacity: 0, y: -12 }}

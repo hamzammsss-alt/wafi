@@ -1,8 +1,21 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Ruler, Plus, Search, Trash2, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Unit } from '../../../types';
+import {
+    UnitCalculationMode,
+    getUnitCalculationMode,
+    getUnitCalculationRequirements,
+    getUnitFormulaHint,
+    inferUnitCalculationMode,
+} from '../../../src/lib/unit-calculations';
 
 const UNIT_TYPE_OPTIONS = ['كمية', 'وزن', 'مساحة', 'حجم', 'وقت', 'طول'];
+const CALCULATION_MODE_OPTIONS: Array<{ value: UnitCalculationMode; label: string }> = [
+    { value: 'MANUAL', label: 'إدخال يدوي' },
+    { value: 'LINEAR', label: 'طولي' },
+    { value: 'AREA', label: 'مساحة' },
+    { value: 'VOLUME', label: 'حجم' },
+];
 
 export const UnitsPage = () => {
     const [units, setUnits] = useState<Unit[]>([]);
@@ -25,6 +38,7 @@ export const UnitsPage = () => {
         symbol_he: '',
         multiplier: 1,
         total_factor: 1,
+        calculation_mode: 'MANUAL' as UnitCalculationMode,
     });
 
     const [saving, setSaving] = useState(false);
@@ -48,6 +62,14 @@ export const UnitsPage = () => {
     };
 
     const parentById = useMemo(() => new Map(units.map((u) => [u.id, u])), [units]);
+    const calculationRequirements = useMemo(
+        () => getUnitCalculationRequirements(formData.calculation_mode),
+        [formData.calculation_mode],
+    );
+    const formulaHint = useMemo(
+        () => getUnitFormulaHint(formData.calculation_mode),
+        [formData.calculation_mode],
+    );
 
     useEffect(() => {
         const parent = parentById.get(formData.parent_unit_id);
@@ -58,6 +80,22 @@ export const UnitsPage = () => {
             setFormData((prev) => ({ ...prev, total_factor: total }));
         }
     }, [formData.parent_unit_id, formData.multiplier, formData.total_factor, parentById]);
+
+    useEffect(() => {
+        const inferredMode = inferUnitCalculationMode({
+            code: formData.code,
+            name_ar: formData.name_ar,
+            name_en: formData.name_en,
+            unit_type: formData.unit_type,
+        });
+
+        if (inferredMode !== 'MANUAL' && formData.calculation_mode === 'MANUAL') {
+            setFormData((prev) => ({
+                ...prev,
+                calculation_mode: inferredMode,
+            }));
+        }
+    }, [formData.code, formData.name_ar, formData.name_en, formData.unit_type, formData.calculation_mode]);
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -80,6 +118,12 @@ export const UnitsPage = () => {
                 code: formData.code.toUpperCase(),
                 is_active: formData.is_active ? 1 : 0,
                 is_used: formData.is_used ? 1 : 0,
+                calculation_mode: formData.calculation_mode,
+                requires_length: calculationRequirements.requiresLength ? 1 : 0,
+                requires_width: calculationRequirements.requiresWidth ? 1 : 0,
+                requires_height: calculationRequirements.requiresHeight ? 1 : 0,
+                requires_count: calculationRequirements.requiresCount ? 1 : 0,
+                formula_hint: formulaHint,
             });
 
             setIsAdding(false);
@@ -98,6 +142,7 @@ export const UnitsPage = () => {
                 symbol_he: '',
                 multiplier: 1,
                 total_factor: 1,
+                calculation_mode: 'MANUAL',
             });
             await loadUnits();
         } catch (err) {
@@ -195,6 +240,7 @@ export const UnitsPage = () => {
                                     <th className="px-4 py-3">فعال</th>
                                     <th className="px-4 py-3">مستخدم</th>
                                     <th className="px-4 py-3">نوع الوحدة</th>
+                                    <th className="px-4 py-3">طريقة الحساب</th>
                                     <th className="px-4 py-3">تابع ل</th>
                                     <th className="px-4 py-3">مستوى</th>
                                     <th className="px-4 py-3">رمز - العربية</th>
@@ -218,6 +264,16 @@ export const UnitsPage = () => {
                                             <td className="px-4 py-3">{Number(unit.is_active || 0) === 1 ? 'نعم' : 'لا'}</td>
                                             <td className="px-4 py-3">{Number(unit.is_used || 0) === 1 ? 'نعم' : 'لا'}</td>
                                             <td className="px-4 py-3">{unit.unit_type || '-'}</td>
+                                            <td className="px-4 py-3">
+                                                <div className="space-y-1">
+                                                    <div className="font-medium text-gray-700">
+                                                        {CALCULATION_MODE_OPTIONS.find((option) => option.value === getUnitCalculationMode(unit))?.label || 'إدخال يدوي'}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">
+                                                        {unit.formula_hint || getUnitFormulaHint(getUnitCalculationMode(unit))}
+                                                    </div>
+                                                </div>
+                                            </td>
                                             <td className="px-4 py-3">{parentById.get(unit.parent_unit_id || '')?.code || '-'}</td>
                                             <td className="px-4 py-3 text-center">{unit.level_no || 1}</td>
                                             <td className="px-4 py-3">{unit.symbol_ar || unit.code || '-'}</td>
@@ -238,7 +294,7 @@ export const UnitsPage = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={17} className="py-16 text-center text-gray-400">
+                                        <td colSpan={18} className="py-16 text-center text-gray-400">
                                             <div className="flex flex-col items-center gap-3">
                                                 <div className="rounded-full bg-gray-50 p-4">
                                                     <Search size={32} className="text-gray-300" />
@@ -292,6 +348,20 @@ export const UnitsPage = () => {
                                     <label className="mb-1.5 block text-sm font-medium text-gray-700">نوع الوحدة</label>
                                     <select value={formData.unit_type} onChange={(e) => setFormData({ ...formData, unit_type: e.target.value })} className="w-full rounded-lg border px-3 py-2">
                                         {UNIT_TYPE_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">طريقة الحساب</label>
+                                    <select
+                                        value={formData.calculation_mode}
+                                        onChange={(e) => setFormData({ ...formData, calculation_mode: e.target.value as UnitCalculationMode })}
+                                        className="w-full rounded-lg border px-3 py-2"
+                                    >
+                                        {CALCULATION_MODE_OPTIONS.map((item) => (
+                                            <option key={item.value} value={item.value}>
+                                                {item.label}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
                                 <div>
