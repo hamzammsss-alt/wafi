@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Search, Folder, FolderOpen, FileText, ChevronRight, ChevronDown, Check, X } from 'lucide-react';
 import { Account } from '../types';
-import { loadUnifiedAccountTree } from '../src/utils/unifiedAccountTree';
+import { UnifiedAccountNode, loadUnifiedAccountTree } from '../src/utils/unifiedAccountTree';
 
 interface AccountPickerProps {
     isOpen: boolean;
@@ -27,26 +27,37 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
     parentId,
     currencyId,
 }) => {
-    const [treeData, setTreeData] = useState<Account[]>([]);
-    const [filteredData, setFilteredData] = useState<Account[]>([]);
+    const [treeData, setTreeData] = useState<UnifiedAccountNode[]>([]);
+    const [filteredData, setFilteredData] = useState<UnifiedAccountNode[]>([]);
     const [search, setSearch] = useState('');
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [loading, setLoading] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const [selectableAccounts, setSelectableAccounts] = useState<Account[]>([]);
+    const [selectableAccounts, setSelectableAccounts] = useState<UnifiedAccountNode[]>([]);
+    const [currencyAliases, setCurrencyAliases] = useState<Record<string, string>>({});
+
+    const normalizeCurrencyToken = (value: any, aliases: Record<string, string> = currencyAliases): string => {
+        const raw = String(value || '').trim().toUpperCase();
+        if (!raw) return '';
+        if (aliases[raw]) return aliases[raw];
+        if (raw === 'NIS') return 'ILS';
+        return raw;
+    };
 
     const matchesCurrency = (node: any): boolean => {
         if (!currencyId) return true;
 
-        const target = String(currencyId).trim().toLowerCase();
-        const nodeCurrencyId = String(node.currency_id || '').trim().toLowerCase();
-        const nodeCurrencyCode = String(node.currency_code || '').trim().toLowerCase();
+        const target = normalizeCurrencyToken(currencyId);
+        if (!target) return true;
 
-        if (!nodeCurrencyId && !nodeCurrencyCode) return true;
-        if (target === nodeCurrencyId || target === nodeCurrencyCode) return true;
+        const nodeCandidates = [
+            normalizeCurrencyToken(node.currency_id),
+            normalizeCurrencyToken(node.currency_code),
+            normalizeCurrencyToken(node.currencyCode),
+        ].filter(Boolean);
 
-        const isCode = target.length <= 4 && !target.includes('-');
-        if (isCode && nodeCurrencyId && nodeCurrencyId === target) return true;
+        if (!nodeCandidates.length) return true;
+        if (nodeCandidates.includes(target)) return true;
 
         return false;
     };
@@ -54,6 +65,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
     useEffect(() => {
         if (isOpen) {
             loadAccounts();
+            loadCurrencies();
             setSearch('');
         }
     }, [isOpen, parentId]);
@@ -64,7 +76,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
 
         const term = search.toLowerCase().trim();
 
-        const filterNode = (node: Account): Account | null => {
+        const filterNode = (node: UnifiedAccountNode): UnifiedAccountNode | null => {
             const nodeCode = node.account_code || node.code || '';
             const nodeName = (node.name || node.name_ar || '').toLowerCase();
             const nodeIsTransactional = Boolean(node.is_transactional);
@@ -99,11 +111,11 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
                 nodeIsActive;
 
             // Process Children
-            let filteredChildren: Account[] = [];
+            let filteredChildren: UnifiedAccountNode[] = [];
             if (node.children) {
                 filteredChildren = node.children
                     .map(filterNode)
-                    .filter(n => n !== null) as Account[];
+                    .filter(n => n !== null) as UnifiedAccountNode[];
             }
 
             if (isMatch || filteredChildren.length > 0) {
@@ -116,12 +128,12 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
             return null;
         };
 
-        const filtered = treeData.map(filterNode).filter(n => n !== null) as Account[];
+        const filtered = treeData.map(filterNode).filter(n => n !== null) as UnifiedAccountNode[];
         setFilteredData(filtered);
 
         // Auto-expand when searching or filtering
         if (term || (allowedPrefixes && allowedPrefixes.length > 0)) {
-            const autoExpand = (nodes: Account[], acc: Record<string, boolean>) => {
+            const autoExpand = (nodes: UnifiedAccountNode[], acc: Record<string, boolean>) => {
                 nodes.forEach(n => {
                     const code = n.account_code || n.code;
                     if (code) acc[code] = true;
@@ -132,7 +144,37 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
             autoExpand(filtered, expandedMap);
             setExpanded(expandedMap);
         }
-    }, [search, treeData, allowedPrefixes, currencyId, selectableMode, showTransactionalOnly]);
+    }, [search, treeData, allowedPrefixes, currencyId, currencyAliases, selectableMode, showTransactionalOnly]);
+
+    const loadCurrencies = async () => {
+        try {
+            // @ts-ignore
+            if (!window.electronAPI) return;
+
+            // @ts-ignore
+            const rows =
+                (await window.electronAPI.currency?.getCurrencies?.()) ||
+                // @ts-ignore
+                (await window.electronAPI.getCurrencies?.()) ||
+                [];
+
+            const aliases: Record<string, string> = { ILS: 'ILS', NIS: 'ILS' };
+            for (const row of Array.isArray(rows) ? rows : []) {
+                const code = normalizeCurrencyToken(row?.code, {});
+                if (!code) continue;
+
+                const id = String(row?.id || '').trim().toUpperCase();
+                const rawCode = String(row?.code || '').trim().toUpperCase();
+
+                if (id) aliases[id] = code;
+                if (rawCode) aliases[rawCode] = code;
+            }
+
+            setCurrencyAliases(aliases);
+        } catch (err) {
+            console.error('AccountPicker.loadCurrencies failed', err);
+        }
+    };
 
     const loadAccounts = async () => {
         setLoading(true);
@@ -146,7 +188,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
 
                 // If parentId is specified, find that node and use its children
                 if (parentId) {
-                    const findNode = (nodes: Account[]): Account | null => {
+                    const findNode = (nodes: UnifiedAccountNode[]): UnifiedAccountNode | null => {
                         for (const node of nodes) {
                             if (node.id === parentId) return node;
                             if (node.children) {
@@ -188,7 +230,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
 
     if (!isOpen) return null;
 
-    const renderTree = (nodes: Account[], level: number = 0) => {
+    const renderTree = (nodes: UnifiedAccountNode[], level: number = 0) => {
         return nodes.map(node => {
             const nodeCode = node.account_code || node.code || '';
             const nodeName = node.name || node.name_ar || 'بدون اسم';
@@ -225,7 +267,7 @@ export const AccountPicker: React.FC<AccountPickerProps> = ({
             `}
                         style={{ paddingRight: `${level * 20 + 8}px` }}
                         onClick={() => {
-                            if (isSelectable) onSelect(node);
+                            if (isSelectable) onSelect(node as Account);
                             else if (hasChildren) toggleExpand(nodeCode);
                         }}
                     >

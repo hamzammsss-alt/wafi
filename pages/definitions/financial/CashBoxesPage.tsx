@@ -535,7 +535,7 @@ export function CashBoxesPage() {
                     setAccountPickerOpen(false);
                 }}
                 allowedPrefixes={['111']}
-                currencyId={formData.currency_id || formData.currency_code || null}
+                currencyId={selectedCurrency?.code || formData.currency_code || formData.currency_id || null}
             />
         </div>
     );
