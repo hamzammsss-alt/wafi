@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 interface Category {
     id: string;
@@ -183,6 +184,111 @@ export const CategoriesPage = () => {
         return categories.find((item) => item.id === parentId)?.name_ar || 'غير محدد';
     };
 
+    const handleDeleteRows = async (rows: Category[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذه المجموعة؟' : `هل أنت متأكد من حذف ${rows.length} مجموعات؟`)) return;
+
+        try {
+            for (const row of rows) {
+                await window.electronAPI.inventory.deleteCategory(row.id);
+            }
+            await loadCategories();
+        } catch (err) {
+            console.error(err);
+            setError('تعذر حذف المجموعات المحددة.');
+        }
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<Category>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'المجموعة',
+            width: 280,
+            defaultVisible: true,
+            getSearchValue: (category) => `${category.name_ar || ''} ${category.name_en || ''}`,
+            renderCell: (category) => (
+                <div className="flex items-center gap-3">
+                    {category.image_url ? (
+                        <img src={category.image_url} alt={category.name_ar} className="h-10 w-10 rounded-xl border border-slate-200 object-cover" />
+                    ) : (
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${category.parent_id ? 'bg-slate-100 text-slate-500' : 'bg-sky-100 text-sky-700'}`}>
+                            {category.parent_id ? <Folder size={18} /> : <FolderOpen size={18} />}
+                        </div>
+                    )}
+                    <div className="min-w-0">
+                        <div className="truncate text-sm font-bold text-slate-800">{category.name_ar}</div>
+                        <div className="truncate text-xs text-slate-400">{category.name_en || '-'}</div>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (category) => category.code || '-',
+            renderCell: (category) => category.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{category.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'parent_id',
+            label: 'المجموعة الأب',
+            width: 190,
+            defaultVisible: true,
+            getDisplayValue: (category) => getParentName(category.parent_id),
+            renderCell: (category) => (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                    <Layers size={12} />
+                    {getParentName(category.parent_id)}
+                </span>
+            ),
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 140,
+            defaultVisible: true,
+            getValue: (category) => (category.is_active ? 1 : 0),
+            renderCell: (category) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${category.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                    {category.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {category.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'description',
+            label: 'الوصف',
+            width: 240,
+            defaultVisible: true,
+            getDisplayValue: (category) => category.description || '-',
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (category) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(category)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(category.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [categories]);
+
     return (
         <div className="app-page" dir="rtl">
             <WorkspaceHeader
@@ -217,6 +323,23 @@ export const CategoriesPage = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.categories"
+                data={categories}
+                loading={loading}
+                columns={columns}
+                rowKey={(category) => String(category.id)}
+                searchPlaceholder="بحث سريع في مجموعات الأصناف"
+                emptyMessage="لا توجد مجموعات أصناف مطابقة"
+                createLabel="إضافة مجموعة"
+                onCreate={openCreate}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadCategories}
+            />
+
+            {false && (
+            <>
             <div className="mb-4 flex flex-wrap items-center gap-3">
                 <div className="relative min-w-[280px] flex-1">
                     <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -364,6 +487,9 @@ export const CategoriesPage = () => {
                     </div>
                 )}
             </div>
+
+            </>
+            )}
 
             {isAdding && createPortal(
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" dir="rtl">

@@ -22,6 +22,7 @@ type FilterDrawerProps = {
     open: boolean;
     onClose: () => void;
     screenKey: string;
+    hideSavedViews?: boolean;
     filterSchema: FilterSchema[];
     columnSchema: ColumnSchema[];
     filters: ScreenFilterStateItem[];
@@ -85,6 +86,7 @@ function normalizeColumns(columns: ScreenColumnStateItem[]): ScreenColumnStateIt
 export const FilterDrawer: React.FC<FilterDrawerProps> = ({
     open,
     onClose,
+    hideSavedViews = false,
     filterSchema,
     columnSchema,
     filters,
@@ -304,121 +306,123 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                 </div>
 
                 <div ref={navigationRef} className="flex-1 overflow-auto p-5 space-y-6">
-                    <section className="rounded-xl border border-slate-200 p-4 bg-white">
-                        <div className="flex items-center gap-2 mb-3 text-slate-800 font-medium">
-                            <Save className="w-4 h-4 text-emerald-600" />
-                            <span>{tr('ui.views.title', 'Saved Views')}</span>
-                        </div>
+                    {!hideSavedViews && (
+                        <section className="rounded-xl border border-slate-200 p-4 bg-white">
+                            <div className="flex items-center gap-2 mb-3 text-slate-800 font-medium">
+                                <Save className="w-4 h-4 text-emerald-600" />
+                                <span>{tr('ui.views.title', 'Saved Views')}</span>
+                            </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                            <select
-                                value={selectedViewId}
-                                onChange={(event) => setSelectedViewId(event.target.value)}
-                                className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-                            >
-                                <option value="">{tr('ui.views.none', 'No saved view')}</option>
-                                {views.map((view) => (
-                                    <option key={view.id} value={view.id}>
-                                        {view.name}
-                                    </option>
-                                ))}
-                            </select>
-
-                            <button
-                                onClick={() => selectedViewId && onApplyView(selectedViewId)}
-                                disabled={!selectedViewId}
-                                className="border border-blue-200 text-blue-700 rounded-lg px-3 py-2 text-sm disabled:opacity-40"
-                            >
-                                {tr('ui.views.apply', 'Apply View')}
-                            </button>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mb-3">
-                            <button
-                                onClick={() => setShowSaveForm((prev) => !prev)}
-                                disabled={!canManageViews}
-                                className="border border-emerald-200 text-emerald-700 rounded-lg px-3 py-1.5 text-sm disabled:opacity-40"
-                                title={!canManageViews ? tr('error.permission_denied.view.manage') : ''}
-                            >
-                                {tr('ui.filters.save', 'Save View')}
-                            </button>
-                            <button
-                                onClick={() => activeView && onSetDefaultView(activeView.id)}
-                                disabled={!canManageViews || !activeView}
-                                className="border border-slate-300 text-slate-700 rounded-lg px-3 py-1.5 text-sm disabled:opacity-40"
-                            >
-                                {tr('ui.views.default', 'Set Default')}
-                            </button>
-                            <button
-                                onClick={() => activeView && onDeleteView(activeView.id)}
-                                disabled={!canManageViews || !activeView}
-                                className="border border-red-200 text-red-700 rounded-lg px-3 py-1.5 text-sm disabled:opacity-40 inline-flex items-center gap-1"
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                {tr('ui.views.delete', 'Delete')}
-                            </button>
-                        </div>
-
-                        {showSaveForm && (
-                            <div className="border border-slate-200 rounded-lg p-3 space-y-2 bg-slate-50">
-                                <input
-                                    value={saveName}
-                                    onChange={(event) => setSaveName(event.target.value)}
-                                    placeholder={tr('ui.views.name_placeholder', 'View name')}
-                                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                                />
-
-                                <div className="grid grid-cols-3 gap-2 text-xs">
-                                    <label className="flex items-center gap-1 border border-slate-200 rounded-lg px-2 py-2 bg-white">
-                                        <input
-                                            type="radio"
-                                            name="view_scope"
-                                            checked={saveScope === 'user'}
-                                            onChange={() => setSaveScope('user')}
-                                        />
-                                        <span>{tr('ui.views.scope.user', 'User')}</span>
-                                    </label>
-                                    <label className="flex items-center gap-1 border border-slate-200 rounded-lg px-2 py-2 bg-white">
-                                        <input
-                                            type="radio"
-                                            name="view_scope"
-                                            checked={saveScope === 'branch'}
-                                            disabled={!canShareViews}
-                                            onChange={() => setSaveScope('branch')}
-                                        />
-                                        <span>{tr('ui.views.scope.branch', 'Branch')}</span>
-                                    </label>
-                                    <label className="flex items-center gap-1 border border-slate-200 rounded-lg px-2 py-2 bg-white">
-                                        <input
-                                            type="radio"
-                                            name="view_scope"
-                                            checked={saveScope === 'company'}
-                                            disabled={!canShareViews}
-                                            onChange={() => setSaveScope('company')}
-                                        />
-                                        <span>{tr('ui.views.scope.company', 'Company')}</span>
-                                    </label>
-                                </div>
-
-                                <label className="flex items-center gap-2 text-sm">
-                                    <input
-                                        type="checkbox"
-                                        checked={saveAsDefault}
-                                        onChange={(event) => setSaveAsDefault(event.target.checked)}
-                                    />
-                                    <span>{tr('ui.views.default', 'Set Default')}</span>
-                                </label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                                <select
+                                    value={selectedViewId}
+                                    onChange={(event) => setSelectedViewId(event.target.value)}
+                                    className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                                >
+                                    <option value="">{tr('ui.views.none', 'No saved view')}</option>
+                                    {views.map((view) => (
+                                        <option key={view.id} value={view.id}>
+                                            {view.name}
+                                        </option>
+                                    ))}
+                                </select>
 
                                 <button
-                                    onClick={handleSave}
-                                    disabled={!saveName.trim() || saveBusy || !canManageViews}
-                                    className="w-full bg-emerald-600 text-white rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-40"
+                                    onClick={() => selectedViewId && onApplyView(selectedViewId)}
+                                    disabled={!selectedViewId}
+                                    className="border border-blue-200 text-blue-700 rounded-lg px-3 py-2 text-sm disabled:opacity-40"
+                                >
+                                    {tr('ui.views.apply', 'Apply View')}
+                                </button>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 mb-3">
+                                <button
+                                    onClick={() => setShowSaveForm((prev) => !prev)}
+                                    disabled={!canManageViews}
+                                    className="border border-emerald-200 text-emerald-700 rounded-lg px-3 py-1.5 text-sm disabled:opacity-40"
+                                    title={!canManageViews ? tr('error.permission_denied.view.manage') : ''}
                                 >
                                     {tr('ui.filters.save', 'Save View')}
                                 </button>
+                                <button
+                                    onClick={() => activeView && onSetDefaultView(activeView.id)}
+                                    disabled={!canManageViews || !activeView}
+                                    className="border border-slate-300 text-slate-700 rounded-lg px-3 py-1.5 text-sm disabled:opacity-40"
+                                >
+                                    {tr('ui.views.default', 'Set Default')}
+                                </button>
+                                <button
+                                    onClick={() => activeView && onDeleteView(activeView.id)}
+                                    disabled={!canManageViews || !activeView}
+                                    className="border border-red-200 text-red-700 rounded-lg px-3 py-1.5 text-sm disabled:opacity-40 inline-flex items-center gap-1"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    {tr('ui.views.delete', 'Delete')}
+                                </button>
                             </div>
-                        )}
-                    </section>
+
+                            {showSaveForm && (
+                                <div className="border border-slate-200 rounded-lg p-3 space-y-2 bg-slate-50">
+                                    <input
+                                        value={saveName}
+                                        onChange={(event) => setSaveName(event.target.value)}
+                                        placeholder={tr('ui.views.name_placeholder', 'View name')}
+                                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                                    />
+
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <label className="flex items-center gap-1 border border-slate-200 rounded-lg px-2 py-2 bg-white">
+                                            <input
+                                                type="radio"
+                                                name="view_scope"
+                                                checked={saveScope === 'user'}
+                                                onChange={() => setSaveScope('user')}
+                                            />
+                                            <span>{tr('ui.views.scope.user', 'User')}</span>
+                                        </label>
+                                        <label className="flex items-center gap-1 border border-slate-200 rounded-lg px-2 py-2 bg-white">
+                                            <input
+                                                type="radio"
+                                                name="view_scope"
+                                                checked={saveScope === 'branch'}
+                                                disabled={!canShareViews}
+                                                onChange={() => setSaveScope('branch')}
+                                            />
+                                            <span>{tr('ui.views.scope.branch', 'Branch')}</span>
+                                        </label>
+                                        <label className="flex items-center gap-1 border border-slate-200 rounded-lg px-2 py-2 bg-white">
+                                            <input
+                                                type="radio"
+                                                name="view_scope"
+                                                checked={saveScope === 'company'}
+                                                disabled={!canShareViews}
+                                                onChange={() => setSaveScope('company')}
+                                            />
+                                            <span>{tr('ui.views.scope.company', 'Company')}</span>
+                                        </label>
+                                    </div>
+
+                                    <label className="flex items-center gap-2 text-sm">
+                                        <input
+                                            type="checkbox"
+                                            checked={saveAsDefault}
+                                            onChange={(event) => setSaveAsDefault(event.target.checked)}
+                                        />
+                                        <span>{tr('ui.views.default', 'Set Default')}</span>
+                                    </label>
+
+                                    <button
+                                        onClick={handleSave}
+                                        disabled={!saveName.trim() || saveBusy || !canManageViews}
+                                        className="w-full bg-emerald-600 text-white rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-40"
+                                    >
+                                        {tr('ui.filters.save', 'Save View')}
+                                    </button>
+                                </div>
+                            )}
+                        </section>
+                    )}
 
                     <section className="rounded-xl border border-slate-200 p-4 bg-white">
                         <div className="flex items-center gap-2 mb-3 text-slate-800 font-medium">
@@ -441,7 +445,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                 return (
                                     <div key={schema.key} className="border border-slate-200 rounded-lg p-3 bg-slate-50/40 space-y-2">
                                         <div className="flex items-center justify-between gap-2">
-                                            <label className="text-sm font-medium text-slate-700">{tr(schema.labelI18nKey, schema.key)}</label>
+                                            <label className="text-sm font-medium text-slate-700">{tr(schema.labelI18nKey, schema.labelI18nKey || schema.key)}</label>
                                             <label className="inline-flex items-center gap-2 text-xs text-slate-600">
                                                 <input
                                                     type="checkbox"
@@ -531,7 +535,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                                             checked={state.visible}
                                             onChange={(event) => updateColumn(schema.key, (prev) => ({ ...prev, visible: event.target.checked }))}
                                         />
-                                        <span className="flex-1 text-sm text-slate-700">{tr(schema.labelI18nKey, schema.key)}</span>
+                                        <span className="flex-1 text-sm text-slate-700">{tr(schema.labelI18nKey, schema.labelI18nKey || schema.key)}</span>
                                         <span className="text-xs text-slate-400">{schema.key}</span>
                                         <button
                                             onClick={() => moveColumn(schema.key, -1)}
@@ -569,7 +573,7 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                             >
                                 <option value="">{tr('ui.sort.none', 'No sort')}</option>
                                 {columnSchema.filter((col) => col.sortable).map((col) => (
-                                    <option key={col.key} value={col.key}>{tr(col.labelI18nKey, col.key)}</option>
+                                    <option key={col.key} value={col.key}>{tr(col.labelI18nKey, col.labelI18nKey || col.key)}</option>
                                 ))}
                             </select>
 

@@ -13,6 +13,7 @@ import {
     X,
 } from 'lucide-react';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 import { commonCurrencies } from '../../../src/lib/currency-data';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
@@ -118,6 +119,19 @@ const getSourceLabel = (source?: string) => {
     if (normalized === 'MANUAL') return 'إدخال يدوي';
     if (normalized === 'SYSTEM') return 'النظام';
     return normalized || 'غير محدد';
+};
+
+const getCurrencyState = (currency: Partial<CurrencyRow> | null | undefined) => {
+    if (isBaseCurrency(currency)) return 'base';
+    if (isFixedCurrency(currency)) return 'fixed';
+    return 'floating';
+};
+
+const getCurrencyStateLabel = (currency: Partial<CurrencyRow> | null | undefined) => {
+    const state = getCurrencyState(currency);
+    if (state === 'base') return 'العملة الرئيسية';
+    if (state === 'fixed') return 'سعر ثابت';
+    return 'متغيرة';
 };
 
 export const Currencies = () => {
@@ -237,6 +251,28 @@ export const Currencies = () => {
         }
     };
 
+    const handleDeleteRows = async (rows: CurrencyRow[]) => {
+        const deletableRows = rows.filter((row) => !isBaseCurrency(row));
+        if (deletableRows.length === 0) {
+            alert('لا يمكن حذف العملة الرئيسية.');
+            return;
+        }
+
+        const message = deletableRows.length === 1
+            ? 'هل أنت متأكد من حذف هذه العملة؟'
+            : `هل أنت متأكد من حذف ${deletableRows.length} عملات؟`;
+        if (!confirm(message)) return;
+
+        try {
+            for (const row of deletableRows) {
+                await api.deleteCurrency(row.id);
+            }
+            await fetchCurrencies();
+        } catch (err: any) {
+            alert(`فشل الحذف: ${err.message}`);
+        }
+    };
+
     const handleScrape = async () => {
         setScraping(true);
         try {
@@ -328,6 +364,141 @@ export const Currencies = () => {
             });
     }, [currencies, searchQuery, statusFilter]);
 
+    const columns = useMemo<DefinitionListColumn<CurrencyRow>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'العملة',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (currency) => `${currency.name_ar || ''} ${currency.name_en || ''} ${currency.code || ''} ${currency.symbol || ''}`,
+            renderCell: (currency) => (
+                <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-base font-bold text-slate-600">
+                        {currency.symbol || '$'}
+                    </div>
+                    <div className="min-w-0">
+                        <div className="truncate text-sm font-bold text-slate-800">{currency.name_ar || '-'}</div>
+                        <div className="truncate text-xs text-slate-400">{currency.name_en || '-'}</div>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الكود',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (currency) => currency.code || '-',
+            renderCell: (currency) => (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-700">
+                    {currency.code || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'symbol',
+            label: 'الرمز',
+            width: 100,
+            defaultVisible: true,
+            getDisplayValue: (currency) => currency.symbol || '-',
+        },
+        {
+            key: 'exchange_rate',
+            label: 'سعر الصرف',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (currency) => Number(currency.exchange_rate || 0),
+            getDisplayValue: (currency) => Number(currency.exchange_rate || 0).toFixed(4),
+            renderCell: (currency) => (
+                <span className="font-mono font-bold text-slate-900">
+                    {Number(currency.exchange_rate || 0).toFixed(4)}
+                </span>
+            ),
+        },
+        {
+            key: 'currency_state',
+            label: 'الحالة',
+            type: 'enum',
+            filterType: 'enum',
+            width: 180,
+            defaultVisible: true,
+            options: [
+                { value: 'base', label: 'العملة الرئيسية' },
+                { value: 'fixed', label: 'سعر ثابت' },
+                { value: 'floating', label: 'متغيرة' },
+            ],
+            getValue: (currency) => getCurrencyState(currency),
+            getDisplayValue: (currency) => getCurrencyStateLabel(currency),
+            renderCell: (currency) => {
+                if (isBaseCurrency(currency)) {
+                    return (
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                            العملة الرئيسية
+                        </span>
+                    );
+                }
+
+                if (isFixedCurrency(currency)) {
+                    return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700">
+                            <Lock size={12} />
+                            سعر ثابت
+                        </span>
+                    );
+                }
+
+                return (
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                        متغيرة
+                    </span>
+                );
+            },
+        },
+        {
+            key: 'last_update',
+            label: 'آخر تحديث',
+            type: 'date',
+            filterType: 'date',
+            width: 130,
+            defaultVisible: true,
+            getDisplayValue: (currency) => formatShortDate(currency.last_update),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (currency) => (
+                <div className="flex justify-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => handleEdit(currency)}
+                        className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                        title="تعديل"
+                    >
+                        <Edit size={18} />
+                    </button>
+                    {!isBaseCurrency(currency) && (
+                        <button
+                            type="button"
+                            onClick={() => handleDelete(currency.id)}
+                            className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+                            title="حذف"
+                        >
+                            <Trash2 size={18} />
+                        </button>
+                    )}
+                </div>
+            ),
+        },
+    ], []);
+
     return (
         <div className="h-full bg-gray-50 p-4 md:p-6" dir="rtl">
             <WorkspaceHeader
@@ -366,6 +537,35 @@ export const Currencies = () => {
                 className="mb-6"
             />
 
+            <DefinitionMasterList
+                screenKey="definitions.currencies"
+                data={currencies}
+                loading={loading}
+                columns={columns}
+                rowKey={(currency) => String(currency.id || currency.code)}
+                searchPlaceholder="بحث باسم العملة أو الكود أو الرمز"
+                emptyMessage="لا توجد عملات مطابقة للمعايير الحالية"
+                createLabel="إضافة عملة"
+                onCreate={openModal}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={fetchCurrencies}
+                defaultSort={{ key: 'code', direction: 'asc' }}
+                toolbarExtraActions={(
+                    <button
+                        type="button"
+                        onClick={handleScrape}
+                        disabled={scraping}
+                        className="inline-flex h-10 items-center gap-2 rounded-2xl border border-blue-200 bg-white px-4 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        <RefreshCw size={16} className={scraping ? 'animate-spin' : ''} />
+                        <span>{scraping ? 'جارٍ التحديث...' : 'تحديث أسعار الصرف'}</span>
+                    </button>
+                )}
+            />
+
+            {false && (
+            <>
             <div className="mb-4 flex flex-wrap items-center gap-3">
                 <div className="relative min-w-[260px] flex-1">
                     <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -523,6 +723,8 @@ export const Currencies = () => {
                         </table>
                     </div>
                 </div>
+            )}
+            </>
             )}
 
             <AnimatePresence>

@@ -36,6 +36,18 @@ class JournalService {
         catch (e) {
             console.error("Schema heal failed (Journal Header)", e);
         }
+        try {
+            const lineCols = database_1.db.prepare("PRAGMA table_info(journal_entry_lines)").all();
+            if (!lineCols.some((c) => c.name === 'expense_type_id')) {
+                database_1.db.prepare("ALTER TABLE journal_entry_lines ADD COLUMN expense_type_id TEXT").run();
+            }
+            if (!lineCols.some((c) => c.name === 'vehicle_id')) {
+                database_1.db.prepare("ALTER TABLE journal_entry_lines ADD COLUMN vehicle_id TEXT").run();
+            }
+        }
+        catch (e) {
+            console.error("Schema heal failed (Journal Lines Dimensions)", e);
+        }
         // 1. Validate Balance
         let totalDebit = new decimal_js_1.default(0);
         let totalCredit = new decimal_js_1.default(0);
@@ -143,11 +155,13 @@ class JournalService {
             INSERT INTO journal_entry_lines(
                 id, journal_entry_id, account_id, debit, credit, line_description, cost_center_id,
                 fc_amount, fc_currency_id, exchange_rate,
-                invoice_ref, tax_ref, sub_account_id, due_date, customer_id, is_returned, bank_account_id
+                invoice_ref, tax_ref, sub_account_id, due_date, customer_id, is_returned, bank_account_id,
+                expense_type_id, vehicle_id
             ) VALUES(
                 @id, @journal_entry_id, @account_id, @debit, @credit, @line_description, @cost_center_id,
                 @fc_amount, @fc_currency_id, @exchange_rate,
-                @invoice_ref, @tax_ref, @sub_account_id, @due_date, @customer_id, @is_returned, @bank_account_id
+                @invoice_ref, @tax_ref, @sub_account_id, @due_date, @customer_id, @is_returned, @bank_account_id,
+                @expense_type_id, @vehicle_id
             )
                 `);
             lines.forEach(line => {
@@ -168,7 +182,9 @@ class JournalService {
                     due_date: line.due_date || null,
                     customer_id: line.customer_id || null,
                     is_returned: line.is_returned ? 1 : 0,
-                    bank_account_id: line.bank_account_id || null
+                    bank_account_id: line.bank_account_id || null,
+                    expense_type_id: line.expense_type_id || null,
+                    vehicle_id: line.vehicle_id || null
                 });
             });
             // Update Counter

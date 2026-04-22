@@ -15,6 +15,7 @@ import {
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { SalesRep } from '../../../types'; // Assuming type exists or we define it locally
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const SalesRepsPage = () => {
     const [reps, setReps] = useState<any[]>([]);
@@ -134,6 +135,100 @@ export const SalesRepsPage = () => {
         r.phone?.toLowerCase().includes(search.toLowerCase())
     );
 
+    const handleDeleteRows = async (rows: any[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذا المندوب؟' : `هل أنت متأكد من حذف ${rows.length} مندوبين؟`)) return;
+
+        try {
+            for (const row of rows) {
+                await window.electronAPI.partner.deleteSalesRep(row.id);
+            }
+            await loadReps();
+        } catch (err) {
+            console.error(err);
+            alert('فشل في الحذف');
+        }
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<any>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'اسم المندوب',
+            width: 240,
+            defaultVisible: true,
+            renderCell: (rep) => (
+                <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-xs font-bold text-purple-600">
+                        {rep.name_ar?.charAt(0) || '#'}
+                    </div>
+                    <span className="font-medium text-slate-800">{rep.name_ar}</span>
+                </div>
+            ),
+        },
+        {
+            key: 'phone',
+            label: 'الهاتف',
+            width: 160,
+            defaultVisible: true,
+            getDisplayValue: (rep) => rep.phone || '-',
+        },
+        {
+            key: 'commission_rate',
+            label: 'نسبة العمولة',
+            type: 'number',
+            filterType: 'number',
+            width: 140,
+            defaultVisible: true,
+            getValue: (rep) => Number(rep.commission_rate || 0),
+            getDisplayValue: (rep) => rep.commission_rate ? `${rep.commission_rate}%` : '-',
+        },
+        {
+            key: 'target_amount',
+            label: 'الهدف البيعي',
+            type: 'number',
+            filterType: 'number',
+            width: 160,
+            defaultVisible: true,
+            getValue: (rep) => Number(rep.target_amount || 0),
+            getDisplayValue: (rep) => rep.target_amount ? Number(rep.target_amount).toLocaleString('en-US') : '-',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 140,
+            defaultVisible: true,
+            getValue: (rep) => (rep.is_active ? 1 : 0),
+            renderCell: (rep) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${rep.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {rep.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {rep.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (rep) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(rep)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(rep.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [reps]);
+
     return (
         <div className="app-page" dir="rtl">
             {/* Header */}
@@ -190,6 +285,23 @@ export const SalesRepsPage = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.sales-reps"
+                data={reps}
+                loading={loading}
+                columns={columns}
+                rowKey={(rep) => String(rep.id)}
+                searchPlaceholder="بحث عن مندوب..."
+                emptyMessage="لا يوجد مندوبون مطابقون للمعايير الحالية"
+                createLabel="إضافة مندوب جديد"
+                onCreate={openCreate}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadReps}
+            />
+
+            {false && (
+            <>
             {/* Search & Content */}
             <div className="card overflow-hidden">
                 {/* Toolbar */}
@@ -290,6 +402,9 @@ export const SalesRepsPage = () => {
                     </div>
                 )}
             </div>
+
+            </>
+            )}
 
             {/* Add/Edit Modal */}
             {isAdding && (

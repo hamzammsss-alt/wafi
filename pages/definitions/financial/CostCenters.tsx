@@ -13,6 +13,7 @@ import {
     Trash2,
     X
 } from 'lucide-react';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 type CostCenterRow = {
     id: string;
@@ -26,6 +27,11 @@ type CostCenterRow = {
 
 type CostCenterTreeNode = CostCenterRow & {
     children: CostCenterTreeNode[];
+};
+
+type CostCenterListRow = CostCenterRow & {
+    parent_name: string;
+    child_count: number;
 };
 
 const typeLabelMap: Record<string, string> = {
@@ -153,6 +159,24 @@ export const CostCenters = () => {
         }
     };
 
+    const handleDeleteRows = async (rows: CostCenterRow[]) => {
+        if (rows.length === 0) return;
+        const message = rows.length === 1
+            ? 'هل أنت متأكد من حذف هذا المركز؟'
+            : `هل أنت متأكد من حذف ${rows.length} مراكز تكلفة؟`;
+        if (!confirm(message)) return;
+
+        try {
+            for (const row of rows) {
+                await api.deleteCostCenter(row.id);
+            }
+            await loadCenters();
+        } catch (err) {
+            console.error(err);
+            alert('فشل في الحذف');
+        }
+    };
+
     const toggleExpand = (id: string) => {
         setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
     };
@@ -209,6 +233,140 @@ export const CostCenters = () => {
             : flattenTree(treeRoots);
     }, [centers, search, expanded]);
 
+    const listRows = useMemo<CostCenterListRow[]>(() => {
+        const childrenCountByParent = centers.reduce<Record<string, number>>((acc, center) => {
+            if (center.parent_id) {
+                acc[center.parent_id] = (acc[center.parent_id] || 0) + 1;
+            }
+            return acc;
+        }, {});
+
+        return [...centers]
+            .map((center) => ({
+                ...center,
+                parent_name: centers.find((item) => item.id === center.parent_id)?.name_ar || '',
+                child_count: childrenCountByParent[center.id] || 0,
+            }))
+            .sort((left, right) => String(left.code || '').localeCompare(String(right.code || ''), 'ar', { numeric: true, sensitivity: 'base' }));
+    }, [centers]);
+
+    const columns = useMemo<DefinitionListColumn<CostCenterListRow>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'اسم المركز',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (center) => `${center.name_ar || ''} ${center.name_en || ''} ${center.code || ''}`,
+            renderCell: (center) => (
+                <div className="flex items-center gap-3">
+                    <div className={`rounded-lg p-1.5 ${center.child_count > 0 ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {center.child_count > 0 ? <Folder size={16} /> : <Briefcase size={16} />}
+                    </div>
+                    <div className="min-w-0">
+                        <div className="truncate font-medium text-gray-800">{center.name_ar || '-'}</div>
+                        <div className="truncate text-xs text-gray-400">{center.name_en || center.code || '-'}</div>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 130,
+            defaultVisible: true,
+            getDisplayValue: (center) => center.code || '-',
+            renderCell: (center) => (
+                <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700">
+                    {center.code || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'type',
+            label: 'النوع',
+            type: 'enum',
+            filterType: 'enum',
+            width: 140,
+            defaultVisible: true,
+            options: [
+                { value: 'DEPARTMENT', label: 'قسم' },
+                { value: 'PROJECT', label: 'مشروع' },
+                { value: 'BRANCH', label: 'فرع' },
+            ],
+            getDisplayValue: (center) => typeLabelMap[String(center.type || 'DEPARTMENT')] || 'قسم',
+            renderCell: (center) => {
+                const typeKey = String(center.type || 'DEPARTMENT');
+                return (
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${typeBadgeMap[typeKey] || typeBadgeMap.DEPARTMENT}`}>
+                        {typeLabelMap[typeKey] || 'قسم'}
+                    </span>
+                );
+            },
+        },
+        {
+            key: 'parent_name',
+            label: 'المركز الأب',
+            width: 220,
+            defaultVisible: true,
+            getDisplayValue: (center) => center.parent_name || '-',
+        },
+        {
+            key: 'manager_name',
+            label: 'المدير المسؤول',
+            width: 180,
+            defaultVisible: true,
+            getDisplayValue: (center) => center.manager_name || '-',
+        },
+        {
+            key: 'child_count',
+            label: 'عدد الفروع',
+            type: 'number',
+            filterType: 'number',
+            width: 110,
+            defaultVisible: true,
+            getValue: (center) => Number(center.child_count || 0),
+            getDisplayValue: (center) => String(center.child_count || 0),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 140,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (center) => (
+                <div className="flex justify-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => handleAddSub(center.id)}
+                        className="rounded-lg p-2 text-green-600 transition-colors hover:bg-green-50"
+                        title="إضافة فرعي"
+                    >
+                        <Plus size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleEdit(center)}
+                        className="rounded-lg p-2 text-blue-600 transition-colors hover:bg-blue-50"
+                        title="تعديل"
+                    >
+                        <Edit size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleDelete(center.id)}
+                        className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
+                        title="حذف"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [centers]);
+
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
             <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
@@ -241,6 +399,23 @@ export const CostCenters = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.cost-centers"
+                data={listRows}
+                loading={loading}
+                columns={columns}
+                rowKey={(center) => String(center.id)}
+                searchPlaceholder="بحث برقم أو اسم مركز التكلفة..."
+                emptyMessage="لا توجد مراكز تكلفة مطابقة للمعايير الحالية"
+                createLabel="إضافة مركز رئيسي"
+                onCreate={() => setIsAdding(true)}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadCenters}
+                defaultSort={{ key: 'code', direction: 'asc' }}
+            />
+
+            {false && (
             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                 <div className="flex flex-col items-center justify-between gap-4 border-b border-gray-100 bg-gray-50/50 p-4 sm:flex-row">
                     <div className="relative w-full sm:w-96">
@@ -369,6 +544,7 @@ export const CostCenters = () => {
                     </div>
                 )}
             </div>
+            )}
 
             {isAdding && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">

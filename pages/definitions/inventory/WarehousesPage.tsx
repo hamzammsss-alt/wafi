@@ -17,6 +17,7 @@ import {
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { Warehouse } from '../../../types';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const WarehousesPage = () => {
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -145,6 +146,97 @@ export const WarehousesPage = () => {
         w.code?.toLowerCase().includes(search.toLowerCase())
     );
 
+    const handleDeleteRows = async (rows: Warehouse[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذا المستودع؟' : `هل أنت متأكد من حذف ${rows.length} مستودعات؟`)) return;
+
+        try {
+            for (const row of rows) {
+                await window.electronAPI.inventory.deleteWarehouse(row.id);
+            }
+            await loadWarehouses();
+        } catch (err) {
+            console.error(err);
+            alert('فشل في الحذف');
+        }
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<Warehouse>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'اسم المستودع',
+            width: 220,
+            defaultVisible: true,
+            getSearchValue: (warehouse) => `${warehouse.name_ar || ''} ${warehouse.name_en || ''}`,
+            getDisplayValue: (warehouse) => warehouse.name_ar || '-',
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (warehouse) => warehouse.code || '-',
+            renderCell: (warehouse) => warehouse.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{warehouse.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'address',
+            label: 'الموقع / العنوان',
+            width: 260,
+            defaultVisible: true,
+            getDisplayValue: (warehouse) => warehouse.address || warehouse.location || '-',
+            renderCell: (warehouse) => (
+                <div className="flex items-center gap-1 text-slate-600">
+                    {(warehouse.address || warehouse.location) ? <MapPin size={14} className="text-slate-400" /> : null}
+                    <span>{warehouse.address || warehouse.location || '-'}</span>
+                </div>
+            ),
+        },
+        {
+            key: 'phone',
+            label: 'الهاتف',
+            width: 140,
+            defaultVisible: true,
+            getDisplayValue: (warehouse) => warehouse.phone || '-',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 140,
+            defaultVisible: true,
+            getValue: (warehouse) => (warehouse.is_active ? 1 : 0),
+            renderCell: (warehouse) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${warehouse.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {warehouse.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {warehouse.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (warehouse) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(warehouse)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(warehouse.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [warehouses]);
+
     return (
         <div className="app-page" dir="rtl">
             {/* Header */}
@@ -201,6 +293,23 @@ export const WarehousesPage = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.warehouses"
+                data={warehouses}
+                loading={loading}
+                columns={columns}
+                rowKey={(warehouse) => String(warehouse.id)}
+                searchPlaceholder="بحث عن مستودع..."
+                emptyMessage="لا توجد مستودعات مطابقة للمعايير الحالية"
+                createLabel="إضافة مستودع جديد"
+                onCreate={openCreate}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadWarehouses}
+            />
+
+            {false && (
+            <>
             {/* Search & Content */}
             <div className="card overflow-hidden">
                 {/* Toolbar */}
@@ -301,6 +410,9 @@ export const WarehousesPage = () => {
                     </div>
                 )}
             </div>
+
+            </>
+            )}
 
             {/* Add/Edit Modal */}
             {isAdding && (

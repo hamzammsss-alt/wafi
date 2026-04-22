@@ -15,6 +15,7 @@ import {
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { Brand } from '../../../types';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const BrandsPage = () => {
     const [brands, setBrands] = useState<Brand[]>([]);
@@ -163,11 +164,118 @@ export const BrandsPage = () => {
         }
     };
 
+    const handleDeleteRows = async (rows: Brand[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذه الماركة؟' : `هل أنت متأكد من حذف ${rows.length} ماركات؟`)) return;
+
+        try {
+            for (const row of rows) {
+                await window.electronAPI.inventory.deleteBrand(row.id);
+            }
+            await loadBrands();
+        } catch (err) {
+            console.error(err);
+            alert('فشل في الحذف');
+        }
+    };
+
     const filteredBrands = brands.filter(b =>
         b.name_ar?.toLowerCase().includes(search.toLowerCase()) ||
         b.name_en?.toLowerCase().includes(search.toLowerCase()) ||
         b.code?.toLowerCase().includes(search.toLowerCase())
     );
+
+    const columns = React.useMemo<DefinitionListColumn<Brand>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'الماركة',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (brand) => `${brand.name_ar || ''} ${brand.name_en || ''}`,
+            renderCell: (brand) => (
+                <div className="flex items-center gap-3">
+                    {(brand as any).image_url ? (
+                        <img src={(brand as any).image_url} alt={brand.name_ar} className="h-10 w-10 rounded-lg border border-gray-200 bg-white object-cover" />
+                    ) : (
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-purple-100 bg-purple-50 font-bold text-purple-600">
+                            {brand.name_ar?.charAt(0) || '#'}
+                        </div>
+                    )}
+                    <div className="min-w-0">
+                        <div className="truncate font-semibold text-slate-800">{brand.name_ar}</div>
+                        <div className="truncate text-xs text-slate-400">{brand.name_en || '-'}</div>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'name_en',
+            label: 'الاسم الإنجليزي',
+            width: 200,
+            defaultVisible: true,
+            getDisplayValue: (brand) => brand.name_en || '-',
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (brand) => brand.code || '-',
+            renderCell: (brand) => brand.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{brand.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'origin_country',
+            label: 'بلد المنشأ',
+            width: 160,
+            defaultVisible: true,
+            getDisplayValue: (brand) => brand.origin_country || '-',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 140,
+            defaultVisible: true,
+            getValue: (brand) => (brand.is_active ? 1 : 0),
+            renderCell: (brand) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${brand.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {brand.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {brand.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (brand) => (
+                <div className="flex justify-center gap-2">
+                    <button
+                        onClick={() => handleEdit(brand)}
+                        className="rounded-lg p-2 text-blue-600 transition-colors hover:bg-blue-50"
+                        title="تعديل"
+                    >
+                        <Edit size={18} />
+                    </button>
+                    <button
+                        onClick={() => handleDelete(brand.id)}
+                        className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
+                        title="حذف"
+                    >
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [brands]);
 
     return (
         <div className="app-page" dir="rtl">
@@ -225,6 +333,23 @@ export const BrandsPage = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.brands"
+                data={brands}
+                loading={loading}
+                columns={columns}
+                rowKey={(brand) => String(brand.id)}
+                searchPlaceholder="بحث عن ماركة..."
+                emptyMessage="لا توجد ماركات مطابقة للمعايير الحالية"
+                createLabel="إضافة ماركة جديدة"
+                onCreate={openCreate}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadBrands}
+            />
+
+            {false && (
+            <>
             {/* Search & Content */}
             <div className="card overflow-hidden">
                 {/* Toolbar */}
@@ -333,6 +458,9 @@ export const BrandsPage = () => {
                     </div>
                 )}
             </div>
+
+            </>
+            )}
 
             {/* Add/Edit Modal */}
             {isAdding && (

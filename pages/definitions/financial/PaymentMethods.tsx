@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AccountPicker } from '../../../components/AccountPicker';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const PaymentMethods = () => {
     const [methods, setMethods] = useState<any[]>([]);
@@ -145,6 +146,98 @@ export const PaymentMethods = () => {
         }
     };
 
+    const columns = React.useMemo<DefinitionListColumn<any>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'الاسم (عربي)',
+            width: 220,
+            defaultVisible: true,
+            getDisplayValue: (method) => method.name_ar || '-',
+        },
+        {
+            key: 'name_en',
+            label: 'الاسم (English)',
+            width: 200,
+            defaultVisible: true,
+            getDisplayValue: (method) => method.name_en || '-',
+        },
+        {
+            key: 'type',
+            label: 'النوع',
+            type: 'enum',
+            filterType: 'enum',
+            width: 220,
+            defaultVisible: true,
+            options: [
+                { value: 'CASH', label: 'نقد' },
+                { value: 'CHECK', label: 'شيك' },
+                { value: 'CREDIT_CARD', label: 'بطاقة ائتمان' },
+                { value: 'BANK_TRANSFER', label: 'حوالة بنكية' },
+                { value: 'ELECTRONIC_WALLET', label: 'محفظة إلكترونية' },
+            ],
+            getDisplayValue: (method) => getTypeLabel(method.type),
+            renderCell: (method) => (
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                    {getTypeIcon(method.type)}
+                    {getTypeLabel(method.type)}
+                </div>
+            ),
+        },
+        {
+            key: 'gl_account_id',
+            label: 'الحساب المرتبط',
+            width: 180,
+            defaultVisible: true,
+            getDisplayValue: (method) => method.gl_account_id || '-',
+        },
+        {
+            key: 'commission_rate',
+            label: 'عمولة %',
+            type: 'number',
+            filterType: 'number',
+            width: 120,
+            defaultVisible: true,
+            getValue: (method) => Number(method.commission_rate || 0),
+            getDisplayValue: (method) => method.commission_rate > 0 ? `${method.commission_rate}%` : '-',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 140,
+            defaultVisible: true,
+            getValue: (method) => (method.is_active ? 1 : 0),
+            renderCell: (method) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${method.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {method.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {method.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 100,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (method) => (
+                <div className="flex justify-center gap-2">
+                    <button
+                        onClick={() => handleEdit(method)}
+                        className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                        title="تعديل"
+                    >
+                        <Edit size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [methods]);
+
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
             {/* Header */}
@@ -179,6 +272,22 @@ export const PaymentMethods = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.payment-methods"
+                data={methods}
+                loading={loading}
+                columns={columns}
+                rowKey={(method) => String(method.id)}
+                searchPlaceholder="بحث عن طريقة دفع..."
+                emptyMessage="لا توجد طرق دفع مطابقة للمعايير الحالية"
+                createLabel="إضافة طريقة دفع"
+                onCreate={() => setIsAdding(true)}
+                onEdit={handleEdit}
+                onRefresh={loadMethods}
+            />
+
+            {false && (
+            <>
             {/* Search & Content */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 {/* Toolbar */}
@@ -274,6 +383,9 @@ export const PaymentMethods = () => {
                     </div>
                 )}
             </div>
+
+            </>
+            )}
 
             {/* Add/Edit Modal */}
             {isAdding && (

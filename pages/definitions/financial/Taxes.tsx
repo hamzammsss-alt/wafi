@@ -12,6 +12,7 @@ import {
     DollarSign,
     Hash
 } from 'lucide-react';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const Taxes = () => {
     const [taxes, setTaxes] = useState<any[]>([]);
@@ -138,6 +139,113 @@ export const Taxes = () => {
         (t.name_en || '').toLowerCase().includes(search.toLowerCase())
     );
 
+    const handleDeleteRows = async (rows: any[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من الحذف؟' : `هل أنت متأكد من حذف ${rows.length} ضرائب/رسوم؟`)) return;
+
+        try {
+            for (const row of rows) {
+                await api.crudOperation({ operation: 'DELETE', table: 'taxes', id: row.id });
+            }
+            await loadTaxes();
+        } catch (err) {
+            console.error(err);
+            alert('فشل في الحذف');
+        }
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<any>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'الاسم',
+            width: 220,
+            defaultVisible: true,
+            getSearchValue: (tax) => `${tax.name_ar || ''} ${tax.name_en || ''}`,
+            renderCell: (tax) => (
+                <div>
+                    <div className="font-medium text-gray-800">{tax.name_ar}</div>
+                    {tax.name_en ? <div className="text-xs text-gray-400">{tax.name_en}</div> : null}
+                </div>
+            ),
+        },
+        {
+            key: 'is_fixed',
+            label: 'النوع',
+            type: 'enum',
+            filterType: 'enum',
+            width: 170,
+            defaultVisible: true,
+            options: [
+                { value: '0', label: 'نسبة مئوية' },
+                { value: '1', label: 'مبلغ ثابت' },
+            ],
+            getValue: (tax) => Number(tax.is_fixed || 0),
+            getDisplayValue: (tax) => Number(tax.is_fixed || 0) === 1 ? 'مبلغ ثابت' : 'نسبة مئوية',
+            renderCell: (tax) => Number(tax.is_fixed || 0) === 1 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                    <DollarSign size={12} /> مبلغ ثابت
+                </span>
+            ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-100 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+                    <Percent size={12} /> نسبة مئوية
+                </span>
+            ),
+        },
+        {
+            key: 'amount_or_rate',
+            label: 'القيمة / النسبة',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (tax) => Number(Number(tax.is_fixed || 0) === 1 ? tax.amount || 0 : tax.rate || 0),
+            getDisplayValue: (tax) => Number(tax.is_fixed || 0) === 1 ? String(tax.amount?.toLocaleString?.() || tax.amount || '-') : `${tax.rate || 0}%`,
+            renderCell: (tax) => (
+                <span className="rounded bg-gray-100 px-3 py-1 font-mono font-bold tracking-tight text-gray-700">
+                    {Number(tax.is_fixed || 0) === 1 ? (tax.amount?.toLocaleString?.() || tax.amount || '-') : `${tax.rate || 0}%`}
+                </span>
+            ),
+        },
+        {
+            key: 'type',
+            label: 'التأثير',
+            type: 'enum',
+            filterType: 'enum',
+            width: 140,
+            defaultVisible: true,
+            options: [
+                { value: 'إضافة', label: 'إضافة' },
+                { value: 'خصم', label: 'خصم' },
+            ],
+            getDisplayValue: (tax) => tax.type || 'إضافة',
+            renderCell: (tax) => (
+                <span className={`rounded-md px-2.5 py-1 text-xs font-medium ${tax.type === 'خصم' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    {tax.type || 'إضافة'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (tax) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(tax)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(tax.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [taxes]);
+
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
             {/* Header */}
@@ -172,6 +280,23 @@ export const Taxes = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.taxes"
+                data={taxes}
+                loading={loading}
+                columns={columns}
+                rowKey={(tax) => String(tax.id)}
+                searchPlaceholder="بحث في الضرائب والرسوم..."
+                emptyMessage="لا توجد ضرائب أو رسوم مطابقة"
+                createLabel="إضافة جديد"
+                onCreate={() => setIsAdding(true)}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadTaxes}
+            />
+
+            {false && (
+            <>
             {/* Content */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 {/* Toolbar */}
@@ -275,6 +400,9 @@ export const Taxes = () => {
                     </div>
                 )}
             </div>
+
+            </>
+            )}
 
             {/* Modal */}
             {isAdding && (

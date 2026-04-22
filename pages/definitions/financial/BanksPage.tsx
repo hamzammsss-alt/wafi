@@ -6,6 +6,7 @@ import initialBanks from './initial_banks.json';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import { AccountPicker } from '../../../components/AccountPicker';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const BanksPage = () => {
     const navigate = useNavigate();
@@ -88,6 +89,89 @@ export const BanksPage = () => {
 
     useCreateIntent(openCreate);
 
+    const handleDeleteRows = async (rows: any[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد؟' : `هل أنت متأكد من حذف ${rows.length} بنوك/فروع؟`)) return;
+
+        for (const row of rows) {
+            await api.deleteBank(row.id);
+        }
+        await fetchBanks();
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<any>[]>(() => [
+        {
+            key: 'bank_branch_code',
+            label: 'الرقم',
+            width: 120,
+            defaultVisible: true,
+            getValue: (bank) => `${bank.bank_code || ''}:${bank.branch_code || ''}`,
+            getDisplayValue: (bank) => `${bank.bank_code || ''}:${bank.branch_code || ''}`,
+        },
+        {
+            key: 'bank_code',
+            label: 'بنك',
+            width: 100,
+            defaultVisible: true,
+            getDisplayValue: (bank) => bank.bank_code || '-',
+        },
+        {
+            key: 'branch_code',
+            label: 'فرع البنك',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (bank) => bank.branch_code || '-',
+        },
+        {
+            key: 'name_ar',
+            label: 'الاسم الكامل',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (bank) => `${bank.name_ar || ''} ${bank.name_he || ''} ${bank.name_en || ''}`,
+            renderCell: (bank) => <span className="font-medium text-gray-800">{bank.name_ar} {bank.name_he ? `- ${bank.name_he}` : ''}</span>,
+        },
+        {
+            key: 'gl_account_name',
+            label: 'الحساب المرتبط',
+            width: 220,
+            defaultVisible: true,
+            getValue: (bank) => bank.gl_account_code || bank.gl_account_name || '',
+            renderCell: (bank) => (
+                <div>
+                    <div className="font-mono text-xs text-sky-700">{bank.gl_account_code || '-'}</div>
+                    <div className="text-xs text-slate-700">{bank.gl_account_name || 'غير مربوط'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 140,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (bank) => (
+                <div className="flex justify-center gap-2">
+                    <button
+                        title="تسوية بنكية"
+                        onClick={() => navigate(`/treasury/reconciliation?bankId=${bank.id}`)}
+                        className="rounded border border-gray-200 bg-white p-1.5 text-gray-600 shadow-sm transition hover:border-blue-500 hover:text-blue-600"
+                    >
+                        <Archive size={14} />
+                    </button>
+                    <button onClick={() => { setCurrentBank(bank); setIsModalOpen(true); }} className="rounded border border-gray-200 bg-white p-1.5 text-gray-600 shadow-sm transition hover:border-emerald-500 hover:text-emerald-600">
+                        <Edit size={14} />
+                    </button>
+                    <button onClick={() => handleDelete(bank.id)} className="rounded border border-gray-200 bg-white p-1.5 text-gray-600 shadow-sm transition hover:border-red-500 hover:text-red-600">
+                        <Trash2 size={14} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [banks]);
+
     return (
         <div className="h-full bg-gray-50 p-4 md:p-6 font-sans" dir="rtl">
             <WorkspaceHeader
@@ -117,6 +201,32 @@ export const BanksPage = () => {
                 دليل البنوك والفروع
             </h1>
 
+            <DefinitionMasterList
+                screenKey="definitions.banks"
+                data={banks}
+                loading={loading}
+                columns={columns}
+                rowKey={(bank) => String(bank.id)}
+                searchPlaceholder="بحث عن بنك، فرع، أو رمز..."
+                emptyMessage="لا توجد بنوك مطابقة للمعايير الحالية"
+                createLabel="إضافة بنك/فرع جديد"
+                onCreate={openCreate}
+                onEdit={(bank) => { setCurrentBank(bank); setIsModalOpen(true); }}
+                onDelete={handleDeleteRows}
+                onRefresh={fetchBanks}
+                toolbarExtraActions={(
+                    <button
+                        type="button"
+                        onClick={handleImportHtml}
+                        className="inline-flex h-10 items-center gap-2 rounded-2xl border border-blue-200 bg-white px-4 text-sm font-semibold text-blue-700 shadow-sm transition hover:bg-blue-50"
+                    >
+                        استيراد ملف البنوك
+                    </button>
+                )}
+            />
+
+            {false && (
+            <>
             {/* Toolbar */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                 <div className="relative w-full md:w-96">
@@ -221,6 +331,9 @@ export const BanksPage = () => {
                     </table>
                 )}
             </div>
+
+            </>
+            )}
 
             <AnimatePresence>
                 {isModalOpen && (

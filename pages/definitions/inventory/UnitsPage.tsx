@@ -8,6 +8,7 @@ import {
     getUnitFormulaHint,
     inferUnitCalculationMode,
 } from '../../../src/lib/unit-calculations';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 const UNIT_TYPE_OPTIONS = ['كمية', 'وزن', 'مساحة', 'حجم', 'وقت', 'طول'];
 const CALCULATION_MODE_OPTIONS: Array<{ value: UnitCalculationMode; label: string }> = [
@@ -165,12 +166,184 @@ export const UnitsPage = () => {
         }
     };
 
+    const handleDeleteRows = async (rows: Unit[]) => {
+        if (rows.length === 0) return;
+        const message = rows.length === 1
+            ? 'هل أنت متأكد من حذف هذه الوحدة؟'
+            : `هل أنت متأكد من حذف ${rows.length} وحدات؟`;
+        if (!confirm(message)) return;
+
+        try {
+            for (const row of rows) {
+                await window.electronAPI.inventory.deleteUnit(row.id);
+            }
+            await loadUnits();
+        } catch (err) {
+            console.error(err);
+            alert('فشل في الحذف');
+        }
+    };
+
     const filteredUnits = units.filter((u) =>
         (u.name_ar || '').toLowerCase().includes(search.toLowerCase()) ||
         (u.name_en || '').toLowerCase().includes(search.toLowerCase()) ||
         (u.name_he || '').toLowerCase().includes(search.toLowerCase()) ||
         (u.code || '').toLowerCase().includes(search.toLowerCase())
     );
+
+    const columns = useMemo<DefinitionListColumn<Unit>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'الوحدة',
+            width: 230,
+            defaultVisible: true,
+            getSearchValue: (unit) => `${unit.name_ar || ''} ${unit.name_en || ''} ${unit.name_he || ''} ${unit.code || ''}`,
+            renderCell: (unit) => (
+                <div>
+                    <div className="font-medium text-gray-800">{unit.name_ar || '-'}</div>
+                    <div className="text-xs text-gray-400">{unit.name_en || unit.code || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (unit) => unit.code || '-',
+            renderCell: (unit) => (
+                <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700">
+                    {unit.code || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'updated_at',
+            label: 'آخر تغيير',
+            type: 'date',
+            filterType: 'date',
+            width: 150,
+            defaultVisible: true,
+            getDisplayValue: (unit) => unit.updated_at ? new Date(unit.updated_at).toLocaleString('en-GB') : '-',
+        },
+        {
+            key: 'unit_type',
+            label: 'نوع الوحدة',
+            type: 'enum',
+            filterType: 'enum',
+            width: 140,
+            defaultVisible: true,
+            options: UNIT_TYPE_OPTIONS.map((item) => ({ value: item, label: item })),
+            getDisplayValue: (unit) => unit.unit_type || '-',
+        },
+        {
+            key: 'calculation_mode',
+            label: 'طريقة الحساب',
+            type: 'enum',
+            filterType: 'enum',
+            width: 220,
+            defaultVisible: true,
+            options: CALCULATION_MODE_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+            getValue: (unit) => getUnitCalculationMode(unit),
+            getDisplayValue: (unit) => CALCULATION_MODE_OPTIONS.find((option) => option.value === getUnitCalculationMode(unit))?.label || 'إدخال يدوي',
+            renderCell: (unit) => (
+                <div className="space-y-1">
+                    <div className="font-medium text-gray-700">
+                        {CALCULATION_MODE_OPTIONS.find((option) => option.value === getUnitCalculationMode(unit))?.label || 'إدخال يدوي'}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                        {unit.formula_hint || getUnitFormulaHint(getUnitCalculationMode(unit))}
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'parent_unit_id',
+            label: 'تابع لـ',
+            width: 140,
+            defaultVisible: true,
+            getDisplayValue: (unit) => parentById.get(unit.parent_unit_id || '')?.code || '-',
+        },
+        {
+            key: 'level_no',
+            label: 'المستوى',
+            type: 'number',
+            filterType: 'number',
+            width: 100,
+            defaultVisible: true,
+            getValue: (unit) => Number(unit.level_no || 1),
+            getDisplayValue: (unit) => String(unit.level_no || 1),
+        },
+        {
+            key: 'is_active',
+            label: 'فعال',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 100,
+            defaultVisible: true,
+            getValue: (unit) => Number(unit.is_active || 0),
+            renderCell: (unit) => Number(unit.is_active || 0) === 1 ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                    <CheckCircle2 size={12} />
+                    نعم
+                </span>
+            ) : (
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                    لا
+                </span>
+            ),
+        },
+        {
+            key: 'is_used',
+            label: 'مستخدم',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 100,
+            defaultVisible: true,
+            getValue: (unit) => Number(unit.is_used || 0),
+            getDisplayValue: (unit) => Number(unit.is_used || 0) === 1 ? 'نعم' : 'لا',
+        },
+        {
+            key: 'multiplier',
+            label: 'ضرب',
+            type: 'number',
+            filterType: 'number',
+            width: 100,
+            defaultVisible: true,
+            getValue: (unit) => Number(unit.multiplier || 1),
+            getDisplayValue: (unit) => String(Number(unit.multiplier || 1)),
+        },
+        {
+            key: 'total_factor',
+            label: 'المعامل الكلي',
+            type: 'number',
+            filterType: 'number',
+            width: 130,
+            defaultVisible: true,
+            getValue: (unit) => Number(unit.total_factor || 1),
+            getDisplayValue: (unit) => String(Number(unit.total_factor || 1)),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 100,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (unit) => (
+                <button
+                    type="button"
+                    onClick={() => handleDelete(unit.id)}
+                    className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
+                    title="حذف"
+                >
+                    <Trash2 size={18} />
+                </button>
+            ),
+        },
+    ], [parentById]);
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
