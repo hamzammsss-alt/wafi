@@ -56,7 +56,19 @@ class MasterDataService {
         }
         return { id: null, code: normalized, name: normalized };
     }
-    static resolveLegacyAccountId(inputId, preferredCurrencyCode = 'ILS') {
+    static tableExists(tableName) {
+        const normalized = String(tableName || '').trim();
+        if (!normalized)
+            return false;
+        const row = database_1.db.prepare(`
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = ?
+            LIMIT 1
+        `).get(normalized);
+        return Boolean(row);
+    }
+    static resolveLegacyAccountId(inputId, preferredCurrencyCode = 'ILS', companyId = 'COMP_01') {
         const normalizedId = String(inputId || '').trim();
         if (!normalizedId)
             return null;
@@ -83,16 +95,16 @@ class MasterDataService {
             return byCode.id;
         let parentLegacyId = null;
         if (chart.parent_id) {
-            parentLegacyId = this.resolveLegacyAccountId(chart.parent_id, chart.currency_code || preferredCurrencyCode);
+            parentLegacyId = this.resolveLegacyAccountId(chart.parent_id, chart.currency_code || preferredCurrencyCode, companyId);
         }
         database_1.db.prepare(`
             INSERT INTO accounts (
-                id, code, account_code, name, type, balance,
+                id, company_id, code, account_code, name, type, balance,
                 parent_id, account_level, posting_allowed, is_transactional, is_group,
                 currency, currency_code, currency_behavior, reference_type, scope_type,
                 status, is_active, requires_cost_center, requires_analysis_code
             ) VALUES (
-                @id, @code, @account_code, @name, @type, '0',
+                @id, @company_id, @code, @account_code, @name, @type, '0',
                 @parent_id, @account_level, @posting_allowed, @is_transactional, @is_group,
                 @currency, @currency_code, 'FIXED_CURRENCY', 'NONE', 'COMPANY',
                 'ACTIVE', 1, 0, 0
@@ -100,6 +112,7 @@ class MasterDataService {
             ON CONFLICT(id) DO NOTHING
         `).run({
             id: chart.id,
+            company_id: companyId,
             code: chart.account_code,
             account_code: chart.account_code,
             name: chart.account_name,
@@ -131,6 +144,122 @@ class MasterDataService {
             LIMIT 1
         `).get(accountId);
     }
+    static ensureAccountVisibleInCompanyChart(accountId, companyId = 'COMP_01') {
+        let currentAccountId = String(accountId || '').trim() || null;
+        if (!currentAccountId)
+            return;
+        const visited = new Set();
+        while (currentAccountId && !visited.has(currentAccountId)) {
+            visited.add(currentAccountId);
+            database_1.db.prepare(`
+                UPDATE accounts
+                SET company_id = COALESCE(NULLIF(company_id, ''), ?),
+                    code = COALESCE(NULLIF(code, ''), NULLIF(account_code, '')),
+                    account_code = COALESCE(NULLIF(account_code, ''), NULLIF(code, '')),
+                    account_level = COALESCE(account_level, LENGTH(COALESCE(NULLIF(account_code, ''), NULLIF(code, '')))),
+                    posting_allowed = COALESCE(posting_allowed, is_transactional, 1),
+                    is_group = COALESCE(is_group, CASE WHEN COALESCE(posting_allowed, is_transactional, 1) = 1 THEN 0 ELSE 1 END),
+                    status = COALESCE(NULLIF(status, ''), CASE WHEN COALESCE(is_active, 1) = 1 THEN 'ACTIVE' ELSE 'INACTIVE' END),
+                    scope_type = COALESCE(NULLIF(scope_type, ''), 'COMPANY'),
+                    currency = COALESCE(NULLIF(currency, ''), NULLIF(currency_code, '')),
+                    currency_code = COALESCE(NULLIF(currency_code, ''), NULLIF(currency, '')),
+                    requires_sub_account = CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM ae_sub_accounts sa
+                            WHERE sa.account_id = accounts.id
+                              AND COALESCE(sa.is_active, 1) = 1
+                        ) THEN 1
+                        ELSE COALESCE(requires_sub_account, 0)
+                    END
+                WHERE id = ?
+            `).run(companyId, currentAccountId);
+            const parentRow = database_1.db.prepare(`
+                SELECT parent_id
+                FROM accounts
+                WHERE id = ?
+                LIMIT 1
+            `).get(currentAccountId);
+            currentAccountId = String(parentRow?.parent_id || '').trim() || null;
+        }
+    }
+    static repairLinkedAccountsForCompany(companyId = 'COMP_01') {
+        const linkSources = [];
+        if (this.tableExists('bank_accounts')) {
+            linkSources.push("SELECT gl_account_id AS account_id FROM bank_accounts WHERE gl_account_id IS NOT NULL");
+            linkSources.push("SELECT commission_account_id AS account_id FROM bank_accounts WHERE commission_account_id IS NOT NULL");
+        }
+        if (this.tableExists('cash_boxes')) {
+            linkSources.push("SELECT gl_account_id AS account_id FROM cash_boxes WHERE gl_account_id IS NOT NULL");
+        }
+        if (this.tableExists('ae_sub_accounts')) {
+            linkSources.push("SELECT account_id FROM ae_sub_accounts WHERE account_id IS NOT NULL");
+        }
+        if (!linkSources.length)
+            return;
+        const linkedRows = database_1.db.prepare(`
+            SELECT DISTINCT
+                ref.account_id,
+                COALESCE(a.currency_code, a.currency, cur.code, 'ILS') AS currency_code
+            FROM (${linkSources.join('\nUNION\n')}) ref
+            LEFT JOIN accounts a ON a.id = ref.account_id
+            LEFT JOIN gl_chart_of_accounts g
+                ON g.id = ref.account_id
+                OR g.account_code = COALESCE(a.account_code, a.code)
+            LEFT JOIN currencies cur ON cur.id = g.currency_id
+            WHERE ref.account_id IS NOT NULL
+              AND TRIM(ref.account_id) != ''
+        `).all();
+        for (const row of linkedRows) {
+            const sourceId = String(row?.account_id || '').trim();
+            if (!sourceId)
+                continue;
+            const legacyId = this.resolveLegacyAccountId(sourceId, row?.currency_code || 'ILS', companyId);
+            if (!legacyId)
+                continue;
+            if (legacyId !== sourceId) {
+                if (this.tableExists('bank_accounts')) {
+                    database_1.db.prepare(`UPDATE bank_accounts SET gl_account_id = ? WHERE gl_account_id = ?`).run(legacyId, sourceId);
+                    database_1.db.prepare(`UPDATE bank_accounts SET commission_account_id = ? WHERE commission_account_id = ?`).run(legacyId, sourceId);
+                }
+                if (this.tableExists('cash_boxes')) {
+                    database_1.db.prepare(`UPDATE cash_boxes SET gl_account_id = ? WHERE gl_account_id = ?`).run(legacyId, sourceId);
+                }
+                if (this.tableExists('ae_sub_accounts')) {
+                    database_1.db.prepare(`UPDATE ae_sub_accounts SET account_id = ? WHERE account_id = ?`).run(legacyId, sourceId);
+                }
+            }
+            this.ensureAccountVisibleInCompanyChart(legacyId, companyId);
+        }
+        database_1.db.prepare(`
+            UPDATE accounts
+            SET company_id = COALESCE(NULLIF(company_id, ''), ?),
+                code = COALESCE(NULLIF(code, ''), NULLIF(account_code, '')),
+                account_code = COALESCE(NULLIF(account_code, ''), NULLIF(code, '')),
+                account_level = COALESCE(account_level, LENGTH(COALESCE(NULLIF(account_code, ''), NULLIF(code, '')))),
+                is_transactional = 1,
+                posting_allowed = 1,
+                is_group = 0,
+                status = COALESCE(NULLIF(status, ''), CASE WHEN COALESCE(is_active, 1) = 1 THEN 'ACTIVE' ELSE 'INACTIVE' END),
+                scope_type = COALESCE(NULLIF(scope_type, ''), 'COMPANY'),
+                requires_sub_account = CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM ae_sub_accounts sa
+                        WHERE sa.account_id = accounts.id
+                          AND COALESCE(sa.is_active, 1) = 1
+                    ) THEN 1
+                    ELSE COALESCE(requires_sub_account, 0)
+                END
+            WHERE COALESCE(account_code, code) LIKE '111%'
+              AND LENGTH(COALESCE(account_code, code)) >= 4
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM accounts child
+                  WHERE child.parent_id = accounts.id
+              )
+        `).run(companyId);
+    }
     static buildBankSubAccountName(data) {
         const explicitName = String(data?.account_name || '').trim();
         const bankName = String(data?.bank_name || '').trim();
@@ -161,7 +290,7 @@ class MasterDataService {
         if (!bankAccountId)
             return;
         const currencyInfo = this.resolveCurrencyValue(data?.currency_id || data?.currency);
-        const linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code);
+        const linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code, 'COMP_01');
         if (!linkedLegacyAccountId)
             return;
         const subAccountName = this.buildBankSubAccountName(data);
@@ -208,6 +337,64 @@ class MasterDataService {
                 INSERT INTO ae_sub_accounts (id, account_id, code, name, normalized_name, is_active)
                 VALUES (?, ?, ?, ?, ?, ?)
             `).run(bankAccountId, linkedLegacyAccountId, subAccountCode, subAccountName, normalizedName, isActive);
+        }
+    }
+    static syncCashBoxSubAccount(data, options = {}) {
+        const cashBoxId = String(data?.id || '').trim();
+        if (!cashBoxId)
+            return;
+        const companyId = 'COMP_01';
+        const currencyInfo = this.resolveCurrencyValue(data?.currency_id || data?.currency_code);
+        const linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code, companyId);
+        if (!linkedLegacyAccountId)
+            return;
+        const subAccountCode = String(data?.code || '').trim().toUpperCase();
+        const subAccountName = String(data?.name_ar || '').trim();
+        const normalizedName = this.normalizeName(subAccountName);
+        const isActive = data?.is_active === false || Number(data?.is_active ?? 1) === 0 ? 0 : 1;
+        if (!subAccountCode || !subAccountName)
+            return;
+        this.ensureAccountVisibleInCompanyChart(linkedLegacyAccountId, companyId);
+        database_1.db.prepare(`
+            UPDATE accounts
+            SET requires_sub_account = 1
+            WHERE id = ?
+        `).run(linkedLegacyAccountId);
+        const duplicateSubAccount = database_1.db.prepare(`
+            SELECT id
+            FROM ae_sub_accounts
+            WHERE account_id = ?
+              AND id != ?
+              AND (
+                UPPER(TRIM(COALESCE(code, ''))) = ?
+                OR UPPER(TRIM(COALESCE(normalized_name, ''))) = ?
+              )
+            LIMIT 1
+        `).get(linkedLegacyAccountId, cashBoxId, subAccountCode, normalizedName);
+        if (duplicateSubAccount) {
+            if (options.strict) {
+                throw new Error('يوجد حساب فرعي بنفس الرمز أو الاسم لهذا الحساب');
+            }
+            return;
+        }
+        const existingSubAccount = database_1.db.prepare(`
+            SELECT id
+            FROM ae_sub_accounts
+            WHERE id = ?
+            LIMIT 1
+        `).get(cashBoxId);
+        if (existingSubAccount) {
+            database_1.db.prepare(`
+                UPDATE ae_sub_accounts
+                SET account_id = ?, code = ?, name = ?, normalized_name = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `).run(linkedLegacyAccountId, subAccountCode, subAccountName, normalizedName, isActive, cashBoxId);
+        }
+        else {
+            database_1.db.prepare(`
+                INSERT INTO ae_sub_accounts (id, account_id, code, name, normalized_name, is_active)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(cashBoxId, linkedLegacyAccountId, subAccountCode, subAccountName, normalizedName, isActive);
         }
     }
     // ================================================================
@@ -398,6 +585,12 @@ class MasterDataService {
         }
         catch (e) {
             console.error("MasterDataService.getBankAccounts self-heal failed:", e);
+        }
+        try {
+            this.repairLinkedAccountsForCompany('COMP_01');
+        }
+        catch (e) {
+            console.error("MasterDataService.getBankAccounts company-chart repair failed:", e);
         }
         try {
             const rows = database_1.db.prepare(`
@@ -932,23 +1125,8 @@ class MasterDataService {
                 }
             }
             const commissionAccountId = resolveLinkedAccountId(data.commission_account_id || null);
-            // Heal existing linked accounts so they appear in modern chart listings by company.
-            const ensureAccountVisibleInCompanyChart = (accountId) => {
-                if (!accountId)
-                    return;
-                database_1.db.prepare(`
-                    UPDATE accounts
-                    SET company_id = COALESCE(company_id, ?),
-                        account_code = COALESCE(account_code, code),
-                        posting_allowed = COALESCE(posting_allowed, is_transactional, 1),
-                        is_group = COALESCE(is_group, CASE WHEN COALESCE(posting_allowed, is_transactional, 1)=1 THEN 0 ELSE 1 END),
-                        status = COALESCE(status, CASE WHEN COALESCE(is_active, 1)=1 THEN 'ACTIVE' ELSE 'INACTIVE' END),
-                        scope_type = COALESCE(scope_type, 'COMPANY')
-                    WHERE id = ?
-                `).run(companyId, accountId);
-            };
-            ensureAccountVisibleInCompanyChart(glAccountId);
-            ensureAccountVisibleInCompanyChart(commissionAccountId);
+            this.ensureAccountVisibleInCompanyChart(glAccountId, companyId);
+            this.ensureAccountVisibleInCompanyChart(commissionAccountId, companyId);
             const params = {
                 id,
                 bank_id: data.bank_id,
@@ -1020,6 +1198,29 @@ class MasterDataService {
     // 3. CASH BOXES
     // ================================================================
     static getCashBoxes() {
+        try {
+            this.repairLinkedAccountsForCompany('COMP_01');
+            const rows = database_1.db.prepare(`
+                SELECT
+                    cb.id,
+                    cb.code,
+                    cb.name_ar,
+                    cb.currency_id,
+                    cb.currency_code,
+                    cb.gl_account_id,
+                    COALESCE(cb.is_active, 1) AS is_active
+                FROM cash_boxes cb
+            `).all();
+            const syncCashBoxSubAccounts = database_1.db.transaction((cashRows) => {
+                for (const row of cashRows) {
+                    this.syncCashBoxSubAccount(row, { strict: false });
+                }
+            });
+            syncCashBoxSubAccounts(rows);
+        }
+        catch (e) {
+            console.error('MasterDataService.getCashBoxes self-heal failed:', e);
+        }
         return database_1.db.prepare(`
             SELECT
                 cb.*,
@@ -1045,7 +1246,8 @@ class MasterDataService {
         if (!normalizedCode)
             throw new Error('رمز الصندوق مطلوب');
         const currencyInfo = this.resolveCurrencyValue(data?.currency_id || data?.currency_code || data?.currency);
-        const linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code);
+        const companyId = 'COMP_01';
+        const linkedLegacyAccountId = this.resolveLegacyAccountId(data?.gl_account_id, currencyInfo.code, companyId);
         if (!linkedLegacyAccountId)
             throw new Error('يجب اختيار حساب صندوق صالح');
         const accountIdentity = this.getAccountIdentity(linkedLegacyAccountId);
@@ -1115,6 +1317,7 @@ class MasterDataService {
             is_active: data?.is_active === false ? 0 : 1
         };
         const saveTx = database_1.db.transaction(() => {
+            this.ensureAccountVisibleInCompanyChart(linkedLegacyAccountId, companyId);
             if (!data?.id) {
                 database_1.db.prepare(`
                     INSERT INTO cash_boxes (
@@ -1141,39 +1344,15 @@ class MasterDataService {
                     WHERE id = @id
                 `).run(payload);
             }
-            database_1.db.prepare(`
-                UPDATE accounts
-                SET requires_sub_account = 1
-                WHERE id = ?
-            `).run(linkedLegacyAccountId);
-            const duplicateSubAccount = database_1.db.prepare(`
-                SELECT id
-                FROM ae_sub_accounts
-                WHERE account_id = ?
-                  AND id != ?
-                  AND (
-                    UPPER(TRIM(COALESCE(code, ''))) = ?
-                    OR UPPER(TRIM(COALESCE(normalized_name, ''))) = ?
-                  )
-                LIMIT 1
-            `).get(linkedLegacyAccountId, id, normalizedCode, normalizedName);
-            if (duplicateSubAccount) {
-                throw new Error('يوجد حساب فرعي بنفس الرمز أو الاسم لهذا الحساب');
-            }
-            const existingSubAccount = database_1.db.prepare(`SELECT id FROM ae_sub_accounts WHERE id = ? LIMIT 1`).get(id);
-            if (existingSubAccount) {
-                database_1.db.prepare(`
-                    UPDATE ae_sub_accounts
-                    SET account_id = ?, code = ?, name = ?, normalized_name = ?, is_active = 1, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                `).run(linkedLegacyAccountId, normalizedCode, payload.name_ar, normalizedName, id);
-            }
-            else {
-                database_1.db.prepare(`
-                    INSERT INTO ae_sub_accounts (id, account_id, code, name, normalized_name, is_active)
-                    VALUES (?, ?, ?, ?, ?, 1)
-                `).run(id, linkedLegacyAccountId, normalizedCode, payload.name_ar, normalizedName);
-            }
+            this.syncCashBoxSubAccount({
+                id,
+                gl_account_id: linkedLegacyAccountId,
+                code: payload.code,
+                name_ar: payload.name_ar,
+                currency_id: payload.currency_id,
+                currency_code: payload.currency_code,
+                is_active: payload.is_active
+            }, { strict: true });
         });
         saveTx();
         return { success: true, id };

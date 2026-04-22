@@ -499,7 +499,89 @@ const initDB = (dbPath) => {
             exports.db.exec("ALTER TABLE units ADD COLUMN total_factor REAL DEFAULT 1");
         if (!has('updated_at'))
             exports.db.exec("ALTER TABLE units ADD COLUMN updated_at TEXT");
-        exports.db.exec("UPDATE units SET name_ar = COALESCE(name_ar, name), code = COALESCE(code, symbol), is_active = COALESCE(is_active, 1), level_no = COALESCE(level_no, 1), multiplier = COALESCE(multiplier, 1), total_factor = COALESCE(total_factor, 1)");
+        if (!has('calculation_mode'))
+            exports.db.exec("ALTER TABLE units ADD COLUMN calculation_mode TEXT DEFAULT 'MANUAL'");
+        if (!has('requires_length'))
+            exports.db.exec("ALTER TABLE units ADD COLUMN requires_length INTEGER DEFAULT 0");
+        if (!has('requires_width'))
+            exports.db.exec("ALTER TABLE units ADD COLUMN requires_width INTEGER DEFAULT 0");
+        if (!has('requires_height'))
+            exports.db.exec("ALTER TABLE units ADD COLUMN requires_height INTEGER DEFAULT 0");
+        if (!has('requires_count'))
+            exports.db.exec("ALTER TABLE units ADD COLUMN requires_count INTEGER DEFAULT 0");
+        if (!has('formula_hint'))
+            exports.db.exec("ALTER TABLE units ADD COLUMN formula_hint TEXT");
+        exports.db.exec(`
+      UPDATE units
+      SET
+        name_ar = COALESCE(name_ar, name),
+        code = COALESCE(code, symbol),
+        is_active = COALESCE(is_active, 1),
+        level_no = COALESCE(level_no, 1),
+        multiplier = COALESCE(multiplier, 1),
+        total_factor = COALESCE(total_factor, 1),
+        calculation_mode = CASE
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('CBM', 'M3', 'CM3', 'MM3')
+            OR COALESCE(name_ar, '') LIKE '%مكعب%'
+            OR COALESCE(name_en, '') LIKE '%Cubic%'
+            THEN 'VOLUME'
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('SQM', 'M2', 'CM2', 'MM2')
+            OR COALESCE(name_ar, '') LIKE '%مربع%'
+            OR COALESCE(name_en, '') LIKE '%Square%'
+            THEN 'AREA'
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('M', 'MTR', 'CM', 'MM', 'KM')
+            OR COALESCE(unit_type, '') = 'طول'
+            THEN 'LINEAR'
+          ELSE COALESCE(NULLIF(calculation_mode, ''), 'MANUAL')
+        END,
+        requires_length = CASE
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('CBM', 'M3', 'CM3', 'MM3', 'SQM', 'M2', 'CM2', 'MM2', 'M', 'MTR', 'CM', 'MM', 'KM')
+            OR COALESCE(name_ar, '') LIKE '%مكعب%'
+            OR COALESCE(name_ar, '') LIKE '%مربع%'
+            OR COALESCE(name_en, '') LIKE '%Cubic%'
+            OR COALESCE(name_en, '') LIKE '%Square%'
+            OR COALESCE(unit_type, '') = 'طول'
+            THEN 1
+          ELSE COALESCE(requires_length, 0)
+        END,
+        requires_width = CASE
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('CBM', 'M3', 'CM3', 'MM3', 'SQM', 'M2', 'CM2', 'MM2')
+            OR COALESCE(name_ar, '') LIKE '%مكعب%'
+            OR COALESCE(name_ar, '') LIKE '%مربع%'
+            OR COALESCE(name_en, '') LIKE '%Cubic%'
+            OR COALESCE(name_en, '') LIKE '%Square%'
+            THEN 1
+          ELSE 0
+        END,
+        requires_height = CASE
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('CBM', 'M3', 'CM3', 'MM3')
+            OR COALESCE(name_ar, '') LIKE '%مكعب%'
+            OR COALESCE(name_en, '') LIKE '%Cubic%'
+            THEN 1
+          ELSE 0
+        END,
+        requires_count = CASE
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('CBM', 'M3', 'CM3', 'MM3', 'SQM', 'M2', 'CM2', 'MM2', 'M', 'MTR', 'CM', 'MM', 'KM')
+            OR COALESCE(name_ar, '') LIKE '%مكعب%'
+            OR COALESCE(name_ar, '') LIKE '%مربع%'
+            OR COALESCE(name_en, '') LIKE '%Cubic%'
+            OR COALESCE(name_en, '') LIKE '%Square%'
+            OR COALESCE(unit_type, '') = 'طول'
+            THEN 1
+          ELSE COALESCE(requires_count, 0)
+        END,
+        formula_hint = CASE
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('M', 'MTR', 'CM', 'MM', 'KM')
+            OR COALESCE(unit_type, '') = 'طول' THEN 'الكمية = الطول × العدد'
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('SQM', 'M2', 'CM2', 'MM2')
+            OR COALESCE(name_ar, '') LIKE '%مربع%'
+            OR COALESCE(name_en, '') LIKE '%Square%' THEN 'الكمية = الطول × العرض × العدد'
+          WHEN UPPER(COALESCE(code, symbol, '')) IN ('CBM', 'M3', 'CM3', 'MM3')
+            OR COALESCE(name_ar, '') LIKE '%مكعب%'
+            OR COALESCE(name_en, '') LIKE '%Cubic%' THEN 'الكمية = الطول × العرض × الارتفاع × العدد'
+          ELSE COALESCE(formula_hint, 'إدخال يدوي')
+        END
+    `);
     }
     catch (unitMigErr) {
         console.error('[DB] Units migration failed:', unitMigErr);

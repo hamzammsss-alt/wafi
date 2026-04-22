@@ -35,6 +35,8 @@ export interface JournalLine {
     customer_id?: string;
     is_returned?: boolean;
     bank_account_id?: string; // New field
+    expense_type_id?: string | null;
+    vehicle_id?: string | null;
 }
 
 export class JournalService {
@@ -70,6 +72,17 @@ export class JournalService {
             }
         } catch (e) {
             console.error("Schema heal failed (Journal Header)", e);
+        }
+        try {
+            const lineCols = db.prepare("PRAGMA table_info(journal_entry_lines)").all();
+            if (!lineCols.some((c: any) => c.name === 'expense_type_id')) {
+                db.prepare("ALTER TABLE journal_entry_lines ADD COLUMN expense_type_id TEXT").run();
+            }
+            if (!lineCols.some((c: any) => c.name === 'vehicle_id')) {
+                db.prepare("ALTER TABLE journal_entry_lines ADD COLUMN vehicle_id TEXT").run();
+            }
+        } catch (e) {
+            console.error("Schema heal failed (Journal Lines Dimensions)", e);
         }
 
         // 1. Validate Balance
@@ -181,11 +194,13 @@ export class JournalService {
             INSERT INTO journal_entry_lines(
                 id, journal_entry_id, account_id, debit, credit, line_description, cost_center_id,
                 fc_amount, fc_currency_id, exchange_rate,
-                invoice_ref, tax_ref, sub_account_id, due_date, customer_id, is_returned, bank_account_id
+                invoice_ref, tax_ref, sub_account_id, due_date, customer_id, is_returned, bank_account_id,
+                expense_type_id, vehicle_id
             ) VALUES(
                 @id, @journal_entry_id, @account_id, @debit, @credit, @line_description, @cost_center_id,
                 @fc_amount, @fc_currency_id, @exchange_rate,
-                @invoice_ref, @tax_ref, @sub_account_id, @due_date, @customer_id, @is_returned, @bank_account_id
+                @invoice_ref, @tax_ref, @sub_account_id, @due_date, @customer_id, @is_returned, @bank_account_id,
+                @expense_type_id, @vehicle_id
             )
                 `);
 
@@ -207,7 +222,9 @@ export class JournalService {
                     due_date: line.due_date || null,
                     customer_id: line.customer_id || null,
                     is_returned: line.is_returned ? 1 : 0,
-                    bank_account_id: line.bank_account_id || null
+                    bank_account_id: line.bank_account_id || null,
+                    expense_type_id: line.expense_type_id || null,
+                    vehicle_id: line.vehicle_id || null
                 });
             });
 

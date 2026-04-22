@@ -80,7 +80,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
         { divider: true, label: '' },
         { header: true, label: 'تعاريف المخزون' },
         { label: 'الوحدات', icon: Box, path: '/master/units' },
-        { label: 'فئات الأصناف', icon: Layers, path: '/master/item-categories' },
+        { label: 'مجموعات الأصناف', icon: Layers, path: '/master/item-categories' },
         { label: 'العلامات التجارية', icon: Tag, path: '/master/brands' },
         { label: 'قائمة الأصناف', icon: Package, path: '/items' },
         { label: 'مواقع التخزين', icon: MapPin, path: '/master/warehouses' },
@@ -107,7 +107,7 @@ export const TOP_MENU_ITEMS: Record<string, MenuItem[]> = {
     'المخزون والأصناف': [
         { header: true, label: 'إدارة الأصناف' },
         { label: 'بطاقات الأصناف', icon: Package, path: '/items' },
-        { label: 'فئات الأصناف', icon: Layers, path: '/master/item-categories' },
+        { label: 'مجموعات الأصناف', icon: Layers, path: '/master/item-categories' },
         { label: 'الضريبة والرسوم', icon: Percent, path: '/master/taxes' },
         { label: 'رموز التحليل', icon: Network, path: '/definitions/analysis-codes' },
         { label: 'تعاريف السمات', icon: Tag, path: '/definitions/attributes' },
@@ -553,7 +553,7 @@ export const RIBBON_CONTENT: Record<string, RibbonGroup[]> = {
             label: 'الاصناف',
             items: [
                 { label: 'ملف الاصناف', icon: Box, path: '/items' },
-                { label: 'مجوعات الاصناف', icon: Layers, path: '/master/item-categories' },
+                { label: 'مجموعات الأصناف', icon: Layers, path: '/master/item-categories' },
                 { label: 'صور الاصناف', icon: Image, path: '/items/images' },
                 { label: 'ملف الاصناف-جداول', icon: Table, path: '/items/table-view' },
             ]

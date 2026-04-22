@@ -1,78 +1,156 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+    AlertCircle,
     Banknote,
+    Edit,
+    Link2,
+    Loader2,
     Plus,
     Search,
     Trash2,
-    Edit,
     X,
-    CheckCircle2,
-    AlertCircle,
-    Loader2
 } from 'lucide-react';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+
+type ExpenseTypeRow = {
+    id?: string;
+    code?: string;
+    name?: string;
+    name_ar?: string;
+    name_en?: string;
+    category?: string;
+    account_id?: string;
+    account_name?: string;
+};
+
+type AccountRow = {
+    id: string;
+    name?: string;
+    name_ar?: string;
+    accountCode?: string;
+    accountType?: string;
+    type?: string;
+    category?: string;
+    accountCategory?: string;
+    postingAllowed?: boolean;
+};
+
+const CATEGORY_OPTIONS = [
+    'تشغيلي',
+    'إداري',
+    'تسويقي',
+    'تمويلي',
+];
+
+const emptyForm = {
+    code: '',
+    name_ar: '',
+    name_en: '',
+    category: 'تشغيلي',
+    account_id: '',
+    account_name: '',
+};
+
+const normalizeText = (value: unknown) => String(value || '').trim();
+
+const getExpenseNameAr = (row: ExpenseTypeRow) => normalizeText(row.name_ar || row.name);
 
 export const ExpenseTypes = () => {
-    const [types, setTypes] = useState<any[]>([]);
+    const [types, setTypes] = useState<ExpenseTypeRow[]>([]);
+    const [accounts, setAccounts] = useState<AccountRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState<'all' | string>('all');
+    const [linkedFilter, setLinkedFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-
-    // Form State
-    const [formData, setFormData] = useState({
-        name_ar: '',
-        name_en: '',
-        category: 'تشغيلي' // Default
-    });
+    const [formData, setFormData] = useState(emptyForm);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const api = (window as any).electronAPI;
 
-    useEffect(() => {
-        loadTypes();
-    }, []);
-
     const loadTypes = async () => {
         try {
             setLoading(true);
             const data = await api.crudOperation({ operation: 'READ', table: 'expense_types' });
-            setTypes(data);
+            setTypes(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(err);
-            setError('فشل في تحميل أنواع المصاريف');
+            setError('فشل في تحميل أنواع المصاريف.');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleEdit = (type: any) => {
-        setFormData({
-            name_ar: type.name_ar || type.name || '',
-            name_en: type.name_en || '',
-            category: type.category || 'تشغيلي'
-        });
-        setEditingId(type.id);
+    const loadAccounts = async () => {
+        try {
+            const list =
+                (await api?.account?.getAccounts?.()) ||
+                (await api?.getAccounts?.()) ||
+                [];
+
+            const normalized = (Array.isArray(list) ? list : []).filter((account: AccountRow) => {
+                const postingAllowed = account.postingAllowed ?? true;
+                const accountType = normalizeText(account.accountType || account.type).toUpperCase();
+                const accountCategory = normalizeText(account.accountCategory || account.category).toUpperCase();
+                const isExpenseAccount =
+                    accountType === 'EXPENSE' ||
+                    accountCategory === 'EXPENSE' ||
+                    accountCategory === 'OPERATING_EXPENSE' ||
+                    accountCategory === 'OTHER_EXPENSE';
+
+                return postingAllowed && isExpenseAccount;
+            });
+
+            setAccounts(normalized);
+        } catch (err) {
+            console.error('Failed to load accounts', err);
+            setAccounts([]);
+        }
+    };
+
+    useEffect(() => {
+        void Promise.all([loadTypes(), loadAccounts()]);
+    }, []);
+
+    const openCreate = () => {
+        setEditingId(null);
+        setFormData(emptyForm);
+        setError(null);
         setIsAdding(true);
     };
 
     const handleClose = () => {
         setIsAdding(false);
         setEditingId(null);
-        setFormData({
-            name_ar: '',
-            name_en: '',
-            category: 'تشغيلي'
-        });
+        setFormData(emptyForm);
         setError(null);
+    };
+
+    useCreateIntent(openCreate);
+
+    const handleEdit = (type: ExpenseTypeRow) => {
+        setFormData({
+            code: normalizeText(type.code),
+            name_ar: getExpenseNameAr(type),
+            name_en: normalizeText(type.name_en),
+            category: normalizeText(type.category) || 'تشغيلي',
+            account_id: normalizeText(type.account_id),
+            account_name: normalizeText(type.account_name),
+        });
+        setEditingId(String(type.id || ''));
+        setError(null);
+        setIsAdding(true);
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
-        if (!formData.name_ar) {
-            setError('اسم النوع مطلوب');
+        if (!normalizeText(formData.name_ar)) {
+            setError('اسم نوع المصروف مطلوب.');
             return;
         }
 
@@ -80,7 +158,7 @@ export const ExpenseTypes = () => {
             setSaving(true);
             const payload = {
                 ...formData,
-                name: formData.name_ar // Fallback for legacy 'name' column if needed
+                name: formData.name_ar,
             };
 
             if (editingId) {
@@ -88,19 +166,19 @@ export const ExpenseTypes = () => {
                     operation: 'UPDATE',
                     table: 'expense_types',
                     data: payload,
-                    id: editingId
+                    id: editingId,
                 });
             } else {
                 await api.crudOperation({
                     operation: 'CREATE',
                     table: 'expense_types',
-                    data: payload
+                    data: payload,
                 });
             }
 
             handleClose();
-            loadTypes();
-        } catch (err: any) {
+            await loadTypes();
+        } catch (err) {
             console.error(err);
             setError('حدث خطأ أثناء الحفظ. حاول مرة أخرى.');
         } finally {
@@ -113,133 +191,203 @@ export const ExpenseTypes = () => {
 
         try {
             await api.crudOperation({ operation: 'DELETE', table: 'expense_types', id });
-            loadTypes();
+            await loadTypes();
         } catch (err) {
             console.error(err);
-            alert('فشل في الحذف');
+            setError('فشل في حذف نوع المصروف.');
         }
     };
 
-    const filteredTypes = types.filter(t =>
-        (t.name_ar || t.name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (t.name_en || '').toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredTypes = useMemo(() => {
+        const query = search.trim().toLowerCase();
+
+        return types.filter((row) => {
+            const matchesSearch =
+                !query ||
+                getExpenseNameAr(row).toLowerCase().includes(query) ||
+                normalizeText(row.name_en).toLowerCase().includes(query) ||
+                normalizeText(row.code).toLowerCase().includes(query) ||
+                normalizeText(row.account_name).toLowerCase().includes(query);
+
+            if (!matchesSearch) return false;
+
+            if (categoryFilter !== 'all' && normalizeText(row.category || 'تشغيلي') !== categoryFilter) {
+                return false;
+            }
+
+            const linked = Boolean(normalizeText(row.account_id));
+            if (linkedFilter === 'linked' && !linked) return false;
+            if (linkedFilter === 'unlinked' && linked) return false;
+
+            return true;
+        });
+    }, [types, search, categoryFilter, linkedFilter]);
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                        <div className="p-2 bg-red-100 rounded-lg text-red-600">
-                            <Banknote size={24} />
-                        </div>
-                        أنواع المصاريف (Expense Types)
-                    </h1>
-                    <p className="text-gray-500 mt-1 mr-12">إدارة تصنيفات المصاريف الإدارية والتشغيلية</p>
-                </div>
+        <div className="app-page" dir="rtl">
+            <WorkspaceHeader
+                icon={<Banknote size={22} />}
+                title="أنواع المصاريف"
+                subtitle="جدول منظم لأنواع المصاريف مع فلترة وربط مباشر بالحسابات."
+                badges={[
+                    { label: `${types.length} نوع`, tone: 'info' },
+                    { label: `${filteredTypes.length} نتيجة`, tone: 'neutral' },
+                    { label: `${types.filter((row) => normalizeText(row.account_id)).length} مرتبط بحساب`, tone: 'success' },
+                ]}
+                actions={(
+                    <button
+                        onClick={openCreate}
+                        className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition hover:brightness-105"
+                    >
+                        <span className="inline-flex items-center gap-2">
+                            <Plus size={16} />
+                            <span>إضافة نوع جديد</span>
+                        </span>
+                    </button>
+                )}
+                className="mb-6"
+            />
 
-                <button
-                    onClick={() => setIsAdding(true)}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
-                >
-                    <Plus size={20} />
-                    إضافة نوع جديد
-                </button>
-            </div>
-
-            {/* Error Alert */}
             {error && (
-                <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 flex items-center gap-3 border border-red-100 animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle size={20} />
-                    {error}
-                    <button onClick={() => setError(null)} className="mr-auto hover:bg-red-100 p-1 rounded">
+                <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <AlertCircle size={18} />
+                    <span>{error}</span>
+                    <button onClick={() => setError(null)} className="mr-auto rounded-md p-1 hover:bg-rose-100">
                         <X size={16} />
                     </button>
                 </div>
             )}
 
-            {/* Search & Content */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                {/* Toolbar */}
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
-                    <div className="relative w-full sm:w-96">
-                        <input
-                            type="text"
-                            placeholder="بحث باسم المصروف..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
-                        />
-                        <Search className="absolute right-3 top-3 text-gray-400" size={18} />
-                    </div>
-                    <div className="text-sm text-gray-500 font-medium bg-white px-3 py-1 rounded-md border shadow-sm">
-                        الإجمالي: <span className="text-blue-600 font-bold">{filteredTypes.length}</span>
-                    </div>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+                <div className="relative min-w-[260px] flex-1">
+                    <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="بحث بالاسم أو الكود أو الحساب..."
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white pr-10 pl-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
                 </div>
 
-                {/* Loading State */}
+                <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="h-11 min-w-[170px] rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                >
+                    <option value="all">كل التصنيفات</option>
+                    {CATEGORY_OPTIONS.map((category) => (
+                        <option key={category} value={category}>
+                            {category}
+                        </option>
+                    ))}
+                </select>
+
+                <select
+                    value={linkedFilter}
+                    onChange={(e) => setLinkedFilter(e.target.value as typeof linkedFilter)}
+                    className="h-11 min-w-[170px] rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                >
+                    <option value="all">كل الحالات</option>
+                    <option value="linked">مرتبطة بحساب</option>
+                    <option value="unlinked">غير مرتبطة</option>
+                </select>
+            </div>
+
+            <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-gradient-to-l from-sky-50 to-blue-50 px-6 py-4">
+                    <h2 className="text-lg font-bold text-slate-900">قائمة أنواع المصاريف</h2>
+                    <p className="text-sm text-slate-600">
+                        عدد السجلات الحالية: <span className="font-semibold">{filteredTypes.length}</span>
+                    </p>
+                </div>
+
                 {loading ? (
-                    <div className="p-12 text-center flex flex-col items-center justify-center text-gray-400">
-                        <Loader2 size={40} className="animate-spin mb-4 text-blue-500" />
+                    <div className="flex flex-col items-center justify-center p-14 text-slate-400">
+                        <Loader2 size={36} className="mb-3 animate-spin text-sky-500" />
                         <p>جاري تحميل البيانات...</p>
                     </div>
                 ) : (
-                    /* Table */
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right">
-                            <thead className="bg-[#f8fafc] text-gray-600 font-semibold text-sm uppercase tracking-wider border-b">
+                        <table className="w-full border-separate border-spacing-0 text-right text-[13px] text-slate-700">
+                            <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
                                 <tr>
-                                    <th className="px-6 py-4">الاسم (عربي)</th>
-                                    <th className="px-6 py-4">الاسم (English)</th>
-                                    <th className="px-6 py-4">التصنيف</th>
-                                    <th className="px-6 py-4 text-center w-32">إجراءات</th>
+                                    <th className="w-[70px] border-b border-l border-slate-200 bg-slate-50 p-3 text-center">الرقم</th>
+                                    <th className="min-w-[120px] border-b border-l border-slate-200 bg-slate-50 p-3">الكود</th>
+                                    <th className="min-w-[220px] border-b border-l border-slate-200 bg-slate-50 p-3">الاسم (عربي)</th>
+                                    <th className="min-w-[220px] border-b border-l border-slate-200 bg-slate-50 p-3">الاسم (English)</th>
+                                    <th className="min-w-[130px] border-b border-l border-slate-200 bg-slate-50 p-3">التصنيف</th>
+                                    <th className="min-w-[260px] border-b border-l border-slate-200 bg-slate-50 p-3">الحساب المرتبط</th>
+                                    <th className="w-[120px] border-b border-slate-200 bg-slate-50 p-3 text-center">إجراءات</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody>
                                 {filteredTypes.length > 0 ? (
                                     filteredTypes.map((type, index) => (
-                                        <tr key={type.id || index} className="hover:bg-slate-50 transition-colors group">
-                                            <td className="px-6 py-4 font-medium text-gray-800">
-                                                {type.name_ar || type.name}
+                                        <tr key={type.id || `${type.code}-${index}`} className="group">
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 text-center font-mono font-bold text-slate-500 transition group-hover:bg-sky-50/40">
+                                                {String(index + 1).padStart(2, '0')}
                                             </td>
-                                            <td className="px-6 py-4 text-gray-600 font-mono text-sm">
-                                                {type.name_en || '-'}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 rounded-md text-xs font-medium ${type.category === 'إداري'
-                                                        ? 'bg-purple-100 text-purple-700'
-                                                        : 'bg-emerald-100 text-emerald-700'
-                                                    }`}>
-                                                    {type.category || 'تشغيلي'}
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 transition group-hover:bg-sky-50/40">
+                                                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-700">
+                                                    {normalizeText(type.code) || '-'}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button
-                                                    onClick={() => handleEdit(type)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="تعديل"
-                                                >
-                                                    <Edit size={18} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(type.id)}
-                                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="حذف"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 font-medium text-slate-800 transition group-hover:bg-sky-50/40">
+                                                {getExpenseNameAr(type)}
+                                            </td>
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 font-mono text-sm text-slate-600 transition group-hover:bg-sky-50/40">
+                                                {normalizeText(type.name_en) || '-'}
+                                            </td>
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 transition group-hover:bg-sky-50/40">
+                                                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                                                    normalizeText(type.category) === 'إداري'
+                                                        ? 'bg-purple-100 text-purple-700'
+                                                        : 'bg-emerald-100 text-emerald-700'
+                                                }`}>
+                                                    {normalizeText(type.category) || 'تشغيلي'}
+                                                </span>
+                                            </td>
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 transition group-hover:bg-sky-50/40">
+                                                {normalizeText(type.account_id) ? (
+                                                    <div className="flex items-center gap-2 text-sm text-slate-700">
+                                                        <Link2 size={14} className="text-sky-600" />
+                                                        <span className="truncate">
+                                                            {normalizeText(type.account_name) || normalizeText(type.account_id)}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-sm text-slate-400">غير مرتبط</span>
+                                                )}
+                                            </td>
+                                            <td className="border-b border-slate-200 bg-white p-3 transition group-hover:bg-sky-50/40">
+                                                <div className="flex justify-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                                    <button
+                                                        onClick={() => handleEdit(type)}
+                                                        className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                                                        title="تعديل"
+                                                    >
+                                                        <Edit size={18} />
+                                                    </button>
+                                                    {type.id && (
+                                                        <button
+                                                            onClick={() => handleDelete(String(type.id))}
+                                                            className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+                                                            title="حذف"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={4} className="py-16 text-center text-gray-400">
+                                        <td colSpan={7} className="border-b border-slate-200 bg-white py-16 text-center text-slate-400">
                                             <div className="flex flex-col items-center gap-3">
-                                                <div className="bg-gray-50 p-4 rounded-full">
-                                                    <Search size={32} className="text-gray-300" />
-                                                </div>
-                                                <p>لا توجد أنواع مصاريف مطابقة للبحث</p>
+                                                <Search size={28} className="text-slate-300" />
+                                                <p>لا توجد أنواع مصاريف مطابقة للفلاتر الحالية.</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -250,72 +398,114 @@ export const ExpenseTypes = () => {
                 )}
             </div>
 
-            {/* Add/Edit Modal */}
             {isAdding && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
+                        <div className="flex items-center justify-between border-b bg-gray-50 px-6 py-4">
+                            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                 {editingId ? <Edit className="text-blue-600" size={20} /> : <Plus className="text-blue-600" size={20} />}
                                 {editingId ? 'تعديل نوع مصروف' : 'إضافة نوع جديد'}
                             </h3>
-                            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <button onClick={handleClose} className="text-gray-400 transition-colors hover:text-gray-600">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSave} className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (عربي) <span className="text-red-500">*</span></label>
-                                <input
-                                    type="text"
-                                    value={formData.name_ar}
-                                    onChange={e => setFormData({ ...formData, name_ar: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-right"
-                                    placeholder="مثال: كهرباء ومياه"
-                                    dir="rtl"
-                                    autoFocus
-                                />
+                        <form onSubmit={handleSave} className="space-y-4 p-6">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">الكود</label>
+                                    <input
+                                        type="text"
+                                        value={formData.code}
+                                        onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                                        className="w-full rounded-lg border px-3 py-2 font-mono outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        placeholder="EXP-001"
+                                        dir="ltr"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">التصنيف</label>
+                                    <select
+                                        value={formData.category}
+                                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                    >
+                                        {CATEGORY_OPTIONS.map((category) => (
+                                            <option key={category} value={category}>
+                                                {category}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                                        الاسم (عربي) <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.name_ar}
+                                        onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        placeholder="مثال: كهرباء ومياه"
+                                        autoFocus
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">الاسم (English)</label>
+                                    <input
+                                        type="text"
+                                        value={formData.name_en}
+                                        onChange={(e) => setFormData({ ...formData, name_en: e.target.value })}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        placeholder="e.g. Electricity & Water"
+                                        dir="ltr"
+                                    />
+                                </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (English)</label>
-                                <input
-                                    type="text"
-                                    value={formData.name_en}
-                                    onChange={e => setFormData({ ...formData, name_en: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                                    placeholder="e.g. Electricity & Water"
-                                    dir="ltr"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">التصنيف</label>
+                                <label className="mb-1.5 block text-sm font-medium text-gray-700">ربط بالحساب</label>
                                 <select
-                                    value={formData.category}
-                                    onChange={e => setFormData({ ...formData, category: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                    value={formData.account_id}
+                                    onChange={(e) => {
+                                        const selected = accounts.find((account) => account.id === e.target.value);
+                                        setFormData({
+                                            ...formData,
+                                            account_id: e.target.value,
+                                            account_name: selected
+                                                ? `${normalizeText(selected.accountCode)} - ${normalizeText(selected.name_ar || selected.name)}`
+                                                : '',
+                                        });
+                                    }}
+                                    className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                 >
-                                    <option value="تشغيلي">تشغيلي (Operational)</option>
-                                    <option value="إداري">إداري (Administrative)</option>
-                                    <option value="تسويقي">تسويقي (Marketing)</option>
-                                    <option value="تمويلي">تمويلي (Financial)</option>
+                                    <option value="">بدون ربط</option>
+                                    {accounts.map((account) => (
+                                        <option key={account.id} value={account.id}>
+                                            {`${normalizeText(account.accountCode)} - ${normalizeText(account.name_ar || account.name)}`}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
-                            <div className="pt-4 flex gap-3">
+                            <div className="flex gap-3 pt-4">
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                                    className="flex-1 rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-200"
                                 >
                                     إلغاء
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={saving}
-                                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm shadow-blue-200 transition-all flex justify-center items-center gap-2 disabled:opacity-70"
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition-all hover:bg-blue-700 disabled:opacity-70"
                                 >
                                     {saving && <Loader2 size={16} className="animate-spin" />}
                                     {editingId ? 'حفظ التعديلات' : 'إضافة النوع'}

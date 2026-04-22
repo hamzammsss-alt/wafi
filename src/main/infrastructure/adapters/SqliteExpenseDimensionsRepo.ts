@@ -372,6 +372,9 @@ export class SqliteExpenseDimensionsRepo implements ExpenseDimensionsRepositoryP
                 name TEXT,
                 name_en TEXT,
                 name_ar TEXT,
+                category TEXT,
+                account_id TEXT,
+                account_name TEXT,
                 company_id TEXT,
                 is_active INTEGER DEFAULT 1,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -406,6 +409,9 @@ export class SqliteExpenseDimensionsRepo implements ExpenseDimensionsRepositoryP
         this.safeAddColumn('expense_types', 'code', 'TEXT');
         this.safeAddColumn('expense_types', 'name_en', 'TEXT');
         this.safeAddColumn('expense_types', 'name_ar', 'TEXT');
+        this.safeAddColumn('expense_types', 'category', 'TEXT');
+        this.safeAddColumn('expense_types', 'account_id', 'TEXT');
+        this.safeAddColumn('expense_types', 'account_name', 'TEXT');
         this.safeAddColumn('expense_types', 'company_id', 'TEXT');
         this.safeAddColumn('expense_types', 'is_active', 'INTEGER DEFAULT 1');
         this.safeAddColumn('expense_types', 'created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP');

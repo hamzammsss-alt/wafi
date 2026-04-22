@@ -61,6 +61,8 @@ interface PaymentAgainstLine {
     accountCode: string;
     accountName: string;
     lineCurrency: string;
+    expenseTypeId?: string;
+    vehicleId?: string;
     subAccountCode?: string;
     reference?: string;
     debitForeign: number;
@@ -113,6 +115,16 @@ interface SalesRepOption {
 interface CurrencyRateHistoryEntry {
     date: string;
     rate: number;
+}
+
+interface ExpenseTypeOption {
+    id: string;
+    name: string;
+}
+
+interface VehicleOption {
+    id: string;
+    label: string;
 }
 
 interface AccountTreeNodeLike {
@@ -237,6 +249,8 @@ const emptyAgainstLine = (): PaymentAgainstLine => ({
     accountCode: '',
     accountName: '',
     lineCurrency: 'ILS',
+    expenseTypeId: '',
+    vehicleId: '',
     subAccountCode: '',
     reference: '',
     debitForeign: 0,
@@ -272,6 +286,8 @@ export const PaymentVoucher = () => {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [partnerOptions, setPartnerOptions] = useState<PartnerOption[]>([]);
     const [salesReps, setSalesReps] = useState<SalesRepOption[]>([]);
+    const [expenseTypes, setExpenseTypes] = useState<ExpenseTypeOption[]>([]);
+    const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
     const [accountIndexById, setAccountIndexById] = useState<Record<string, AccountIndexItem>>({});
     const [currencyHistoryMap, setCurrencyHistoryMap] = useState<Record<string, CurrencyRateHistoryEntry[]>>({});
     const [headerDescriptionOptions, setHeaderDescriptionOptions] = useState<string[]>([]);
@@ -326,7 +342,7 @@ export const PaymentVoucher = () => {
             const api = (window as any).electronAPI;
             if (!api) return;
 
-            const [bks, bankAccountRows, curs, ccs, brs, customerRows, supplierRows, employeeRows, salesRepRows, paymentRows, accountTreeRows] = await Promise.all([
+            const [bks, bankAccountRows, curs, ccs, brs, customerRows, supplierRows, employeeRows, salesRepRows, paymentRows, accountTreeRows, expenseTypeRows, vehicleRows] = await Promise.all([
                 api.masterData.getBanks(),
                 api.masterData.getBankAccounts ? api.masterData.getBankAccounts() : Promise.resolve([]),
                 api.currency.getCurrencies(),
@@ -337,7 +353,9 @@ export const PaymentVoucher = () => {
                 api.hr?.getEmployees ? api.hr.getEmployees() : Promise.resolve([]),
                 api.partner?.getSalesReps ? api.partner.getSalesReps() : Promise.resolve([]),
                 api.treasury.getPayments ? api.treasury.getPayments({}) : Promise.resolve([]),
-                loadUnifiedAccountTree(api, true)
+                loadUnifiedAccountTree(api, true),
+                api.crudOperation ? api.crudOperation({ operation: 'READ', table: 'expense_types' }) : Promise.resolve([]),
+                api.logistics?.getVehicles ? api.logistics.getVehicles() : Promise.resolve([])
             ]);
 
             setBanks(bks || []); setBankAccounts((bankAccountRows || []).filter((row: any) => row?.is_active)); setCurrencies(curs || []);
@@ -383,6 +401,29 @@ export const PaymentVoucher = () => {
                 })
                 .filter(Boolean) as SalesRepOption[];
             setSalesReps(reps);
+            setExpenseTypes(
+                (Array.isArray(expenseTypeRows) ? expenseTypeRows : [])
+                    .filter((row: any) => Number(row?.is_active ?? 1) !== 0)
+                    .map((row: any) => ({
+                        id: String(row.id),
+                        name: normalizeText(row?.name_ar || row?.name || row?.name_en || row?.code)
+                    }))
+                    .filter((row: ExpenseTypeOption) => row.id && row.name)
+            );
+            setVehicles(
+                (Array.isArray(vehicleRows) ? vehicleRows : [])
+                    .map((row: any) => {
+                        const code = normalizeText(row?.vehicle_code);
+                        const plate = normalizeText(row?.plate_no);
+                        const title = normalizeText(row?.description || row?.model || row?.brand);
+                        const labelParts = [code, plate, title].filter(Boolean);
+                        return {
+                            id: String(row.id),
+                            label: labelParts.join(' - ') || String(row.id)
+                        };
+                    })
+                    .filter((row: VehicleOption) => row.id && row.label)
+            );
 
             const paymentList = Array.isArray(paymentRows) ? paymentRows : [];
             const historicalHeaderDescriptions = toUniqueTextList(paymentList.map((row: any) => row?.description));
@@ -533,6 +574,8 @@ export const PaymentVoucher = () => {
                             accountCode: line.account_code || '',
                             accountName: line.account_name || '',
                             lineCurrency: 'ILS',
+                            expenseTypeId: line.expense_type_id || line.expenseTypeId || '',
+                            vehicleId: line.vehicle_id || line.vehicleId || '',
                             subAccountCode: line.sub_account_id || line.cost_center_id || line.cost_center || '',
                             reference: line.line_description || '',
                             debitForeign: Number(line.debit) || 0,
@@ -858,6 +901,10 @@ export const PaymentVoucher = () => {
         setAgainstLines(prev => prev.map(line => {
             if (line.id !== id) return line;
             const updated = { ...line, [field]: value };
+            if (field === 'expenseTypeId') {
+                updated.expenseTypeId = String(value || '');
+                updated.vehicleId = '';
+            }
             if (field === 'lineCurrency' || field === 'debitForeign') {
                 const fx = Number(field === 'debitForeign' ? value : updated.debitForeign) || 0;
                 const local = Math.round(fx * resolveRateForDate(field === 'lineCurrency' ? String(value) : updated.lineCurrency, header.date) * 100) / 100;
@@ -1078,6 +1125,8 @@ export const PaymentVoucher = () => {
                     debit: line.debitLocal,
                     debit_foreign: line.debitForeign,
                     currency: line.lineCurrency,
+                    expense_type_id: line.expenseTypeId || null,
+                    vehicle_id: line.vehicleId || null,
                     reference: line.reference,
                     reference_type: inferReferenceTypeFromAccountMeta(accountIndexById[normalizeText(line.accountId)] || null),
                     sub_account_id: line.subAccountCode || null,
@@ -1301,6 +1350,8 @@ export const PaymentVoucher = () => {
                                         <tr>
                                             <th className="px-3 py-3 w-[220px]">حساب</th>
                                             <th className="px-3 py-3 w-[90px]">عملة</th>
+                                            <th className="px-3 py-3 w-[180px]">نوع المصروف</th>
+                                            <th className="px-3 py-3 w-[180px]">المركبة</th>
                                             <th className="px-3 py-3 w-[110px]">حساب فرعي</th>
                                             <th className="px-3 py-3 w-[120px]">مرجع</th>
                                             <th className="px-3 py-3 w-[120px]">قيمة مدين</th>
@@ -1323,6 +1374,32 @@ export const PaymentVoucher = () => {
                                             <tr key={line.id} className="hover:bg-slate-50/50 transition-colors">
                                                 <td className="p-2"><button type="button" onClick={() => { setPickerTarget('AGAINST'); setActiveLineId(line.id); setAccountPickerOpen(true); }} className={`w-full rounded-lg border px-3 py-2 text-right text-sm ${line.accountId ? 'border-slate-200 bg-white text-slate-700' : 'border-red-200 bg-red-50 text-red-600'}`}>{line.accountCode ? `${line.accountCode} - ${line.accountName}` : (line.accountName || 'اختر حساب المقابل...')}</button></td>
                                                 <td className="p-2"><select value={line.lineCurrency} onChange={e => updateAgainstLine(line.id, 'lineCurrency', e.target.value)} disabled={!line.accountId} className={`w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-red-500 ${line.accountId ? 'bg-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>{currencies.map((currency) => (<option key={currency.id} value={currency.code}>{currency.code}</option>))}</select></td>
+                                                <td className="p-2">
+                                                    <select
+                                                        value={line.expenseTypeId || ''}
+                                                        onChange={e => updateAgainstLine(line.id, 'expenseTypeId', e.target.value)}
+                                                        disabled={!line.accountId}
+                                                        className={`w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-red-500 ${line.accountId ? 'bg-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                                                    >
+                                                        <option value="">اختر نوع المصروف...</option>
+                                                        {expenseTypes.map((expenseType) => (
+                                                            <option key={expenseType.id} value={expenseType.id}>{expenseType.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                                <td className="p-2">
+                                                    <select
+                                                        value={line.vehicleId || ''}
+                                                        onChange={e => updateAgainstLine(line.id, 'vehicleId', e.target.value)}
+                                                        disabled={!line.accountId || !line.expenseTypeId}
+                                                        className={`w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-red-500 ${line.accountId && line.expenseTypeId ? 'bg-white' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                                                    >
+                                                        <option value="">{line.expenseTypeId ? 'اختر المركبة...' : 'اختر نوع المصروف أولاً'}</option>
+                                                        {vehicles.map((vehicle) => (
+                                                            <option key={vehicle.id} value={vehicle.id}>{vehicle.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
                                                 <td className="p-2">
                                                     <select
                                                         value={line.subAccountCode || ''}

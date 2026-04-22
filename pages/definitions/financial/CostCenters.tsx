@@ -1,56 +1,83 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+    AlertCircle,
+    Briefcase,
+    ChevronDown,
+    ChevronRight,
+    Edit,
+    Folder,
     Layers,
+    Loader2,
     Plus,
     Search,
     Trash2,
-    Edit,
-    X,
-    CheckCircle2,
-    AlertCircle,
-    Loader2,
-    ChevronRight,
-    ChevronDown,
-    Folder,
-    Briefcase
+    X
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+
+type CostCenterRow = {
+    id: string;
+    code: string;
+    name_ar: string;
+    name_en?: string;
+    type?: 'DEPARTMENT' | 'PROJECT' | 'BRANCH';
+    parent_id?: string | null;
+    manager_name?: string;
+};
+
+type CostCenterTreeNode = CostCenterRow & {
+    children: CostCenterTreeNode[];
+};
+
+const typeLabelMap: Record<string, string> = {
+    DEPARTMENT: 'قسم',
+    PROJECT: 'مشروع',
+    BRANCH: 'فرع'
+};
+
+const typeBadgeMap: Record<string, string> = {
+    DEPARTMENT: 'bg-emerald-100 text-emerald-700',
+    PROJECT: 'bg-violet-100 text-violet-700',
+    BRANCH: 'bg-amber-100 text-amber-700'
+};
+
+const emptyForm = {
+    code: '',
+    name_ar: '',
+    name_en: '',
+    type: 'DEPARTMENT',
+    parent_id: '',
+    manager_name: ''
+};
 
 export const CostCenters = () => {
-    const [centers, setCenters] = useState<any[]>([]);
+    const [centers, setCenters] = useState<CostCenterRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-    // Form State
-    const [formData, setFormData] = useState({
-        code: '',
-        name_ar: '',
-        name_en: '',
-        type: 'DEPARTMENT',
-        parent_id: '',
-        manager_name: ''
-    });
+    const [formData, setFormData] = useState(emptyForm);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const api = (window as any).electronAPI?.masterData;
 
     useEffect(() => {
-        loadCenters();
+        void loadCenters();
     }, []);
 
     const loadCenters = async () => {
         try {
             setLoading(true);
             const data = await api.getCostCenters();
-            setCenters(data);
-            // Default expand roots
+            const rows = Array.isArray(data) ? data : [];
+            setCenters(rows);
+
             const initialExpanded: Record<string, boolean> = {};
-            data.filter((c: any) => !c.parent_id).forEach((c: any) => initialExpanded[c.id] = true);
-            setExpanded(prev => ({ ...initialExpanded, ...prev }));
+            rows.filter((row: CostCenterRow) => !row.parent_id).forEach((row: CostCenterRow) => {
+                initialExpanded[row.id] = true;
+            });
+            setExpanded((prev) => ({ ...initialExpanded, ...prev }));
         } catch (err) {
             console.error(err);
             setError('فشل في تحميل مراكز التكلفة');
@@ -59,10 +86,10 @@ export const CostCenters = () => {
         }
     };
 
-    const handleEdit = (center: any) => {
+    const handleEdit = (center: CostCenterRow) => {
         setFormData({
             code: center.code || '',
-            name_ar: center.name_ar,
+            name_ar: center.name_ar || '',
             name_en: center.name_en || '',
             type: center.type || 'DEPARTMENT',
             parent_id: center.parent_id || '',
@@ -74,21 +101,14 @@ export const CostCenters = () => {
 
     const handleAddSub = (parentId: string) => {
         handleClose();
-        setFormData(prev => ({ ...prev, parent_id: parentId }));
+        setFormData((prev) => ({ ...prev, parent_id: parentId }));
         setIsAdding(true);
     };
 
     const handleClose = () => {
         setIsAdding(false);
         setEditingId(null);
-        setFormData({
-            code: '',
-            name_ar: '',
-            name_en: '',
-            type: 'DEPARTMENT',
-            parent_id: '',
-            manager_name: ''
-        });
+        setFormData(emptyForm);
         setError(null);
     };
 
@@ -103,7 +123,7 @@ export const CostCenters = () => {
 
         try {
             setSaving(true);
-            const payload = { ...formData }; // Add other fields if necessary
+            const payload = { ...formData };
 
             if (editingId) {
                 await api.saveCostCenter({ id: editingId, ...payload });
@@ -111,10 +131,9 @@ export const CostCenters = () => {
                 await api.saveCostCenter(payload);
             }
 
-            // Success
             handleClose();
-            loadCenters();
-        } catch (err: any) {
+            await loadCenters();
+        } catch (err) {
             console.error(err);
             setError('حدث خطأ أثناء الحفظ. حاول مرة أخرى.');
         } finally {
@@ -127,7 +146,7 @@ export const CostCenters = () => {
 
         try {
             await api.deleteCostCenter(id);
-            loadCenters();
+            await loadCenters();
         } catch (err) {
             console.error(err);
             alert('فشل في الحذف');
@@ -135,16 +154,17 @@ export const CostCenters = () => {
     };
 
     const toggleExpand = (id: string) => {
-        setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+        setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
     };
 
-    // Tree Builder & Flattener
-    const buildTree = (items: any[]) => {
-        const map: any = {};
-        const roots: any[] = [];
+    const buildTree = (items: CostCenterRow[]) => {
+        const map: Record<string, CostCenterTreeNode> = {};
+        const roots: CostCenterTreeNode[] = [];
+
         items.forEach((item) => {
             map[item.id] = { ...item, children: [] };
         });
+
         items.forEach((item) => {
             if (item.parent_id && map[item.parent_id]) {
                 map[item.parent_id].children.push(map[item.id]);
@@ -152,120 +172,125 @@ export const CostCenters = () => {
                 roots.push(map[item.id]);
             }
         });
+
         return roots;
     };
 
-    const flattenTree = (nodes: any[], level = 0, result: any[] = []) => {
+    const flattenTree = (nodes: CostCenterTreeNode[], level = 0, result: Array<CostCenterTreeNode & { level: number }> = []) => {
         for (const node of nodes) {
-            // Apply search filter
-            const matchesSearch = search === '' ||
-                node.name_ar.toLowerCase().includes(search.toLowerCase()) ||
-                node.code.includes(search);
-
-            // If search is active, show flat list of matches logic??
-            // Simplified: If search is active, show all matches regardless of hierarchy OR keep hierarchy but highlight?
-            // Let's keep specific hierarchy behavior: if we search, we flatten the list to show matches
             if (search) {
-                if (matchesSearch) result.push({ ...node, level });
-                if (node.children) flattenTree(node.children, level + 1, result);
-            } else {
-                result.push({ ...node, level });
-                if (expanded[node.id] && node.children) {
-                    flattenTree(node.children, level + 1, result);
-                }
+                const query = search.toLowerCase();
+                const matches =
+                    String(node.name_ar || '').toLowerCase().includes(query) ||
+                    String(node.code || '').toLowerCase().includes(query);
+
+                if (matches) result.push({ ...node, level: 0 });
+                if (node.children?.length) flattenTree(node.children, level + 1, result);
+                continue;
+            }
+
+            result.push({ ...node, level });
+            if (expanded[node.id] && node.children?.length) {
+                flattenTree(node.children, level + 1, result);
             }
         }
         return result;
     };
 
-    const treeRoots = buildTree(centers);
-    // If search is active, we just filter the raw list roughly or use the flattened tree with a flag?
-    // Let's simple filter the original list if search is on, otherwise use tree
-    const displayItems = search
-        ? centers.filter(c => c.name_ar.includes(search) || c.code.includes(search)).map(c => ({ ...c, level: 0 }))
-        : flattenTree(treeRoots);
-
+    const displayItems = useMemo(() => {
+        const treeRoots = buildTree(centers);
+        return search
+            ? centers
+                .filter((center) =>
+                    String(center.name_ar || '').toLowerCase().includes(search.toLowerCase()) ||
+                    String(center.code || '').toLowerCase().includes(search.toLowerCase())
+                )
+                .map((center) => ({ ...center, children: [], level: 0 }))
+            : flattenTree(treeRoots);
+    }, [centers, search, expanded]);
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                        <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
+                    <h1 className="flex items-center gap-3 text-2xl font-bold text-gray-800">
+                        <div className="rounded-lg bg-orange-100 p-2 text-orange-600">
                             <Layers size={24} />
                         </div>
                         مراكز التكلفة (Cost Centers)
                     </h1>
-                    <p className="text-gray-500 mt-1 mr-12">الهيكل التنظيمي للمراكز والمشاريع والفروع</p>
+                    <p className="mr-12 mt-1 text-gray-500">الهيكل التنظيمي للمراكز والمشاريع والفروع</p>
                 </div>
 
                 <button
                     onClick={() => setIsAdding(true)}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-95"
                 >
                     <Plus size={20} />
                     إضافة مركز رئيسي
                 </button>
             </div>
 
-            {/* Error Alert */}
             {error && (
-                <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 flex items-center gap-3 border border-red-100 animate-in fade-in slide-in-from-top-2">
+                <div className="mb-6 flex items-center gap-3 rounded-lg border border-red-100 bg-red-50 p-4 text-red-700">
                     <AlertCircle size={20} />
                     {error}
-                    <button onClick={() => setError(null)} className="mr-auto hover:bg-red-100 p-1 rounded">
+                    <button onClick={() => setError(null)} className="mr-auto rounded p-1 hover:bg-red-100">
                         <X size={16} />
                     </button>
                 </div>
             )}
 
-            {/* Search & Content */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                {/* Toolbar */}
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex flex-col items-center justify-between gap-4 border-b border-gray-100 bg-gray-50/50 p-4 sm:flex-row">
                     <div className="relative w-full sm:w-96">
                         <input
                             type="text"
                             placeholder="بحث برقم أو اسم المركز..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-4 pr-10 shadow-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                         />
                         <Search className="absolute right-3 top-3 text-gray-400" size={18} />
                     </div>
-                    <div className="text-sm text-gray-500 font-medium bg-white px-3 py-1 rounded-md border shadow-sm">
-                        الإجمالي: <span className="text-blue-600 font-bold">{centers.length}</span>
+
+                    <div className="rounded-md border bg-white px-3 py-1 text-sm font-medium text-gray-500 shadow-sm">
+                        الإجمالي: <span className="font-bold text-blue-600">{centers.length}</span>
                     </div>
                 </div>
 
-                {/* Loading State */}
                 {loading ? (
-                    <div className="p-12 text-center flex flex-col items-center justify-center text-gray-400">
-                        <Loader2 size={40} className="animate-spin mb-4 text-blue-500" />
-                        <p>جاري تحميل البيانات...</p>
+                    <div className="flex flex-col items-center justify-center p-12 text-center text-gray-400">
+                        <Loader2 size={40} className="mb-4 animate-spin text-blue-500" />
+                        <p>جارِ تحميل البيانات...</p>
                     </div>
                 ) : (
-                    /* Table */
                     <div className="overflow-x-auto">
-                        <table className="w-full text-right">
-                            <thead className="bg-[#f8fafc] text-gray-600 font-semibold text-sm uppercase tracking-wider border-b">
+                        <table className="w-full text-right" style={{ minWidth: '1100px' }}>
+                            <thead className="border-b border-slate-200 bg-slate-50 text-sm font-semibold text-slate-600">
                                 <tr>
-                                    <th className="px-6 py-4 w-1/3">اسم المركز</th>
-                                    <th className="px-6 py-4">الرمز</th>
-                                    <th className="px-6 py-4">النوع</th>
-                                    <th className="px-6 py-4">المدير المسؤول</th>
-                                    <th className="px-6 py-4 text-center w-32">إجراءات</th>
+                                    <th className="w-20 px-4 py-4 text-center">الرقم</th>
+                                    <th className="min-w-[320px] px-6 py-4">اسم المركز</th>
+                                    <th className="w-40 px-6 py-4">الرمز</th>
+                                    <th className="w-40 px-6 py-4">النوع</th>
+                                    <th className="min-w-[220px] px-6 py-4">المدير المسؤول</th>
+                                    <th className="w-40 px-6 py-4 text-center">الإجراءات</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-slate-100">
                                 {displayItems.length > 0 ? (
                                     displayItems.map((center, index) => {
-                                        const hasChildren = centers.some(c => c.parent_id === center.id);
+                                        const hasChildren = centers.some((item) => item.parent_id === center.id);
                                         const isExpanded = expanded[center.id];
+                                        const typeKey = String(center.type || 'DEPARTMENT');
 
                                         return (
-                                            <tr key={center.id || `center-${index}`} className="hover:bg-slate-50 transition-colors group">
+                                            <tr key={center.id || `center-${index}`} className="group transition-colors hover:bg-slate-50/70">
+                                                <td className="px-4 py-4 text-center">
+                                                    <span className="inline-flex min-w-9 items-center justify-center rounded-lg bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                                                        {index + 1}
+                                                    </span>
+                                                </td>
                                                 <td className="px-6 py-4 font-medium text-gray-800">
                                                     <div
                                                         className="flex items-center gap-2"
@@ -274,62 +299,64 @@ export const CostCenters = () => {
                                                         {!search && (
                                                             <button
                                                                 onClick={() => toggleExpand(center.id)}
-                                                                className={`p-1 rounded hover:bg-gray-200 text-gray-500 transition-opacity ${!hasChildren ? 'opacity-0 cursor-default' : ''}`}
+                                                                className={`rounded p-1 text-gray-500 transition-opacity hover:bg-gray-200 ${!hasChildren ? 'cursor-default opacity-0' : ''}`}
                                                                 disabled={!hasChildren}
                                                             >
                                                                 {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} className="rtl:rotate-180" />}
                                                             </button>
                                                         )}
-                                                        <div className={`p-1.5 rounded-lg ${hasChildren ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+
+                                                        <div className={`rounded-lg p-1.5 ${hasChildren ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
                                                             {hasChildren ? <Folder size={16} /> : <Briefcase size={16} />}
                                                         </div>
-                                                        {center.name_ar}
+
+                                                        <span>{center.name_ar}</span>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className="font-mono text-gray-600 bg-gray-50 px-2 py-1 rounded text-xs">
+                                                    <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 font-mono text-xs text-slate-700">
                                                         {center.code}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-gray-600">
-                                                    {center.type === 'DEPARTMENT' && 'قسم'}
-                                                    {center.type === 'PROJECT' && 'مشروع'}
-                                                    {center.type === 'BRANCH' && 'فرع'}
+                                                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${typeBadgeMap[typeKey] || typeBadgeMap.DEPARTMENT}`}>
+                                                        {typeLabelMap[typeKey] || 'قسم'}
+                                                    </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-gray-500 text-sm">
-                                                    {center.manager_name || '-'}
-                                                </td>
-                                                <td className="px-6 py-4 flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => handleAddSub(center.id)}
-                                                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                        title="إضافة فرعي"
-                                                    >
-                                                        <Plus size={18} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleEdit(center)}
-                                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                        title="تعديل"
-                                                    >
-                                                        <Edit size={18} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(center.id)}
-                                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                                        title="حذف"
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
+                                                <td className="px-6 py-4 text-sm text-gray-500">{center.manager_name || '-'}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex justify-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                                        <button
+                                                            onClick={() => handleAddSub(center.id)}
+                                                            className="rounded-lg p-2 text-green-600 transition-colors hover:bg-green-50"
+                                                            title="إضافة فرعي"
+                                                        >
+                                                            <Plus size={18} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleEdit(center)}
+                                                            className="rounded-lg p-2 text-blue-600 transition-colors hover:bg-blue-50"
+                                                            title="تعديل"
+                                                        >
+                                                            <Edit size={18} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDelete(center.id)}
+                                                            className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
+                                                            title="حذف"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan={5} className="py-16 text-center text-gray-400">
+                                        <td colSpan={6} className="py-16 text-center text-gray-400">
                                             <div className="flex flex-col items-center gap-3">
-                                                <div className="bg-gray-50 p-4 rounded-full">
+                                                <div className="rounded-full bg-gray-50 p-4">
                                                     <Search size={32} className="text-gray-300" />
                                                 </div>
                                                 <p>لا توجد مراكز تكلفة</p>
@@ -343,39 +370,41 @@ export const CostCenters = () => {
                 )}
             </div>
 
-            {/* Add/Edit Modal */}
             {isAdding && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-xl">
+                        <div className="flex items-center justify-between border-b bg-gray-50 px-6 py-4">
+                            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                 {editingId ? <Edit className="text-blue-600" size={20} /> : <Plus className="text-blue-600" size={20} />}
                                 {editingId ? 'تعديل مركز تكلفة' : 'إضافة مركز تكلفة جديد'}
                             </h3>
-                            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <button onClick={handleClose} className="text-gray-400 transition-colors hover:text-gray-600">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSave} className="p-6 space-y-4">
+                        <form onSubmit={handleSave} className="space-y-4 p-6">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">الرمز (Code) <span className="text-red-500">*</span></label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                                        الرمز (Code) <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         type="text"
                                         value={formData.code}
-                                        onChange={e => setFormData({ ...formData, code: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-mono"
+                                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                                        className="w-full rounded-lg border px-3 py-2 font-mono outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                         placeholder="01"
                                         autoFocus
                                     />
                                 </div>
+
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">النوع</label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">النوع</label>
                                     <select
                                         value={formData.type}
-                                        onChange={e => setFormData({ ...formData, type: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     >
                                         <option value="DEPARTMENT">قسم (Department)</option>
                                         <option value="PROJECT">مشروع (Project)</option>
@@ -385,24 +414,26 @@ export const CostCenters = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">اسم المركز (عربي) <span className="text-red-500">*</span></label>
+                                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                                    اسم المركز (عربي) <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="text"
                                     value={formData.name_ar}
-                                    onChange={e => setFormData({ ...formData, name_ar: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-right"
+                                    onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
+                                    className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     placeholder="مثال: الإدارة العامة"
                                     dir="rtl"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (English)</label>
+                                <label className="mb-1.5 block text-sm font-medium text-gray-700">الاسم (English)</label>
                                 <input
                                     type="text"
                                     value={formData.name_en}
-                                    onChange={e => setFormData({ ...formData, name_en: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                    onChange={(e) => setFormData({ ...formData, name_en: e.target.value })}
+                                    className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     placeholder="e.g. Headquarters"
                                     dir="ltr"
                                 />
@@ -410,42 +441,42 @@ export const CostCenters = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">يتبع للمركز</label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">يتبع للمركز</label>
                                     <select
                                         value={formData.parent_id}
-                                        onChange={e => setFormData({ ...formData, parent_id: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                        onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     >
                                         <option value="">-- رئيسي --</option>
-                                        {centers.filter(c => c.id !== editingId).map(c => (
-                                            <option key={c.id} value={c.id}>{c.name_ar}</option>
+                                        {centers.filter((center) => center.id !== editingId).map((center) => (
+                                            <option key={center.id} value={center.id}>{center.name_ar}</option>
                                         ))}
                                     </select>
                                 </div>
+
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">المدير المسؤول</label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">المدير المسؤول</label>
                                     <input
                                         type="text"
                                         value={formData.manager_name}
-                                        onChange={e => setFormData({ ...formData, manager_name: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                                        placeholder=""
+                                        onChange={(e) => setFormData({ ...formData, manager_name: e.target.value })}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     />
                                 </div>
                             </div>
 
-                            <div className="pt-4 flex gap-3">
+                            <div className="flex gap-3 pt-4">
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                                    className="flex-1 rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-200"
                                 >
                                     إلغاء
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={saving}
-                                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm shadow-blue-200 transition-all flex justify-center items-center gap-2 disabled:opacity-70"
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white shadow-sm shadow-blue-200 transition-all hover:bg-blue-700 disabled:opacity-70"
                                 >
                                     {saving && <Loader2 size={16} className="animate-spin" />}
                                     {editingId ? 'حفظ التعديلات' : 'إضافة المركز'}

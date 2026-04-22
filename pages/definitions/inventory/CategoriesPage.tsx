@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+    AlertCircle,
+    CheckCircle2,
+    Edit,
+    Folder,
+    FolderOpen,
     Layers,
+    Loader2,
     Plus,
     Search,
     Trash2,
-    Edit,
-    Save,
+    Upload,
     X,
-    Folder,
-    FolderOpen,
-    Loader2,
-    AlertCircle,
-    CheckCircle2
 } from 'lucide-react';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
@@ -25,7 +25,18 @@ interface Category {
     description?: string;
     code?: string;
     is_active?: number | boolean;
+    image_url?: string;
 }
+
+const emptyForm: Partial<Category> = {
+    name_ar: '',
+    name_en: '',
+    parent_id: '',
+    description: '',
+    code: '',
+    is_active: true,
+    image_url: '',
+};
 
 export const CategoriesPage = () => {
     const [categories, setCategories] = useState<Category[]>([]);
@@ -33,274 +44,317 @@ export const CategoriesPage = () => {
     const [search, setSearch] = useState('');
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-
-    // Form State
-    const [formData, setFormData] = useState<Partial<Category>>({
-        name_ar: '',
-        name_en: '',
-        parent_id: '',
-        description: '',
-        code: '',
-        is_active: true
-    });
+    const [formData, setFormData] = useState<Partial<Category>>(emptyForm);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        loadCategories();
+        void loadCategories();
     }, []);
 
     const loadCategories = async () => {
         try {
             setLoading(true);
             const data = await window.electronAPI.inventory.getCategories();
-            // Ensure is_active is treated as boolean for UI usually, or 0/1
-            setCategories(data);
+            setCategories(Array.isArray(data) ? data : []);
         } catch (err) {
             console.error(err);
-            setError('فشل في تحميل البيانات');
+            setError('فشل في تحميل مجموعات الأصناف.');
         } finally {
             setLoading(false);
         }
     };
 
+    const openCreate = () => {
+        setEditingId(null);
+        setFormData(emptyForm);
+        setError(null);
+        setIsAdding(true);
+    };
+
+    const closeModal = () => {
+        setIsAdding(false);
+        setEditingId(null);
+        setFormData(emptyForm);
+        setError(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    useCreateIntent(openCreate);
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
 
-        if (!formData.name_ar) {
-            setError('اسم المجموعة (عربي) مطلوب');
+        if (!String(formData.name_ar || '').trim()) {
+            setError('اسم المجموعة بالعربية مطلوب.');
             return;
         }
 
         try {
             setSaving(true);
+            const payload = {
+                ...formData,
+                is_active: formData.is_active ? 1 : 0,
+            };
+
             if (editingId) {
-                await window.electronAPI.inventory.updateCategory({ ...formData, id: editingId });
+                await window.electronAPI.inventory.updateCategory({ ...payload, id: editingId });
             } else {
-                await window.electronAPI.inventory.createCategory(formData);
+                await window.electronAPI.inventory.createCategory(payload);
             }
 
-            // Success
-            setIsAdding(false);
-            setEditingId(null);
-            setFormData({ name_ar: '', name_en: '', parent_id: '', description: '', code: '', is_active: true });
-            loadCategories();
-        } catch (err: any) {
+            closeModal();
+            await loadCategories();
+        } catch (err) {
             console.error(err);
-            setError('حدث خطأ أثناء الحفظ. حاول مرة أخرى.');
+            setError('حدث خطأ أثناء حفظ المجموعة.');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('هل أنت متأكد من حذف هذه المجموعة؟ قد تؤثر على الأصناف المرتبطة بها.')) return;
+        if (!confirm('هل أنت متأكد من حذف هذه المجموعة؟ قد يؤثر ذلك على الأصناف المرتبطة بها.')) return;
 
         try {
             await window.electronAPI.inventory.deleteCategory(id);
-            loadCategories();
+            await loadCategories();
         } catch (err) {
             console.error(err);
-            alert('فشل في الحذف');
+            setError('تعذر حذف المجموعة.');
         }
     };
 
-    const handleEdit = (cat: Category) => {
+    const handleEdit = (category: Category) => {
+        setEditingId(category.id);
         setFormData({
-            name_ar: cat.name_ar,
-            name_en: cat.name_en,
-            parent_id: cat.parent_id || '',
-            description: cat.description,
-            code: cat.code || '',
-            is_active: cat.is_active === 1 || cat.is_active === true
+            name_ar: category.name_ar,
+            name_en: category.name_en || '',
+            parent_id: category.parent_id || '',
+            description: category.description || '',
+            code: category.code || '',
+            is_active: category.is_active === 1 || category.is_active === true,
+            image_url: category.image_url || '',
         });
-        setEditingId(cat.id);
-        setIsAdding(true);
-    };
-
-    const openCreate = () => {
-        setEditingId(null);
-        setFormData({ name_ar: '', name_en: '', parent_id: '', description: '', code: '', is_active: true });
         setError(null);
         setIsAdding(true);
     };
 
-    useCreateIntent(openCreate);
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
 
-    const filteredCategories = categories.filter(c =>
-        c.name_ar?.toLowerCase().includes(search.toLowerCase()) ||
-        c.name_en?.toLowerCase().includes(search.toLowerCase()) ||
-        c.code?.toLowerCase().includes(search.toLowerCase())
-    );
+        try {
+            if (window.electronAPI?.system?.saveImage) {
+                const buffer = await file.arrayBuffer();
+                const result = await window.electronAPI.system.saveImage(buffer, file.name);
+                if (!result?.success) throw new Error('saveImage failed');
+                setFormData((prev) => ({ ...prev, image_url: result.path }));
+            } else {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setFormData((prev) => ({ ...prev, image_url: reader.result as string }));
+                };
+                reader.readAsDataURL(file);
+            }
+        } catch (err) {
+            console.error(err);
+            setError('حدث خطأ أثناء رفع الصورة.');
+        } finally {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
 
-    // Helper to get parent name
+    const filteredCategories = categories.filter((category) => {
+        const query = search.trim().toLowerCase();
+        if (!query) return true;
+
+        return (
+            String(category.name_ar || '').toLowerCase().includes(query) ||
+            String(category.name_en || '').toLowerCase().includes(query) ||
+            String(category.code || '').toLowerCase().includes(query)
+        );
+    });
+
     const getParentName = (parentId?: string) => {
-        if (!parentId) return null;
-        return categories.find(c => c.id === parentId)?.name_ar;
+        if (!parentId) return 'رئيسية';
+        return categories.find((item) => item.id === parentId)?.name_ar || 'غير محدد';
     };
 
     return (
         <div className="app-page" dir="rtl">
-            {/* Header */}
             <WorkspaceHeader
                 icon={<Layers size={22} />}
                 title="مجموعات الأصناف"
-                subtitle="تصنيف الأصناف في مجموعات وعائلات لتسهيل الإدارة والتقارير."
+                subtitle="عرض جدولي منظم بنفس أسلوب شاشة الأصناف."
                 badges={[
-                    { label: `${categories.length} مجموعات`, tone: 'info' },
-                    { label: `${filteredCategories.length} مطابق`, tone: 'neutral' },
+                    { label: `${categories.length} مجموعة`, tone: 'info' },
+                    { label: `${filteredCategories.length} نتيجة`, tone: 'neutral' },
                 ]}
                 actions={(
                     <button
                         onClick={openCreate}
-                        className="rounded-xl bg-gradient-to-r from-teal-600 to-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-900/15 transition hover:brightness-105"
+                        className="rounded-xl bg-gradient-to-r from-sky-600 to-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-sky-900/15 transition hover:brightness-105"
                     >
                         <span className="inline-flex items-center gap-2">
                             <Plus size={16} />
-                            <span>إضافة مجموعة جديدة</span>
+                            <span>إضافة مجموعة</span>
                         </span>
                     </button>
                 )}
-                className="mb-8"
+                className="mb-6"
             />
 
-            <div className="hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                        <div className="p-2 bg-teal-100 rounded-lg text-teal-600">
-                            <Layers size={24} />
-                        </div>
-                        مجموعات الأصناف
-                    </h1>
-                    <p className="text-gray-500 mt-1 mr-12">تصنيف الأصناف في مجموعات وعائلات لتسهيل الإدارة والتقارير</p>
-                </div>
-
-                <button
-                    onClick={openCreate}
-                    className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
-                >
-                    <Plus size={20} />
-                    إضافة مجموعة جديدة
-                </button>
-            </div>
-
-            {/* Error Alert */}
             {error && (
-                <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 flex items-center gap-3 border border-red-100 animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle size={20} />
-                    {error}
-                    <button onClick={() => setError(null)} className="mr-auto hover:bg-red-100 p-1 rounded">
+                <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <AlertCircle size={18} />
+                    <span>{error}</span>
+                    <button onClick={() => setError(null)} className="mr-auto rounded-md p-1 hover:bg-rose-100">
                         <X size={16} />
                     </button>
                 </div>
             )}
 
-            {/* Search & Content */}
-            <div className="card overflow-hidden">
-                {/* Toolbar */}
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
-                    <div className="relative w-full sm:w-96">
-                        <input
-                            type="text"
-                            placeholder="بحث عن مجموعة (الاسم، الرمز)..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all shadow-sm"
-                        />
-                        <Search className="absolute right-3 top-3 text-gray-400" size={18} />
-                    </div>
-                    <div className="text-sm text-gray-500 font-medium bg-white px-3 py-1 rounded-md border shadow-sm">
-                        إجمالي المجموعات: <span className="text-teal-600 font-bold">{categories.length}</span>
-                    </div>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+                <div className="relative min-w-[280px] flex-1">
+                    <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="بحث سريع في مجموعات الأصناف"
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white pr-10 pl-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
                 </div>
 
-                {/* Loading State */}
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600">
+                    إجمالي المجموعات: <span className="text-slate-900">{categories.length}</span>
+                </div>
+
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700">
+                    المعروض: <span>{filteredCategories.length}</span>
+                </div>
+            </div>
+
+            {search.trim() && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setSearch('')}
+                        className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-800"
+                    >
+                        بحث: {search} ×
+                    </button>
+                </div>
+            )}
+
+            <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-gradient-to-l from-sky-50 to-blue-50 px-6 py-4">
+                    <h2 className="text-lg font-bold text-slate-900">قائمة مجموعات الأصناف</h2>
+                    <p className="text-sm text-slate-600">
+                        عدد السجلات الحالية: <span className="font-semibold">{filteredCategories.length}</span>
+                    </p>
+                </div>
+
                 {loading ? (
-                    <div className="p-12 text-center flex flex-col items-center justify-center text-gray-400">
-                        <Loader2 size={40} className="animate-spin mb-4 text-teal-500" />
+                    <div className="flex flex-col items-center justify-center p-14 text-slate-400">
+                        <Loader2 size={36} className="mb-3 animate-spin text-sky-500" />
                         <p>جاري تحميل البيانات...</p>
                     </div>
                 ) : (
-                    /* Table */
                     <div className="overflow-x-auto">
-                        <table className="dense-table w-full text-right">
-                            <thead className="bg-[#f8fafc] text-gray-600 font-semibold text-sm uppercase tracking-wider border-b">
+                        <table className="w-full border-separate border-spacing-0 text-right text-[13px] text-slate-700">
+                            <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
                                 <tr>
-                                    <th className="px-6 py-4">اسم المجموعة</th>
-                                    <th className="px-6 py-4">الرمز</th>
-                                    <th className="px-6 py-4">تتبع لـ (الأب)</th>
-                                    <th className="px-6 py-4">الحالة</th>
-                                    <th className="px-6 py-4">ملاحظات</th>
-                                    <th className="px-6 py-4 text-center w-32">إجراءات</th>
+                                    <th className="min-w-[260px] border-b border-l border-slate-200 bg-slate-50 p-3">المجموعة</th>
+                                    <th className="min-w-[120px] border-b border-l border-slate-200 bg-slate-50 p-3">الرمز</th>
+                                    <th className="min-w-[170px] border-b border-l border-slate-200 bg-slate-50 p-3">المجموعة الأب</th>
+                                    <th className="min-w-[120px] border-b border-l border-slate-200 bg-slate-50 p-3">الحالة</th>
+                                    <th className="min-w-[220px] border-b border-l border-slate-200 bg-slate-50 p-3">الوصف</th>
+                                    <th className="w-[120px] border-b border-slate-200 bg-slate-50 p-3 text-center">إجراءات</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody>
                                 {filteredCategories.length > 0 ? (
-                                    filteredCategories.map((cat) => (
-                                        <tr key={cat.id} className="hover:bg-teal-50/30 transition-colors group">
-                                            <td className="px-6 py-4 font-medium text-gray-800 flex items-center gap-3">
-                                                <div className={`p-2 rounded-lg ${cat.parent_id ? 'bg-gray-100 text-gray-500' : 'bg-teal-50 text-teal-600'}`}>
-                                                    {cat.parent_id ? <Folder size={18} /> : <FolderOpen size={18} />}
-                                                </div>
-                                                <div>
-                                                    <div>{cat.name_ar}</div>
-                                                    <div className="text-xs text-gray-400">{cat.name_en}</div>
+                                    filteredCategories.map((category) => (
+                                        <tr key={category.id} className="group">
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 align-middle transition group-hover:bg-sky-50/40">
+                                                <div className="flex items-center gap-3">
+                                                    {category.image_url ? (
+                                                        <img
+                                                            src={category.image_url}
+                                                            alt={category.name_ar}
+                                                            className="h-10 w-10 rounded-xl border border-slate-200 object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${category.parent_id ? 'bg-slate-100 text-slate-500' : 'bg-sky-100 text-sky-700'}`}>
+                                                            {category.parent_id ? <Folder size={18} /> : <FolderOpen size={18} />}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="min-w-0">
+                                                        <div className="truncate text-sm font-bold text-slate-800">{category.name_ar}</div>
+                                                        <div className="truncate text-xs text-slate-400">{category.name_en || '-'}</div>
+                                                    </div>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                {cat.code ? (
-                                                    <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-mono">
-                                                        {cat.code}
+
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 align-middle transition group-hover:bg-sky-50/40">
+                                                {category.code ? (
+                                                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">
+                                                        {category.code}
                                                     </span>
                                                 ) : '-'}
                                             </td>
-                                            <td className="px-6 py-4">
-                                                {cat.parent_id ? (
-                                                    <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium flex items-center gap-1 w-fit">
-                                                        <Layers size={12} />
-                                                        {getParentName(cat.parent_id)}
-                                                    </span>
-                                                ) : <span className="text-gray-400 text-xs">- رئيسي -</span>}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${cat.is_active
-                                                    ? 'bg-emerald-100 text-emerald-700'
-                                                    : 'bg-gray-100 text-gray-500'
-                                                    }`}>
-                                                    {cat.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
-                                                    {cat.is_active ? 'فعال' : 'غير فعال'}
+
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 align-middle transition group-hover:bg-sky-50/40">
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                                                    <Layers size={12} />
+                                                    {getParentName(category.parent_id)}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-gray-500 text-sm max-w-xs truncate">
-                                                {cat.description || '-'}
+
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 align-middle transition group-hover:bg-sky-50/40">
+                                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${category.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                                                    {category.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                                                    {category.is_active ? 'فعال' : 'غير فعال'}
+                                                </span>
                                             </td>
-                                            <td className="px-6 py-4 flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button
-                                                    onClick={() => handleEdit(cat)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="تعديل"
-                                                >
-                                                    <Edit size={18} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(cat.id)}
-                                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="حذف"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
+
+                                            <td className="border-b border-l border-slate-200 bg-white p-3 align-middle text-sm text-slate-500 transition group-hover:bg-sky-50/40">
+                                                <div className="max-w-xs truncate">{category.description || '-'}</div>
+                                            </td>
+
+                                            <td className="border-b border-slate-200 bg-white p-3 align-middle transition group-hover:bg-sky-50/40">
+                                                <div className="flex justify-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                                    <button
+                                                        onClick={() => handleEdit(category)}
+                                                        className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                                                        title="تعديل"
+                                                    >
+                                                        <Edit size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(category.id)}
+                                                        className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+                                                        title="حذف"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={6} className="py-16 text-center text-gray-400">
+                                        <td colSpan={6} className="border-b border-slate-200 bg-white py-16 text-center text-slate-400">
                                             <div className="flex flex-col items-center gap-3">
-                                                <div className="bg-gray-50 p-4 rounded-full">
-                                                    <Search size={32} className="text-gray-300" />
+                                                <div className="rounded-full bg-slate-50 p-4">
+                                                    <Search size={28} className="text-slate-300" />
                                                 </div>
-                                                <p>لا توجد مجموعات أصناف</p>
+                                                <p>لا توجد مجموعات أصناف مطابقة.</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -311,112 +365,139 @@ export const CategoriesPage = () => {
                 )}
             </div>
 
-            {/* Add/Edit Modal */}
             {isAdding && createPortal(
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4" dir="rtl">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                {editingId ? <Edit className="text-teal-600" size={20} /> : <Plus className="text-teal-600" size={20} />}
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" dir="rtl">
+                    <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+                        <div className="flex items-center justify-between border-b bg-gray-50 px-6 py-4">
+                            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                                {editingId ? <Edit className="text-sky-600" size={20} /> : <Plus className="text-sky-600" size={20} />}
                                 {editingId ? 'تعديل المجموعة' : 'إضافة مجموعة جديدة'}
                             </h3>
-                            <button onClick={() => setIsAdding(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <button onClick={closeModal} className="text-gray-400 transition-colors hover:text-gray-600">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSave} className="p-6 space-y-4">
+                        <form onSubmit={handleSave} className="space-y-4 p-6">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">اسم المجموعة (عربي) <span className="text-red-500">*</span></label>
+                                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                                    اسم المجموعة (عربي) <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="text"
-                                    value={formData.name_ar}
-                                    onChange={e => setFormData({ ...formData, name_ar: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all placeholder:text-right"
+                                    value={formData.name_ar || ''}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, name_ar: e.target.value }))}
+                                    className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
                                     placeholder="مثال: إلكترونيات"
-                                    dir="rtl"
                                     autoFocus
                                 />
                             </div>
 
                             <div className="flex gap-4">
                                 <div className="flex-1">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (English)</label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">الاسم بالإنجليزية</label>
                                     <input
                                         type="text"
-                                        value={formData.name_en}
-                                        onChange={e => setFormData({ ...formData, name_en: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
-                                        placeholder="e.g. Electronics"
+                                        value={formData.name_en || ''}
+                                        onChange={(e) => setFormData((prev) => ({ ...prev, name_en: e.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
                                         dir="ltr"
                                     />
                                 </div>
+
                                 <div className="w-1/3">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">الرمز</label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">الرمز</label>
                                     <input
                                         type="text"
-                                        value={formData.code}
-                                        onChange={e => setFormData({ ...formData, code: e.target.value?.toUpperCase() })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all font-mono uppercase text-center"
-                                        placeholder="CODE"
+                                        value={formData.code || ''}
+                                        onChange={(e) => setFormData((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                                        className="w-full rounded-lg border px-3 py-2 text-center font-mono uppercase outline-none transition-all focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
                                         dir="ltr"
                                     />
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">تتبع لـ (المجموعة الأب)</label>
-                                <select
-                                    value={formData.parent_id}
-                                    onChange={e => setFormData({ ...formData, parent_id: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
-                                >
-                                    <option value="">-- رئيسي (بدون أب) --</option>
-                                    {categories
-                                        .filter(c => c.id !== editingId) // Prevent self-parenting
-                                        .map(c => (
-                                            <option key={c.id} value={c.id}>{c.name_ar}</option>
-                                        ))}
-                                </select>
+                            <div className="flex gap-4">
+                                <div className="flex-1">
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">المجموعة الأب</label>
+                                    <select
+                                        value={formData.parent_id || ''}
+                                        onChange={(e) => setFormData((prev) => ({ ...prev, parent_id: e.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                                    >
+                                        <option value="">رئيسية</option>
+                                        {categories
+                                            .filter((item) => item.id !== editingId)
+                                            .map((item) => (
+                                                <option key={item.id} value={item.id}>
+                                                    {item.name_ar}
+                                                </option>
+                                            ))}
+                                    </select>
+                                </div>
+
+                                <div className="flex-1">
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">صورة المجموعة</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={formData.image_url || ''}
+                                            onChange={(e) => setFormData((prev) => ({ ...prev, image_url: e.target.value }))}
+                                            className="flex-1 rounded-lg border px-3 py-2 text-left outline-none transition-all focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                                            dir="ltr"
+                                            placeholder="URL"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-gray-700 hover:bg-gray-200"
+                                        >
+                                            <Upload size={18} />
+                                        </button>
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleImageUpload}
+                                            className="hidden"
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">ملاحظات</label>
+                                <label className="mb-1.5 block text-sm font-medium text-gray-700">الوصف</label>
                                 <textarea
-                                    value={formData.description}
-                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all h-20 resize-none"
-                                    placeholder="وصف تفصيلي للمجموعة..."
+                                    value={formData.description || ''}
+                                    onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                                    className="h-20 w-full resize-none rounded-lg border px-3 py-2 outline-none transition-all focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
                                 />
                             </div>
 
-                            <div className="pt-2">
-                                <label className="flex items-center gap-3 cursor-pointer group">
-                                    <div className="relative">
-                                        <input
-                                            type="checkbox"
-                                            checked={!!formData.is_active}
-                                            onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                                    </div>
-                                    <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">فعال</span>
+                            <div className="pt-1">
+                                <label className="flex cursor-pointer items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!formData.is_active}
+                                        onChange={(e) => setFormData((prev) => ({ ...prev, is_active: e.target.checked }))}
+                                        className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                    />
+                                    <span className="text-sm font-medium text-gray-700">المجموعة فعالة</span>
                                 </label>
                             </div>
 
-                            <div className="pt-4 flex gap-3">
+                            <div className="flex gap-3 pt-2">
                                 <button
                                     type="button"
-                                    onClick={() => setIsAdding(false)}
-                                    className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                                    onClick={closeModal}
+                                    className="flex-1 rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 hover:bg-gray-200"
                                 >
                                     إلغاء
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={saving}
-                                    className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium shadow-sm shadow-teal-200 transition-all flex justify-center items-center gap-2 disabled:opacity-70"
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 font-medium text-white transition hover:bg-sky-700 disabled:opacity-70"
                                 >
                                     {saving && <Loader2 size={16} className="animate-spin" />}
                                     حفظ
@@ -430,5 +511,3 @@ export const CategoriesPage = () => {
         </div>
     );
 };
-
-

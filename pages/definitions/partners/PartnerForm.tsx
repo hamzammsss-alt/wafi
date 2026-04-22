@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Users, Plus, Search, Phone, Mail, MapPin, CreditCard, Edit, Trash2, X,
     CheckCircle2, AlertCircle, Building, Globe, Save, User, FileText, Briefcase,
@@ -26,6 +26,9 @@ export const PartnerForm: React.FC = () => {
     // UI State
     const [searchTerm, setSearchTerm] = useState('');
     const [filterType, setFilterType] = useState<string>('ALL'); // ALL, CUSTOMER, SUPPLIER, EMPLOYEE
+    const [filterStatus, setFilterStatus] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+    const [sortKey, setSortKey] = useState<'name_ar' | 'code' | 'type' | 'status' | 'city'>('name_ar');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'general' | 'contact' | 'financial' | 'hr'>('general');
@@ -210,18 +213,44 @@ export const PartnerForm: React.FC = () => {
     };
 
     // --- Filtering ---
-    const filteredPartners = partners.filter(p => {
-        const matchesSearch =
-            p.name_ar.includes(searchTerm) ||
-            (p.name_en && p.name_en.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            p.code?.includes(searchTerm) ||
-            p.phone?.includes(searchTerm) ||
-            p.mobile?.includes(searchTerm);
+    const filteredPartners = useMemo(() => {
+        const normalizedSearch = searchTerm.trim().toLowerCase();
+        const filtered = partners.filter(p => {
+            const matchesSearch =
+                !normalizedSearch ||
+                p.name_ar?.toLowerCase().includes(normalizedSearch) ||
+                p.name_en?.toLowerCase().includes(normalizedSearch) ||
+                p.code?.toLowerCase().includes(normalizedSearch) ||
+                p.phone?.toLowerCase().includes(normalizedSearch) ||
+                p.mobile?.toLowerCase().includes(normalizedSearch) ||
+                p.city?.toLowerCase().includes(normalizedSearch) ||
+                p.email?.toLowerCase().includes(normalizedSearch);
 
-        const matchesType = filterType === 'ALL' || p.type === filterType || (filterType !== 'EMPLOYEE' && p.type === 'BOTH');
+            const matchesType = filterType === 'ALL' || p.type === filterType || (filterType !== 'EMPLOYEE' && p.type === 'BOTH');
+            const isActive = Boolean(p.is_active);
+            const matchesStatus =
+                filterStatus === 'ALL' ||
+                (filterStatus === 'ACTIVE' && isActive) ||
+                (filterStatus === 'INACTIVE' && !isActive);
 
-        return matchesSearch && matchesType;
-    });
+            return matchesSearch && matchesType && matchesStatus;
+        });
+
+        const sortValue = (partner: BusinessPartner): string => {
+            if (sortKey === 'status') return partner.is_active ? '1' : '0';
+            if (sortKey === 'city') return String(partner.city || '').toLowerCase();
+            if (sortKey === 'code') return String(partner.code || '').toLowerCase();
+            if (sortKey === 'type') return String(partner.type || '').toLowerCase();
+            return String(partner.name_ar || '').toLowerCase();
+        };
+
+        return [...filtered].sort((a, b) => {
+            const left = sortValue(a);
+            const right = sortValue(b);
+            const comparison = left.localeCompare(right, 'ar', { numeric: true, sensitivity: 'base' });
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    }, [partners, searchTerm, filterType, filterStatus, sortKey, sortDirection]);
 
     // --- Render Helpers ---
     const TabButton = ({ id, label, icon: Icon }: { id: typeof activeTab, label: string, icon: any }) => (
@@ -253,111 +282,216 @@ export const PartnerForm: React.FC = () => {
         return <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[type] || 'bg-gray-100'}`}>{labels[type] || type}</span>;
     };
 
+    const toggleSort = (key: 'name_ar' | 'code' | 'type' | 'status' | 'city') => {
+        if (sortKey === key) {
+            setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+            return;
+        }
+        setSortKey(key);
+        setSortDirection('asc');
+    };
+
+    const SortableHeader = ({
+        label,
+        sortValue,
+        className = ''
+    }: {
+        label: string;
+        sortValue: 'name_ar' | 'code' | 'type' | 'status' | 'city';
+        className?: string;
+    }) => (
+        <button
+            type="button"
+            onClick={() => toggleSort(sortValue)}
+            className={`flex items-center gap-1 font-semibold text-slate-600 hover:text-slate-900 transition-colors ${className}`}
+        >
+            <span>{label}</span>
+            <span className={`text-[10px] ${sortKey === sortValue ? 'text-emerald-600' : 'text-slate-300'}`}>
+                {sortKey === sortValue ? (sortDirection === 'asc' ? '▲' : '▼') : '↕'}
+            </span>
+        </button>
+    );
+
     return (
         <div className="h-full bg-gray-50 p-6 flex flex-col gap-6" dir="rtl">
 
             {/* Header Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-2xl flex items-center justify-center shadow-inner border border-indigo-100">
-                        <Users size={28} className="text-indigo-600" />
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col gap-5">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-2xl flex items-center justify-center shadow-inner border border-indigo-100">
+                            <Users size={28} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">دليل</h1>
+                            <p className="text-sm text-gray-500 mt-1">إدارة الزبائن، الموردين، والموظفين في مكان واحد</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-800">العملاء</h1>
-                        <p className="text-sm text-gray-500 mt-1">إدارة الزبائن، الموردين، والموظفين في مكان واحد</p>
-                    </div>
-                </div>
 
-                <div className="flex items-center gap-3 bg-gray-100 p-1 rounded-lg">
-                    {['ALL', 'CUSTOMER', 'SUPPLIER', 'EMPLOYEE'].map(t => (
-                        <button
-                            key={t}
-                            onClick={() => setFilterType(t)}
-                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${filterType === t ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                                }`}
-                        >
-                            {t === 'ALL' ? 'الكل' : t === 'CUSTOMER' ? 'زبائن' : t === 'SUPPLIER' ? 'موردين' : 'موظفين'}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <div className="relative group">
-                        <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
-                        <input
-                            type="text"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="بحث شامل..."
-                            className="w-full md:w-56 pr-10 pl-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all"
-                        />
-                    </div>
                     <button
                         onClick={() => { resetForm(); setIsModalOpen(true); }}
-                        className="bg-emerald-600 text-white px-6 py-2.5 rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors flex items-center gap-2 font-medium shadow-lg shadow-emerald-200"
+                        className="bg-emerald-600 text-white px-6 py-2.5 rounded-lg hover:bg-emerald-700 active:bg-emerald-800 transition-colors flex items-center gap-2 font-medium shadow-lg shadow-emerald-200 self-start md:self-auto"
                     >
                         <Plus size={20} />
                         إضافة جديد
                     </button>
                 </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-4 items-start">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                        <div className="relative group md:col-span-2 xl:col-span-1">
+                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="بحث بالاسم أو الرمز أو الهاتف..."
+                                className="w-full pr-10 pl-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all"
+                            />
+                        </div>
+
+                        <select
+                            value={filterType}
+                            onChange={(e) => setFilterType(e.target.value)}
+                            className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 outline-none text-sm text-gray-700"
+                        >
+                            <option value="ALL">كل الأنواع</option>
+                            <option value="CUSTOMER">الزبائن</option>
+                            <option value="SUPPLIER">الموردين</option>
+                            <option value="EMPLOYEE">الموظفين</option>
+                        </select>
+
+                        <select
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
+                            className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 outline-none text-sm text-gray-700"
+                        >
+                            <option value="ALL">كل الحالات</option>
+                            <option value="ACTIVE">نشط</option>
+                            <option value="INACTIVE">موقف</option>
+                        </select>
+
+                        <select
+                            value={`${sortKey}:${sortDirection}`}
+                            onChange={(e) => {
+                                const [key, direction] = e.target.value.split(':') as ['name_ar' | 'code' | 'type' | 'status' | 'city', 'asc' | 'desc'];
+                                setSortKey(key);
+                                setSortDirection(direction);
+                            }}
+                            className="px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 outline-none text-sm text-gray-700"
+                        >
+                            <option value="name_ar:asc">الاسم من أ إلى ي</option>
+                            <option value="name_ar:desc">الاسم من ي إلى أ</option>
+                            <option value="code:asc">الرمز تصاعدي</option>
+                            <option value="code:desc">الرمز تنازلي</option>
+                            <option value="type:asc">النوع</option>
+                            <option value="status:asc">الحالة</option>
+                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 min-w-[260px]">
+                        <div className="text-right">
+                            <div className="text-xs text-slate-500">عدد السجلات المعروضة</div>
+                            <div className="text-2xl font-bold text-slate-800">{filteredPartners.length}</div>
+                        </div>
+                        <div className="h-10 w-px bg-slate-200" />
+                        <div className="text-right">
+                            <div className="text-xs text-slate-500">إجمالي السجلات</div>
+                            <div className="text-lg font-semibold text-slate-700">{partners.length}</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            {/* Content Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {isLoading ? (
-                    [...Array(8)].map((_, i) => (
-                        <div key={i} className="bg-white h-48 rounded-xl shadow-sm animate-pulse border border-gray-100 p-6">
-                            {/* Skeleton */}
-                        </div>
-                    ))
-                ) : (
-                    filteredPartners.map(partner => (
-                        <div key={partner.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col group">
-                            <div className="p-5 flex-1">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="w-12 h-12 rounded-xl bg-gray-50 text-gray-600 flex items-center justify-center font-bold text-lg border border-gray-100">
-                                        {partner.name_ar.charAt(0)}
-                                    </div>
-                                    <div className="flex flex-col items-end gap-1">
-                                        <TypeBadge type={partner.type} />
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${partner.is_active ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-                                            {partner.is_active ? 'نشط' : 'موقف'}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <h3 className="font-bold text-gray-800 text-lg mb-1 line-clamp-1" title={partner.name_ar}>{partner.name_ar}</h3>
-                                <p className="text-sm text-gray-500 mb-4 font-mono">{partner.code || '#'}</p>
-
-                                <div className="space-y-2 text-sm text-gray-600">
-                                    <div className="flex items-center gap-2">
-                                        <Phone size={14} className="text-gray-400" />
-                                        <span>{partner.phone || partner.mobile || '-'}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <MapPin size={14} className="text-gray-400" />
-                                        <span className="truncate">{partner.city || '-'}</span>
-                                    </div>
-                                    {partner.type === 'EMPLOYEE' && (
-                                        <div className="flex items-center gap-2 text-purple-600">
-                                            <Briefcase size={14} />
-                                            <span className="truncate">{partner.job_title_name || 'بدون مسمى'}</span>
+            {/* Table Section */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr className="text-right">
+                                <th className="px-4 py-3 whitespace-nowrap">
+                                    <SortableHeader label="الاسم" sortValue="name_ar" />
+                                </th>
+                                <th className="px-4 py-3 whitespace-nowrap">
+                                    <SortableHeader label="الرمز" sortValue="code" />
+                                </th>
+                                <th className="px-4 py-3 whitespace-nowrap">
+                                    <SortableHeader label="النوع" sortValue="type" />
+                                </th>
+                                <th className="px-4 py-3 whitespace-nowrap">
+                                    <SortableHeader label="الحالة" sortValue="status" />
+                                </th>
+                                <th className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold">الهاتف</th>
+                                <th className="px-4 py-3 whitespace-nowrap">
+                                    <SortableHeader label="المدينة" sortValue="city" />
+                                </th>
+                                <th className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold">البريد</th>
+                                <th className="px-4 py-3 whitespace-nowrap text-slate-600 font-semibold">إجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {isLoading ? (
+                                [...Array(8)].map((_, i) => (
+                                    <tr key={i} className="animate-pulse">
+                                        {[...Array(8)].map((__, j) => (
+                                            <td key={j} className="px-4 py-4">
+                                                <div className="h-4 rounded bg-slate-100" />
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))
+                            ) : filteredPartners.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="px-6 py-16 text-center">
+                                        <div className="flex flex-col items-center gap-3 text-slate-500">
+                                            <Users size={32} className="text-slate-300" />
+                                            <div className="text-lg font-semibold text-slate-700">لا توجد سجلات مطابقة</div>
+                                            <p className="text-sm">جرّب تغيير البحث أو التصفيات لعرض نتائج أخرى.</p>
                                         </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="bg-gray-50 p-3 flex justify-end gap-2 border-t border-gray-100 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleEdit(partner)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                                    <Edit size={16} />
-                                </button>
-                                <button onClick={() => handleDelete(partner.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
-                        </div>
-                    ))
-                )}
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredPartners.map(partner => (
+                                    <tr key={partner.id} className="hover:bg-emerald-50/40 transition-colors">
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold border border-slate-200 shrink-0">
+                                                    {partner.name_ar?.charAt(0) || '#'}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="font-semibold text-slate-800 truncate" title={partner.name_ar}>{partner.name_ar}</div>
+                                                    {partner.name_en && (
+                                                        <div className="text-xs text-slate-500 truncate" title={partner.name_en}>{partner.name_en}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600 font-mono whitespace-nowrap">{partner.code || '-'}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap"><TypeBadge type={partner.type} /></td>
+                                        <td className="px-4 py-3 whitespace-nowrap">
+                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${partner.is_active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                                {partner.is_active ? 'نشط' : 'موقف'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{partner.phone || partner.mobile || '-'}</td>
+                                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{partner.city || '-'}</td>
+                                        <td className="px-4 py-3 text-slate-600 max-w-[220px] truncate" title={partner.email || ''}>{partner.email || '-'}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button onClick={() => handleEdit(partner)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="تعديل">
+                                                    <Edit size={16} />
+                                                </button>
+                                                <button onClick={() => handleDelete(partner.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="حذف">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* Modal */}

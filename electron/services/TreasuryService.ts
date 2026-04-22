@@ -675,6 +675,8 @@ WHERE status LIKE 'PENDING_APPROVAL%';
                         credit: 0,
                         line_description: ag.reference ? `سند صرف ${voucherNo} - ${ag.reference}` : `سند صرف ${voucherNo} - ${header.description}`,
                         cost_center_id: ag.cost_center_id || header.cost_center_id || null,
+                        expense_type_id: ag.expense_type_id || null,
+                        vehicle_id: ag.vehicle_id || null,
                         sub_account_id: linkedSubAccountId,
                         invoice_ref: ag.reference || null,
                         tax_ref: ag.tax_ref || null,

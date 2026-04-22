@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Tag,
     Plus,
@@ -9,7 +9,8 @@ import {
     X,
     CheckCircle2,
     AlertCircle,
-    Loader2
+    Loader2,
+    Upload
 } from 'lucide-react';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { Brand } from '../../../types';
@@ -29,10 +30,12 @@ export const BrandsPage = () => {
         code: '',
         origin_country: '',
         description: '',
-        is_active: true
+        is_active: true,
+        image_url: ''
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         loadBrands();
@@ -58,7 +61,8 @@ export const BrandsPage = () => {
             code: brand.code || '',
             origin_country: brand.origin_country || '',
             description: brand.description || '',
-            is_active: brand.is_active ? true : false
+            is_active: brand.is_active ? true : false,
+            image_url: (brand as any).image_url || ''
         });
         setEditingId(brand.id);
         setIsAdding(true);
@@ -73,9 +77,38 @@ export const BrandsPage = () => {
             code: '',
             origin_country: '',
             description: '',
-            is_active: true
+            is_active: true,
+            image_url: ''
         });
         setError(null);
+    };
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            if (window.electronAPI?.system?.saveImage) {
+                const buffer = await file.arrayBuffer();
+                const res = await window.electronAPI.system.saveImage(buffer, file.name);
+                if (res.success) {
+                    setFormData({ ...formData, image_url: res.path });
+                } else {
+                    throw new Error('Failed to save image path');
+                }
+            } else {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setFormData({ ...formData, image_url: reader.result as string });
+                };
+                reader.readAsDataURL(file);
+            }
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            setError('حدث خطأ أثناء رفع الصورة.');
+        } finally {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
     };
 
     const openCreate = () => {
@@ -235,7 +268,18 @@ export const BrandsPage = () => {
                                 {filteredBrands.length > 0 ? (
                                     brands.map((brand, index) => (
                                         <tr key={brand.id || `brand-${index}`} className="hover:bg-slate-50 transition-colors group">
-                                            <td className="px-6 py-4 font-medium text-gray-800">{brand.name_ar}</td>
+                                            <td className="px-6 py-4 font-medium text-gray-800">
+                                                <div className="flex items-center gap-3">
+                                                    {(brand as any).image_url ? (
+                                                        <img src={(brand as any).image_url} alt={brand.name_ar} className="w-10 h-10 rounded-lg object-cover border border-gray-200 bg-white" />
+                                                    ) : (
+                                                        <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold border border-purple-100 shrink-0">
+                                                            {brand.name_ar.charAt(0)}
+                                                        </div>
+                                                    )}
+                                                    <span>{brand.name_ar}</span>
+                                                </div>
+                                            </td>
                                             <td className="px-6 py-4 text-gray-600">{brand.name_en || '-'}</td>
                                             <td className="px-6 py-4">
                                                 {brand.code ? (
@@ -305,7 +349,7 @@ export const BrandsPage = () => {
                         </div>
 
                         <form onSubmit={handleSave} className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (عربي) <span className="text-red-500">*</span></label>
                                     <input
@@ -329,9 +373,6 @@ export const BrandsPage = () => {
                                         dir="ltr"
                                     />
                                 </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">الرمز (Code)</label>
                                     <input
@@ -353,16 +394,59 @@ export const BrandsPage = () => {
                                         placeholder="مثال: اليابان"
                                     />
                                 </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">وصف / ملاحظات</label>
-                                <textarea
-                                    value={formData.description}
-                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all resize-none h-20"
-                                    placeholder="ملاحظات إضافية..."
-                                />
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">صورة الماركة</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={formData.image_url}
+                                            onChange={e => setFormData({ ...formData, image_url: e.target.value })}
+                                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-left"
+                                            placeholder="رابط URL أو قم برفع صورة..."
+                                            dir="ltr"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 rounded-lg flex items-center gap-2 transition-colors shrink-0 font-medium"
+                                        >
+                                            <Upload size={18} />
+                                            رفع صورة
+                                        </button>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleImageUpload}
+                                            accept="image/*"
+                                            className="hidden"
+                                        />
+                                    </div>
+                                    {formData.image_url && (
+                                        <div className="mt-3 flex items-start gap-3">
+                                            <img src={formData.image_url} alt="Preview" className="h-16 w-16 rounded-lg border border-gray-200 object-cover bg-white" />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setFormData({ ...formData, image_url: '' });
+                                                    if (fileInputRef.current) fileInputRef.current.value = '';
+                                                }}
+                                                className="p-1.5 text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition-all mt-1"
+                                                title="إزالة الصورة"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">وصف / ملاحظات</label>
+                                    <textarea
+                                        value={formData.description}
+                                        onChange={e => setFormData({ ...formData, description: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all resize-none h-20"
+                                        placeholder="ملاحظات إضافية..."
+                                    />
+                                </div>
                             </div>
 
                             <div className="pt-2">
@@ -404,4 +488,3 @@ export const BrandsPage = () => {
         </div>
     );
 };
-

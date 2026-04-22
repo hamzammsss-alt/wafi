@@ -47,9 +47,26 @@ type SeedResolvedParent = {
     isPosting: boolean;
 };
 
+const LEGACY_DUPLICATE_ACCOUNT_CODES = new Set([
+    '1110',
+    '112001',
+    '1200',
+    '1300',
+    '2300',
+    '4406',
+    '5000',
+    '6000',
+    'ACC-DEMO-CASH',
+    'ACC-DEMO-REV',
+    'ACC-DEMO-EXP',
+    'ACC-DEMO-AR',
+    'ACC-DEMO-AP',
+]);
+
 export class SqliteChartOfAccountsRepo implements ChartOfAccountsRepositoryPort {
     constructor(private readonly db: Database.Database) {
         this.ensureSchema();
+        this.cleanupLegacyDuplicateAccounts();
     }
 
     nextIdentity(): string {
@@ -214,7 +231,9 @@ export class SqliteChartOfAccountsRepo implements ChartOfAccountsRepositoryPort 
                 posting: query.posting,
                 searchText,
             }) as AccountRow[];
-        return rows.map((row) => this.mapAccountRow(row));
+        return rows
+            .filter((row) => !this.shouldHideLegacyDuplicateAccount(row))
+            .map((row) => this.mapAccountRow(row));
     }
 
     async listAccountTree(companyId: string, query: AccountListQuery): Promise<AccountTreeNodeEntity[]> {
@@ -617,6 +636,105 @@ export class SqliteChartOfAccountsRepo implements ChartOfAccountsRepositoryPort 
         if (category === AccountCategory.REVENUE) return NormalBalance.CREDIT;
         if (category === AccountCategory.OTHER_INCOME) return NormalBalance.CREDIT;
         return NormalBalance.DEBIT;
+    }
+
+    private shouldHideLegacyDuplicateAccount(row: AccountRow): boolean {
+        const code = String(row.code || row.account_code || '').trim().toUpperCase();
+        if (!LEGACY_DUPLICATE_ACCOUNT_CODES.has(code)) {
+            return false;
+        }
+
+        const isInactive =
+            Number(row.is_active ?? 1) === 0 ||
+            String((row as AccountRow & { status?: string | null }).status || '')
+                .trim()
+                .toUpperCase() === 'INACTIVE';
+
+        return isInactive && !row.parent_id;
+    }
+
+    private cleanupLegacyDuplicateAccounts(): void {
+        const codes = [...LEGACY_DUPLICATE_ACCOUNT_CODES];
+        if (!codes.length) {
+            return;
+        }
+
+        const codePlaceholders = codes.map(() => '?').join(', ');
+        const hasVoucherLinesTable = this.tableExists('ae_voucher_lines');
+        const hasSubAccountsTable = this.tableExists('ae_sub_accounts');
+        const voucherLineGuard = hasVoucherLinesTable
+            ? `
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM ae_voucher_lines vl
+                        WHERE vl.account_id = a.id
+                      )
+              `
+            : '';
+
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS app_runtime_flags (
+                flag_key TEXT PRIMARY KEY,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        const alreadyApplied = this.db
+            .prepare('SELECT 1 FROM app_runtime_flags WHERE flag_key = ? LIMIT 1')
+            .get('cleanup.legacyDuplicateAccounts.v1');
+        if (alreadyApplied) {
+            return;
+        }
+
+        const cleanup = this.db.transaction((): void => {
+            const candidateIds = this.db
+                .prepare(
+                    `
+                    SELECT a.id
+                    FROM accounts a
+                    WHERE UPPER(COALESCE(a.code, a.account_code, '')) IN (${codePlaceholders})
+                      AND (
+                        COALESCE(a.is_active, 1) = 0
+                        OR UPPER(COALESCE(a.status, '')) = 'INACTIVE'
+                      )
+                      AND a.parent_id IS NULL
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM accounts c
+                        WHERE c.parent_id = a.id
+                      )
+                      ${voucherLineGuard}
+                    `,
+                )
+                .all(...codes) as Array<{ id: string }>;
+
+            if (!candidateIds.length) {
+                this.db
+                    .prepare('INSERT OR IGNORE INTO app_runtime_flags(flag_key) VALUES (?)')
+                    .run('cleanup.legacyDuplicateAccounts.v1');
+                return;
+            }
+
+            const ids = candidateIds.map((row) => row.id);
+            const idPlaceholders = ids.map(() => '?').join(', ');
+
+            if (hasSubAccountsTable) {
+                this.db.prepare(`DELETE FROM ae_sub_accounts WHERE account_id IN (${idPlaceholders})`).run(...ids);
+            }
+            this.db.prepare(`DELETE FROM accounts WHERE id IN (${idPlaceholders})`).run(...ids);
+            this.db
+                .prepare('INSERT OR IGNORE INTO app_runtime_flags(flag_key) VALUES (?)')
+                .run('cleanup.legacyDuplicateAccounts.v1');
+        });
+
+        cleanup();
+    }
+
+    private tableExists(tableName: string): boolean {
+        const row = this.db
+            .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1`)
+            .get(tableName) as { 1?: number } | undefined;
+        return Boolean(row);
     }
 
     private ensureSchema(): void {
