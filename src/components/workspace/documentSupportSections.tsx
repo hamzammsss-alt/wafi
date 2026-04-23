@@ -274,3 +274,65 @@ export function buildDocumentSupportSections(definition: DocumentShape): Documen
 
     return uniqueSections(sections);
 }
+
+export function resolveDocumentSupportSectionForField(
+    definition: DocumentShape,
+    fieldKey: string,
+): DocumentSupportSection | null {
+    const key = String(fieldKey || '').toLowerCase();
+    const docType = String(definition.docType || '').toLowerCase();
+
+    if (!key) return null;
+
+    if (key.includes('customer') || key.includes('supplier') || key.includes('partner')) {
+        return sectionFactory.partners();
+    }
+    if (key.includes('sales_rep')) {
+        return sectionFactory.salesReps();
+    }
+    if (key.includes('item')) {
+        return sectionFactory.items();
+    }
+    if (key.includes('warehouse')) {
+        return sectionFactory.warehouses();
+    }
+    if (key.includes('branch')) {
+        return sectionFactory.branches();
+    }
+    if (key.includes('currency')) {
+        return sectionFactory.currencies();
+    }
+    if (key.includes('price_list')) {
+        return sectionFactory.priceLists();
+    }
+    if (key.includes('payment_method')) {
+        return sectionFactory.paymentMethods();
+    }
+    if (key.includes('tax')) {
+        return sectionFactory.taxes();
+    }
+    if (key.includes('cost_center')) {
+        return sectionFactory.costCenters();
+    }
+    if (key.includes('bank_account')) {
+        return sectionFactory.bankAccounts();
+    }
+    if (key.includes('bank')) {
+        return sectionFactory.banks();
+    }
+    if (key.includes('account')) {
+        return sectionFactory.chartOfAccounts();
+    }
+
+    if (definition.lineLookup?.fieldKey === fieldKey) {
+        return definition.lineLookup.type === 'account'
+            ? sectionFactory.chartOfAccounts()
+            : sectionFactory.items();
+    }
+
+    if (docType.startsWith('sales') && key === 'partner_id') {
+        return sectionFactory.partners();
+    }
+
+    return null;
+}

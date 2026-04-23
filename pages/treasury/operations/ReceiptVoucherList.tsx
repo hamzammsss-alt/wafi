@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Banknote, Search, Filter, RotateCcw, Columns3, ChevronDown, Bookmark, Star, Trash2, ArrowDownAZ, ArrowUpZA, Copy, Maximize2, RefreshCw, Pencil, FolderOpen, CheckCircle2 } from 'lucide-react';
 import { useTabs } from '../../../src/contexts/TabsContext';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -1282,7 +1283,7 @@ export const ReceiptVoucherList = () => {
             </div>
 
             <AnimatePresence>
-                {activeColumnMenu && (
+                {activeColumnMenu && typeof document !== 'undefined' && createPortal(
                     <motion.div
                         data-receipt-context-menu="1"
                         initial={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -1297,7 +1298,12 @@ export const ReceiptVoucherList = () => {
                             transformOrigin: activeColumnMenu.position.transformOrigin,
                         }}
                         dir="rtl"
-                        onContextMenu={(event) => event.preventDefault()}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                        onContextMenu={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        }}
                     >
                         <div className="border-b border-slate-100 bg-gradient-to-l from-sky-50/90 via-white to-cyan-50/80 px-4 py-3">
                             <div className="flex items-start justify-between gap-3">
@@ -1560,7 +1566,8 @@ export const ReceiptVoucherList = () => {
                                 <button type="button" onClick={() => setActiveColumnMenu(null)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[11px] font-bold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900">إغلاق</button>
                             </div>
                         </div>
-                    </motion.div>
+                    </motion.div>,
+                    document.body,
                 )}
             </AnimatePresence>
         </div>

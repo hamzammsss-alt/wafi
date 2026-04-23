@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
     CreditCard,
     Plus,
@@ -16,6 +16,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { AccountPicker } from '../../../components/AccountPicker';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 
 export const PaymentMethods = () => {
     const [methods, setMethods] = useState<any[]>([]);
@@ -50,7 +51,7 @@ export const PaymentMethods = () => {
             setMethods(data);
         } catch (err) {
             console.error(err);
-            setError('فشل في تحميل طرق الدفع');
+            setError('ظپط´ظ„ ظپظٹ طھط­ظ…ظٹظ„ ط·ط±ظ‚ ط§ظ„ط¯ظپط¹');
         } finally {
             setLoading(false);
         }
@@ -88,7 +89,7 @@ export const PaymentMethods = () => {
         setError(null);
 
         if (!formData.name_ar) {
-            setError('اسم طريقة الدفع مطلوب');
+            setError('ط§ط³ظ… ط·ط±ظٹظ‚ط© ط§ظ„ط¯ظپط¹ ظ…ط·ظ„ظˆط¨');
             return;
         }
 
@@ -110,7 +111,7 @@ export const PaymentMethods = () => {
             loadMethods();
         } catch (err: any) {
             console.error(err);
-            setError('حدث خطأ أثناء الحفظ. حاول مرة أخرى.');
+            setError('ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط§ظ„ط­ظپط¸. ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰.');
         } finally {
             setSaving(false);
         }
@@ -137,11 +138,11 @@ export const PaymentMethods = () => {
 
     const getTypeLabel = (type: string) => {
         switch (type) {
-            case 'CASH': return 'نقد (Cash)';
-            case 'CHECK': return 'شيك (Check)';
-            case 'CREDIT_CARD': return 'بطاقة ائتمان';
-            case 'BANK_TRANSFER': return 'حوالة بنكية';
-            case 'ELECTRONIC_WALLET': return 'محفظة إلكترونية';
+            case 'CASH': return 'ظ†ظ‚ط¯ (Cash)';
+            case 'CHECK': return 'ط´ظٹظƒ (Check)';
+            case 'CREDIT_CARD': return 'ط¨ط·ط§ظ‚ط© ط§ط¦طھظ…ط§ظ†';
+            case 'BANK_TRANSFER': return 'ط­ظˆط§ظ„ط© ط¨ظ†ظƒظٹط©';
+            case 'ELECTRONIC_WALLET': return 'ظ…ط­ظپط¸ط© ط¥ظ„ظƒطھط±ظˆظ†ظٹط©';
             default: return type;
         }
     };
@@ -149,31 +150,31 @@ export const PaymentMethods = () => {
     const columns = React.useMemo<DefinitionListColumn<any>[]>(() => [
         {
             key: 'name_ar',
-            label: 'الاسم (عربي)',
+            label: 'ط§ظ„ط§ط³ظ… (ط¹ط±ط¨ظٹ)',
             width: 220,
             defaultVisible: true,
             getDisplayValue: (method) => method.name_ar || '-',
         },
         {
             key: 'name_en',
-            label: 'الاسم (English)',
+            label: 'ط§ظ„ط§ط³ظ… (English)',
             width: 200,
             defaultVisible: true,
             getDisplayValue: (method) => method.name_en || '-',
         },
         {
             key: 'type',
-            label: 'النوع',
+            label: 'ط§ظ„ظ†ظˆط¹',
             type: 'enum',
             filterType: 'enum',
             width: 220,
             defaultVisible: true,
             options: [
-                { value: 'CASH', label: 'نقد' },
-                { value: 'CHECK', label: 'شيك' },
-                { value: 'CREDIT_CARD', label: 'بطاقة ائتمان' },
-                { value: 'BANK_TRANSFER', label: 'حوالة بنكية' },
-                { value: 'ELECTRONIC_WALLET', label: 'محفظة إلكترونية' },
+                { value: 'CASH', label: 'ظ†ظ‚ط¯' },
+                { value: 'CHECK', label: 'ط´ظٹظƒ' },
+                { value: 'CREDIT_CARD', label: 'ط¨ط·ط§ظ‚ط© ط§ط¦طھظ…ط§ظ†' },
+                { value: 'BANK_TRANSFER', label: 'ط­ظˆط§ظ„ط© ط¨ظ†ظƒظٹط©' },
+                { value: 'ELECTRONIC_WALLET', label: 'ظ…ط­ظپط¸ط© ط¥ظ„ظƒطھط±ظˆظ†ظٹط©' },
             ],
             getDisplayValue: (method) => getTypeLabel(method.type),
             renderCell: (method) => (
@@ -185,14 +186,14 @@ export const PaymentMethods = () => {
         },
         {
             key: 'gl_account_id',
-            label: 'الحساب المرتبط',
+            label: 'ط§ظ„ط­ط³ط§ط¨ ط§ظ„ظ…ط±طھط¨ط·',
             width: 180,
             defaultVisible: true,
             getDisplayValue: (method) => method.gl_account_id || '-',
         },
         {
             key: 'commission_rate',
-            label: 'عمولة %',
+            label: 'ط¹ظ…ظˆظ„ط© %',
             type: 'number',
             filterType: 'number',
             width: 120,
@@ -202,7 +203,7 @@ export const PaymentMethods = () => {
         },
         {
             key: 'is_active',
-            label: 'الحالة',
+            label: 'ط§ظ„ط­ط§ظ„ط©',
             type: 'boolean',
             filterType: 'boolean',
             width: 140,
@@ -211,13 +212,13 @@ export const PaymentMethods = () => {
             renderCell: (method) => (
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${method.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                     {method.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
-                    {method.is_active ? 'فعال' : 'غير فعال'}
+                    {method.is_active ? 'ظپط¹ط§ظ„' : 'ط؛ظٹط± ظپط¹ط§ظ„'}
                 </span>
             ),
         },
         {
             key: 'actions',
-            label: 'إجراءات',
+            label: 'ط¥ط¬ط±ط§ط،ط§طھ',
             width: 100,
             sortable: false,
             filterable: false,
@@ -229,7 +230,7 @@ export const PaymentMethods = () => {
                     <button
                         onClick={() => handleEdit(method)}
                         className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
-                        title="تعديل"
+                        title="طھط¹ط¯ظٹظ„"
                     >
                         <Edit size={18} />
                     </button>
@@ -240,26 +241,27 @@ export const PaymentMethods = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
-                            <CreditCard size={24} />
-                        </div>
-                        طرق الدفع (Payment Methods)
-                    </h1>
-                    <p className="text-gray-500 mt-1 mr-12">تعريف وسائل الدفع (نقدي، شبكة، تحويل) وربطها بالحسابات</p>
-                </div>
-
-                <button
-                    onClick={() => setIsAdding(true)}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
-                >
-                    <Plus size={20} />
-                    إضافة طريقة دفع
-                </button>
-            </div>
+            <WorkspaceHeader
+                icon={<CreditCard size={22} />}
+                title="طرق الدفع"
+                subtitle="تعريف وسائل الدفع وربطها بالحسابات بنفس تجربة القوائم المرجعية الموحدة."
+                badges={[
+                    { label: `${methods.length} طريقة`, tone: 'info' },
+                    { label: `${methods.filter((method) => method.is_active).length} نشطة`, tone: 'success' },
+                ]}
+                actions={(
+                    <button
+                        onClick={() => setIsAdding(true)}
+                        className="rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-purple-900/15 transition hover:brightness-105"
+                    >
+                        <span className="inline-flex items-center gap-2">
+                            <Plus size={16} />
+                            <span>إضافة طريقة دفع</span>
+                        </span>
+                    </button>
+                )}
+                className="mb-8"
+            />
 
             {/* Error Alert */}
             {error && (
@@ -278,9 +280,9 @@ export const PaymentMethods = () => {
                 loading={loading}
                 columns={columns}
                 rowKey={(method) => String(method.id)}
-                searchPlaceholder="بحث عن طريقة دفع..."
-                emptyMessage="لا توجد طرق دفع مطابقة للمعايير الحالية"
-                createLabel="إضافة طريقة دفع"
+                searchPlaceholder="ط¨ط­ط« ط¹ظ† ط·ط±ظٹظ‚ط© ط¯ظپط¹..."
+                emptyMessage="ظ„ط§ طھظˆط¬ط¯ ط·ط±ظ‚ ط¯ظپط¹ ظ…ط·ط§ط¨ظ‚ط© ظ„ظ„ظ…ط¹ط§ظٹظٹط± ط§ظ„ط­ط§ظ„ظٹط©"
+                createLabel="ط¥ط¶ط§ظپط© ط·ط±ظٹظ‚ط© ط¯ظپط¹"
                 onCreate={() => setIsAdding(true)}
                 onEdit={handleEdit}
                 onRefresh={loadMethods}
@@ -295,7 +297,7 @@ export const PaymentMethods = () => {
                     <div className="relative w-full sm:w-96">
                         <input
                             type="text"
-                            placeholder="بحث عن طريقة دفع..."
+                            placeholder="ط¨ط­ط« ط¹ظ† ط·ط±ظٹظ‚ط© ط¯ظپط¹..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="w-full pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
@@ -303,7 +305,7 @@ export const PaymentMethods = () => {
                         <Search className="absolute right-3 top-3 text-gray-400" size={18} />
                     </div>
                     <div className="text-sm text-gray-500 font-medium bg-white px-3 py-1 rounded-md border shadow-sm">
-                        الإجمالي: <span className="text-blue-600 font-bold">{methods.length}</span>
+                        ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ: <span className="text-blue-600 font-bold">{methods.length}</span>
                     </div>
                 </div>
 
@@ -311,7 +313,7 @@ export const PaymentMethods = () => {
                 {loading ? (
                     <div className="p-12 text-center flex flex-col items-center justify-center text-gray-400">
                         <Loader2 size={40} className="animate-spin mb-4 text-blue-500" />
-                        <p>جاري تحميل البيانات...</p>
+                        <p>ط¬ط§ط±ظٹ طھط­ظ…ظٹظ„ ط§ظ„ط¨ظٹط§ظ†ط§طھ...</p>
                     </div>
                 ) : (
                     /* Table */
@@ -319,13 +321,13 @@ export const PaymentMethods = () => {
                         <table className="w-full text-right">
                             <thead className="bg-[#f8fafc] text-gray-600 font-semibold text-sm uppercase tracking-wider border-b">
                                 <tr>
-                                    <th className="px-6 py-4">الاسم (عربي)</th>
-                                    <th className="px-6 py-4">الاسم (English)</th>
-                                    <th className="px-6 py-4">النوع</th>
-                                    <th className="px-6 py-4">الحساب المرتبط</th>
-                                    <th className="px-6 py-4">عمولة %</th>
-                                    <th className="px-6 py-4">الحالة</th>
-                                    <th className="px-6 py-4 text-center w-32">إجراءات</th>
+                                    <th className="px-6 py-4">ط§ظ„ط§ط³ظ… (ط¹ط±ط¨ظٹ)</th>
+                                    <th className="px-6 py-4">ط§ظ„ط§ط³ظ… (English)</th>
+                                    <th className="px-6 py-4">ط§ظ„ظ†ظˆط¹</th>
+                                    <th className="px-6 py-4">ط§ظ„ط­ط³ط§ط¨ ط§ظ„ظ…ط±طھط¨ط·</th>
+                                    <th className="px-6 py-4">ط¹ظ…ظˆظ„ط© %</th>
+                                    <th className="px-6 py-4">ط§ظ„ط­ط§ظ„ط©</th>
+                                    <th className="px-6 py-4 text-center w-32">ط¥ط¬ط±ط§ط،ط§طھ</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -352,14 +354,14 @@ export const PaymentMethods = () => {
                                                     : 'bg-gray-100 text-gray-500'
                                                     }`}>
                                                     {method.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
-                                                    {method.is_active ? 'فعال' : 'غير فعال'}
+                                                    {method.is_active ? 'ظپط¹ط§ظ„' : 'ط؛ظٹط± ظپط¹ط§ظ„'}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
                                                     onClick={() => handleEdit(method)}
                                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="تعديل"
+                                                    title="طھط¹ط¯ظٹظ„"
                                                 >
                                                     <Edit size={18} />
                                                 </button>
@@ -373,7 +375,7 @@ export const PaymentMethods = () => {
                                                 <div className="bg-gray-50 p-4 rounded-full">
                                                     <Search size={32} className="text-gray-300" />
                                                 </div>
-                                                <p>لا توجد طرق دفع مطابقة للبحث</p>
+                                                <p>ظ„ط§ طھظˆط¬ط¯ ط·ط±ظ‚ ط¯ظپط¹ ظ…ط·ط§ط¨ظ‚ط© ظ„ظ„ط¨ط­ط«</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -394,7 +396,7 @@ export const PaymentMethods = () => {
                         <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
                             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                                 {editingId ? <Edit className="text-blue-600" size={20} /> : <Plus className="text-blue-600" size={20} />}
-                                {editingId ? 'تعديل طريقة الدفع' : 'إضافة طريقة دفع جديدة'}
+                                {editingId ? 'طھط¹ط¯ظٹظ„ ط·ط±ظٹظ‚ط© ط§ظ„ط¯ظپط¹' : 'ط¥ط¶ط§ظپط© ط·ط±ظٹظ‚ط© ط¯ظپط¹ ط¬ط¯ظٹط¯ط©'}
                             </h3>
                             <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
                                 <X size={20} />
@@ -404,19 +406,19 @@ export const PaymentMethods = () => {
                         <form onSubmit={handleSave} className="p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (عربي) <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">ط§ظ„ط§ط³ظ… (ط¹ط±ط¨ظٹ) <span className="text-red-500">*</span></label>
                                     <input
                                         type="text"
                                         value={formData.name_ar}
                                         onChange={e => setFormData({ ...formData, name_ar: e.target.value })}
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-right"
-                                        placeholder="مثال: نقدي"
+                                        placeholder="ظ…ط«ط§ظ„: ظ†ظ‚ط¯ظٹ"
                                         dir="rtl"
                                         autoFocus
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (English)</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">ط§ظ„ط§ط³ظ… (English)</label>
                                     <input
                                         type="text"
                                         value={formData.name_en}
@@ -430,21 +432,21 @@ export const PaymentMethods = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">نوع الدفع</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">ظ†ظˆط¹ ط§ظ„ط¯ظپط¹</label>
                                     <select
                                         value={formData.type}
                                         onChange={e => setFormData({ ...formData, type: e.target.value })}
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
                                     >
-                                        <option value="CASH">نقد (Cash)</option>
-                                        <option value="CHECK">شيك (Check)</option>
-                                        <option value="CREDIT_CARD">بطاقة ائتمان</option>
-                                        <option value="BANK_TRANSFER">حوالة بنكية</option>
-                                        <option value="ELECTRONIC_WALLET">محفظة إلكترونية</option>
+                                        <option value="CASH">ظ†ظ‚ط¯ (Cash)</option>
+                                        <option value="CHECK">ط´ظٹظƒ (Check)</option>
+                                        <option value="CREDIT_CARD">ط¨ط·ط§ظ‚ط© ط§ط¦طھظ…ط§ظ†</option>
+                                        <option value="BANK_TRANSFER">ط­ظˆط§ظ„ط© ط¨ظ†ظƒظٹط©</option>
+                                        <option value="ELECTRONIC_WALLET">ظ…ط­ظپط¸ط© ط¥ظ„ظƒطھط±ظˆظ†ظٹط©</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">عمولة البنك %</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">ط¹ظ…ظˆظ„ط© ط§ظ„ط¨ظ†ظƒ %</label>
                                     <input
                                         type="number"
                                         value={formData.commission_rate}
@@ -459,13 +461,13 @@ export const PaymentMethods = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1.5">الحساب المحاسبي المرتبط</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">ط§ظ„ط­ط³ط§ط¨ ط§ظ„ظ…ط­ط§ط³ط¨ظٹ ط§ظ„ظ…ط±طھط¨ط·</label>
                                 <div
                                     className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-700 cursor-pointer hover:bg-white hover:border-blue-300 transition-all flex justify-between items-center"
                                     onClick={() => setShowAccountPicker(true)}
                                 >
                                     <span className={formData.gl_account_id ? 'text-gray-900' : 'text-gray-400'}>
-                                        {formData.gl_account_id || 'اضغط لاختيار الحساب...'}
+                                        {formData.gl_account_id || 'ط§ط¶ط؛ط· ظ„ط§ط®طھظٹط§ط± ط§ظ„ط­ط³ط§ط¨...'}
                                     </span>
                                     <Edit size={16} className="text-gray-400" />
                                 </div>
@@ -482,7 +484,7 @@ export const PaymentMethods = () => {
                                         />
                                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                     </div>
-                                    <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">فعال</span>
+                                    <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900">ظپط¹ط§ظ„</span>
                                 </label>
                             </div>
 
@@ -492,7 +494,7 @@ export const PaymentMethods = () => {
                                     onClick={handleClose}
                                     className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
                                 >
-                                    إلغاء
+                                    ط¥ظ„ط؛ط§ط،
                                 </button>
                                 <button
                                     type="submit"
@@ -500,7 +502,7 @@ export const PaymentMethods = () => {
                                     className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm shadow-blue-200 transition-all flex justify-center items-center gap-2 disabled:opacity-70"
                                 >
                                     {saving && <Loader2 size={16} className="animate-spin" />}
-                                    {editingId ? 'حفظ التعديلات' : 'إضافة طريقة الدفع'}
+                                    {editingId ? 'ط­ظپط¸ ط§ظ„طھط¹ط¯ظٹظ„ط§طھ' : 'ط¥ط¶ط§ظپط© ط·ط±ظٹظ‚ط© ط§ظ„ط¯ظپط¹'}
                                 </button>
                             </div>
                         </form>
@@ -520,3 +522,5 @@ export const PaymentMethods = () => {
         </div>
     );
 };
+
+

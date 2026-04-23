@@ -180,7 +180,7 @@ export const BanksPage = () => {
                 subtitle="تعريف البنوك والفروع وربطها مع العمليات البنكية داخل النظام"
                 badges={[
                     { label: `الإجمالي ${banks.length}`, tone: 'warning' },
-                    { label: `المعروض ${filteredBanks.length}`, tone: 'success' },
+                    { label: `المربوط ${banks.filter((bank) => bank.gl_account_code).length}`, tone: 'success' },
                 ]}
                 actions={
                     <>

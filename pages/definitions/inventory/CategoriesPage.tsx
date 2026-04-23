@@ -297,7 +297,7 @@ export const CategoriesPage = () => {
                 subtitle="عرض جدولي منظم بنفس أسلوب شاشة الأصناف."
                 badges={[
                     { label: `${categories.length} مجموعة`, tone: 'info' },
-                    { label: `${filteredCategories.length} نتيجة`, tone: 'neutral' },
+                    { label: `${categories.filter((category) => !category.parent_id).length} رئيسية`, tone: 'neutral' },
                 ]}
                 actions={(
                     <button

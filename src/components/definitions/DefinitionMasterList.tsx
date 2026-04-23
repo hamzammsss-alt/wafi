@@ -1,5 +1,6 @@
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Filter, RotateCcw, Search } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowDownAZ, ArrowUpAZ, Copy, EyeOff, Filter, FilterX, RotateCcw, Search, SlidersHorizontal } from 'lucide-react';
 import { FilterValueType } from '../../config/screenRegistry';
 import type {
     ColumnSchema,
@@ -13,6 +14,7 @@ import type {
     ScreenFilterStateItem,
     ScreenSortStateItem,
 } from '../../hooks/useScreenViewManager';
+import { getFloatingMenuPositionFromPoint, getFloatingMenuPositionFromRect } from '../../lib/floatingMenu';
 import FilterDrawer from '../ui/FilterDrawer';
 import MasterListToolbar from './MasterListToolbar';
 import { WafiColumnDef, WafiDataGrid, WafiDataGridHandle } from '../../../pages/treasury/operations/WafiDataGrid';
@@ -66,6 +68,26 @@ type PersistedState = {
     columnWidths?: Record<string, number>;
     quickSearchField?: string;
     quickSearchOperator?: QuickSearchOperator;
+};
+
+type ColumnMenuState = {
+    key: string;
+    label: string;
+    source: 'header' | 'cell';
+    position: {
+        top: number;
+        left: number;
+        maxHeight: number;
+        transformOrigin: string;
+    };
+    rowId?: string;
+    cellValue?: string;
+};
+
+type DraftColumnFilter = {
+    operator: FilterOperator;
+    value?: unknown;
+    valueTo?: unknown;
 };
 
 const EMPTY_VIEWS: SavedScreenView[] = [];
@@ -138,6 +160,46 @@ function normalizeFilters(raw: unknown): ScreenFilterStateItem[] {
             valueTo: (item as any).valueTo,
             enabled: (item as any).enabled !== false,
         }));
+}
+
+function getOperatorLabel(operator: FilterOperator) {
+    switch (operator) {
+        case 'eq':
+            return 'يساوي';
+        case 'neq':
+            return 'لا يساوي';
+        case 'starts_with':
+            return 'يبدأ بـ';
+        case 'ends_with':
+            return 'ينتهي بـ';
+        case 'gt':
+            return 'أكبر من';
+        case 'gte':
+            return 'أكبر أو يساوي';
+        case 'lt':
+            return 'أصغر من';
+        case 'lte':
+            return 'أصغر أو يساوي';
+        case 'between':
+            return 'بين';
+        case 'in':
+            return 'ضمن';
+        case 'is_null':
+            return 'فارغ';
+        case 'not_null':
+            return 'غير فارغ';
+        case 'contains':
+        default:
+            return 'يحتوي على';
+    }
+}
+
+function operatorNeedsValue(operator: FilterOperator) {
+    return operator !== 'is_null' && operator !== 'not_null';
+}
+
+function operatorNeedsSecondValue(operator: FilterOperator) {
+    return operator === 'between';
 }
 
 function getBooleanLabel(value: unknown) {
@@ -258,7 +320,6 @@ function matchesFilter<T>(row: T, column: DefinitionListColumn<T>, filter: Scree
         const value = toNumber(raw);
         const compare = Number(filter.value ?? 0);
         const compareTo = Number(filter.valueTo ?? 0);
-
         switch (filter.operator) {
             case 'eq':
                 return value === compare;
@@ -282,7 +343,6 @@ function matchesFilter<T>(row: T, column: DefinitionListColumn<T>, filter: Scree
         const compare = parseComparableDate(filter.value);
         const compareTo = parseComparableDate(filter.valueTo);
         if (Number.isNaN(value)) return false;
-
         switch (filter.operator) {
             case 'eq':
                 return value === compare;
@@ -299,7 +359,6 @@ function matchesFilter<T>(row: T, column: DefinitionListColumn<T>, filter: Scree
 
     const textValue = String(raw ?? '').trim().toLowerCase();
     const normalizedFilterValue = String(filter.value ?? '').trim().toLowerCase();
-
     switch (filter.operator) {
         case 'eq':
             return textValue === normalizedFilterValue;
@@ -364,13 +423,15 @@ export function DefinitionMasterList<T>({
         ...(persisted?.columnWidths || {}),
     });
     const [rowDensity, setRowDensity] = useState<'comfortable' | 'compact'>(persisted?.rowDensity || 'comfortable');
+    const [activeColumnMenu, setActiveColumnMenu] = useState<ColumnMenuState | null>(null);
+    const [draftColumnFilter, setDraftColumnFilter] = useState<DraftColumnFilter | null>(null);
 
     const deferredSearchValue = useDeferredValue(quickSearch);
 
     const columnSchema = useMemo(() => buildColumnSchema(columns), [columns]);
     const filterSchema = useMemo(() => buildFilterSchema(columns), [columns]);
     const columnMap = useMemo(() => new Map(columns.map((column) => [column.key, column])), [columns]);
-
+    const filterSchemaMap = useMemo(() => new Map(filterSchema.map((item) => [item.key, item])), [filterSchema]);
     const searchableColumns = useMemo(
         () => columns.filter((column) => column.searchable !== false && column.key !== 'actions'),
         [columns],
@@ -405,13 +466,59 @@ export function DefinitionMasterList<T>({
         });
     }, [data, rowKey]);
 
+    useEffect(() => {
+        if (!activeColumnMenu) {
+            setDraftColumnFilter(null);
+            return;
+        }
+
+        const onMouseDown = (event: MouseEvent) => {
+            const target = event.target as HTMLElement | null;
+            if (!target) return;
+            const insideMenu = target.closest('[data-definition-column-menu="1"]');
+            const insideTrigger = target.closest('[data-column-filter-trigger="1"]');
+            if (!insideMenu && !insideTrigger) {
+                setActiveColumnMenu(null);
+            }
+        };
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setActiveColumnMenu(null);
+            }
+        };
+
+        const closeMenu = () => setActiveColumnMenu(null);
+
+        document.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('keydown', onKeyDown);
+        window.addEventListener('resize', closeMenu);
+        window.addEventListener('scroll', closeMenu, true);
+
+        return () => {
+            document.removeEventListener('mousedown', onMouseDown);
+            document.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('resize', closeMenu);
+            window.removeEventListener('scroll', closeMenu, true);
+        };
+    }, [activeColumnMenu]);
+
     const activeFilters = useMemo(() => {
         return filters.filter((filter) => {
             if (filter.enabled === false) return false;
-            if (filter.operator === 'is_null' || filter.operator === 'not_null') return true;
+            if (!operatorNeedsValue(filter.operator)) return true;
             return String(filter.value ?? '').trim() !== '';
         });
     }, [filters]);
+
+    const columnFilterValues = useMemo(() => {
+        return activeFilters.reduce<Record<string, string>>((acc, filter) => {
+            acc[filter.key] = !operatorNeedsValue(filter.operator)
+                ? getOperatorLabel(filter.operator)
+                : String(filter.value ?? '');
+            return acc;
+        }, {});
+    }, [activeFilters]);
 
     const filteredRows = useMemo(() => {
         const normalizedSearch = deferredSearchValue.trim().toLowerCase();
@@ -453,7 +560,6 @@ export function DefinitionMasterList<T>({
 
         const currentSort = sort[0];
         if (!currentSort?.key) return baseRows;
-
         const column = columnMap.get(currentSort.key);
         if (!column) return baseRows;
 
@@ -479,16 +585,7 @@ export function DefinitionMasterList<T>({
                 ? compareText(first, second)
                 : compareText(second, first);
         });
-    }, [
-        activeFilters,
-        columnMap,
-        data,
-        deferredSearchValue,
-        quickSearchField,
-        quickSearchOperator,
-        searchableColumns,
-        sort,
-    ]);
+    }, [activeFilters, columnMap, data, deferredSearchValue, quickSearchField, quickSearchOperator, searchableColumns, sort]);
 
     const selectedRows = useMemo(() => {
         if (selectedRowIds.length === 0) return [];
@@ -503,7 +600,7 @@ export function DefinitionMasterList<T>({
         }));
     }, [searchableColumns]);
 
-    const wafiColumns = useMemo<WafiColumnDef<T>[]>(() => {
+    const wafiColumns = useMemo<WafiColumnDef<T>[]>((() => {
         return columns.map((column) => ({
             key: column.key,
             label: column.label,
@@ -511,7 +608,109 @@ export function DefinitionMasterList<T>({
             getValue: (row: T) => getDisplayValue(column, row),
             renderCell: column.renderCell ? (row: T) => column.renderCell!(row) : undefined,
         }));
-    }, [columns]);
+    }), [columns]);
+
+    const setFilterForColumn = (columnKey: string, next: DraftColumnFilter | null) => {
+        if (!filterSchemaMap.has(columnKey)) return;
+        if (!next) {
+            setFilters((prev) => prev.filter((item) => item.key !== columnKey));
+            return;
+        }
+
+        const hasPrimaryValue = String(next.value ?? '').trim() !== '';
+        const hasSecondaryValue = String(next.valueTo ?? '').trim() !== '';
+        if (operatorNeedsValue(next.operator) && !hasPrimaryValue) {
+            setFilters((prev) => prev.filter((item) => item.key !== columnKey));
+            return;
+        }
+        if (operatorNeedsSecondValue(next.operator) && !hasSecondaryValue) {
+            setFilters((prev) => prev.filter((item) => item.key !== columnKey));
+            return;
+        }
+
+        const normalized: ScreenFilterStateItem = {
+            key: columnKey,
+            operator: next.operator,
+            value: next.value,
+            valueTo: next.valueTo,
+            enabled: true,
+        };
+
+        setFilters((prev) => {
+            const others = prev.filter((item) => item.key !== columnKey);
+            return filterSchema
+                .map((item) => {
+                    if (item.key === columnKey) return normalized;
+                    return others.find((entry) => entry.key === item.key) || null;
+                })
+                .filter(Boolean) as ScreenFilterStateItem[];
+        });
+    };
+
+    const openColumnMenu = (payload: {
+        key: string;
+        label: string;
+        source: 'header' | 'cell';
+        triggerElement?: HTMLElement | null;
+        clientX?: number;
+        clientY?: number;
+        rowId?: string;
+        cellValue?: string;
+    }) => {
+        const schema = filterSchemaMap.get(payload.key);
+        let position: ColumnMenuState['position'] | null = null;
+
+        if (typeof payload.clientX === 'number' && typeof payload.clientY === 'number') {
+            position = getFloatingMenuPositionFromPoint(payload.clientX, payload.clientY, {
+                menuWidth: 320,
+                menuHeight: payload.source === 'cell' ? 360 : 420,
+                preferredAlign: 'right',
+                offset: 10,
+                margin: 14,
+                minHeight: 220,
+            });
+        } else if (payload.triggerElement) {
+            position = getFloatingMenuPositionFromRect(payload.triggerElement.getBoundingClientRect(), {
+                menuWidth: 320,
+                menuHeight: payload.source === 'cell' ? 360 : 420,
+                preferredAlign: 'right',
+                offset: 10,
+                margin: 14,
+                minHeight: 220,
+            });
+        }
+
+        if (!position) return;
+        const existing = activeFilters.find((item) => item.key === payload.key);
+        setDraftColumnFilter({
+            operator: (existing?.operator || schema?.defaultOperator || schema?.operatorSet?.[0] || 'contains') as FilterOperator,
+            value: existing?.value ?? '',
+            valueTo: existing?.valueTo ?? '',
+        });
+        setActiveColumnMenu({
+            key: payload.key,
+            label: payload.label,
+            source: payload.source,
+            position,
+            rowId: payload.rowId,
+            cellValue: payload.cellValue,
+        });
+    };
+
+    const applyVisibleColumnsChange = (next: string[] | ((prev: string[]) => string[])) => {
+        const nextKeys = typeof next === 'function' ? next(visibleColumns) : next;
+        setColumnsState((prev) => {
+            const hiddenKeys = prev.map((item) => item.key).filter((key) => !nextKeys.includes(key));
+            const orderedKeys = [...nextKeys, ...hiddenKeys];
+            return prev
+                .map((item) => ({
+                    ...item,
+                    visible: nextKeys.includes(item.key),
+                    order: orderedKeys.indexOf(item.key),
+                }))
+                .sort((left, right) => left.order - right.order);
+        });
+    };
 
     const resetState = () => {
         setQuickSearch('');
@@ -522,30 +721,97 @@ export function DefinitionMasterList<T>({
         setSort(normalizeSort([], defaultSort));
         setColumnWidths(defaultColumnWidths);
         setRowDensity('comfortable');
-    };
-
-    const handleRefresh = async () => {
-        await onRefresh?.();
-    };
-
-    const handleDelete = async () => {
-        if (!onDelete || selectedRows.length === 0) return;
-        await onDelete(selectedRows);
-        setSelectedRowIds([]);
+        setActiveColumnMenu(null);
     };
 
     const activeQuickFilter = quickSearch.trim();
+    const activeColumnSchema = activeColumnMenu ? filterSchemaMap.get(activeColumnMenu.key) || null : null;
+    const currentColumnSort = activeColumnMenu?.key && sort[0]?.key === activeColumnMenu.key ? sort[0] : null;
+    const cellMenuHasValue = !!activeColumnMenu?.cellValue && activeColumnMenu.cellValue !== '-';
+
+    const renderDraftFilterInput = () => {
+        if (!activeColumnSchema || !draftColumnFilter || !operatorNeedsValue(draftColumnFilter.operator)) return null;
+
+        const optionItems = activeColumnSchema.type === 'boolean'
+            ? [
+                { value: '1', label: 'نعم' },
+                { value: '0', label: 'لا' },
+            ]
+            : activeColumnSchema.options || [];
+        const inputClassName = 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100';
+        const valueType = activeColumnSchema.type === 'number' ? 'number' : activeColumnSchema.type === 'date' ? 'date' : 'text';
+
+        if (activeColumnSchema.type === 'enum' || activeColumnSchema.type === 'lookup' || activeColumnSchema.type === 'boolean') {
+            return (
+                <div className="grid gap-2">
+                    <select
+                        value={String(draftColumnFilter.value ?? '')}
+                        onChange={(event) => setDraftColumnFilter((prev) => prev ? { ...prev, value: event.target.value } : prev)}
+                        className={inputClassName}
+                    >
+                        <option value="">اختر قيمة</option>
+                        {optionItems.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                    {operatorNeedsSecondValue(draftColumnFilter.operator) && (
+                        <select
+                            value={String(draftColumnFilter.valueTo ?? '')}
+                            onChange={(event) => setDraftColumnFilter((prev) => prev ? { ...prev, valueTo: event.target.value } : prev)}
+                            className={inputClassName}
+                        >
+                            <option value="">إلى قيمة</option>
+                            {optionItems.map((option) => (
+                                <option key={`${option.value}-to`} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+                </div>
+            );
+        }
+
+        return (
+            <div className="grid gap-2">
+                <input
+                    type={valueType}
+                    value={String(draftColumnFilter.value ?? '')}
+                    onChange={(event) => setDraftColumnFilter((prev) => prev ? { ...prev, value: event.target.value } : prev)}
+                    className={inputClassName}
+                    placeholder={`أدخل قيمة ${activeColumnMenu?.label || ''}`}
+                />
+                {operatorNeedsSecondValue(draftColumnFilter.operator) && (
+                    <input
+                        type={valueType}
+                        value={String(draftColumnFilter.valueTo ?? '')}
+                        onChange={(event) => setDraftColumnFilter((prev) => prev ? { ...prev, valueTo: event.target.value } : prev)}
+                        className={inputClassName}
+                        placeholder="إلى"
+                    />
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className={className}>
             <MasterListToolbar
                 createLabel={createLabel}
                 selectedRowsCount={selectedRows.length}
+                totalRowsCount={data.length}
+                visibleRowsCount={filteredRows.length}
+                activeFiltersCount={activeFilters.length + (activeQuickFilter ? 1 : 0)}
                 rowDensity={rowDensity}
                 onCreate={onCreate}
                 onEdit={onEdit && selectedRows.length === 1 ? () => onEdit(selectedRows[0]) : undefined}
                 onDuplicate={onDuplicate && selectedRows.length === 1 ? () => onDuplicate(selectedRows[0]) : undefined}
-                onDelete={onDelete ? handleDelete : undefined}
+                onDelete={onDelete && selectedRows.length > 0 ? async () => {
+                    await onDelete(selectedRows);
+                    setSelectedRowIds([]);
+                } : undefined}
                 onExport={(format) => {
                     if (format === 'excel') {
                         gridRef.current?.exportToExcel(`${screenKey}.xlsx`, 'Data');
@@ -555,56 +821,59 @@ export function DefinitionMasterList<T>({
                 }}
                 onPrint={() => gridRef.current?.exportToPdf(screenKey)}
                 onOpenFilters={() => setFiltersOpen(true)}
-                onRefresh={onRefresh ? handleRefresh : undefined}
+                onRefresh={onRefresh}
                 onSetRowDensity={setRowDensity}
                 extraActions={toolbarExtraActions}
             />
 
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-                <div className="relative min-w-[280px] flex-1">
-                    <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                        type="text"
-                        value={quickSearch}
-                        onChange={(event) => setQuickSearch(event.target.value)}
-                        placeholder={searchPlaceholder}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white pr-10 pl-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                    />
+            <div className="mb-4 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative min-w-[300px] flex-1">
+                        <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            value={quickSearch}
+                            onChange={(event) => setQuickSearch(event.target.value)}
+                            placeholder={searchPlaceholder}
+                            className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50/70 pr-10 pl-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:bg-white focus:ring-2 focus:ring-sky-100"
+                        />
+                    </div>
+
+                    <select
+                        value={quickSearchField}
+                        onChange={(event) => setQuickSearchField(event.target.value)}
+                        className="h-12 min-w-[170px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    >
+                        <option value="all">كل الحقول</option>
+                        {quickSearchFields.map((field) => (
+                            <option key={field.key} value={field.key}>
+                                {field.label}
+                            </option>
+                        ))}
+                    </select>
+
+                    <select
+                        value={quickSearchOperator}
+                        onChange={(event) => setQuickSearchOperator(event.target.value as QuickSearchOperator)}
+                        className="h-12 min-w-[170px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    >
+                        <option value="contains">يحتوي على</option>
+                        <option value="startsWith">يبدأ بـ</option>
+                        <option value="equals">يساوي</option>
+                        <option value="notContains">لا يحتوي</option>
+                    </select>
+
+                    <button
+                        type="button"
+                        onClick={() => setFiltersOpen(true)}
+                        className="inline-flex h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-sky-300 hover:text-sky-700"
+                    >
+                        <SlidersHorizontal size={16} />
+                        <span>الفلترة المتقدمة</span>
+                    </button>
+
+                    {summaryBadges}
                 </div>
-
-                <select
-                    value={quickSearchField}
-                    onChange={(event) => setQuickSearchField(event.target.value)}
-                    className="h-11 min-w-[170px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                >
-                    <option value="all">كل الحقول</option>
-                    {quickSearchFields.map((field) => (
-                        <option key={field.key} value={field.key}>
-                            {field.label}
-                        </option>
-                    ))}
-                </select>
-
-                <select
-                    value={quickSearchOperator}
-                    onChange={(event) => setQuickSearchOperator(event.target.value as QuickSearchOperator)}
-                    className="h-11 min-w-[160px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                >
-                    <option value="contains">يحتوي على</option>
-                    <option value="startsWith">يبدأ بـ</option>
-                    <option value="equals">يساوي</option>
-                    <option value="notContains">لا يحتوي</option>
-                </select>
-
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600">
-                    الإجمالي: <span className="text-slate-900">{data.length}</span>
-                </div>
-
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700">
-                    المعروض: <span>{filteredRows.length}</span>
-                </div>
-
-                {summaryBadges}
             </div>
 
             {(activeQuickFilter || activeFilters.length > 0) && (
@@ -622,12 +891,7 @@ export function DefinitionMasterList<T>({
                     {activeFilters.map((filter) => {
                         const column = columnMap.get(filter.key);
                         if (!column) return null;
-                        const value = filter.operator === 'is_null'
-                            ? 'فارغ'
-                            : filter.operator === 'not_null'
-                                ? 'غير فارغ'
-                                : String(filter.value ?? '');
-
+                        const value = !operatorNeedsValue(filter.operator) ? getOperatorLabel(filter.operator) : String(filter.value ?? '');
                         return (
                             <button
                                 key={filter.key}
@@ -664,23 +928,230 @@ export function DefinitionMasterList<T>({
                     selectedRowIds={selectedRowIds}
                     onSelectionChange={setSelectedRowIds}
                     visibleColumns={visibleColumns}
-                    onVisibleColumnsChange={(next) => {
-                        const nextKeys = typeof next === 'function' ? next(visibleColumns) : next;
-                        setColumnsState((prev) => prev.map((item) => ({
-                            ...item,
-                            visible: nextKeys.includes(item.key),
-                        })));
-                    }}
+                    onVisibleColumnsChange={applyVisibleColumnsChange}
                     columnWidths={columnWidths}
                     onColumnWidthsChange={setColumnWidths}
                     sortKey={sort[0]?.key || ''}
                     sortDir={sort[0]?.direction || 'asc'}
                     onSortChange={(key, direction) => setSort(key ? [{ key, direction }] : [])}
                     rowDensity={rowDensity}
+                    columnFilters={columnFilterValues}
+                    onHeaderContextMenu={(event, colKey, label) => {
+                        openColumnMenu({
+                            key: colKey,
+                            label,
+                            source: 'header',
+                            clientX: event.clientX,
+                            clientY: event.clientY,
+                        });
+                    }}
+                    onCellContextMenu={(event, colKey, label, cellValue, rowId) => {
+                        openColumnMenu({
+                            key: colKey,
+                            label,
+                            source: 'cell',
+                            clientX: event.clientX,
+                            clientY: event.clientY,
+                            cellValue,
+                            rowId,
+                        });
+                    }}
+                    onFilterClick={(event, colKey, label) => {
+                        if (activeColumnMenu?.key === colKey && activeColumnMenu.source === 'header' && !activeColumnMenu.rowId) {
+                            setActiveColumnMenu(null);
+                            return;
+                        }
+                        openColumnMenu({
+                            key: colKey,
+                            label,
+                            source: 'header',
+                            triggerElement: event.currentTarget as HTMLElement,
+                        });
+                    }}
+                    activeFilterColumn={activeColumnMenu?.source === 'header' ? activeColumnMenu.key : null}
                     onRowDoubleClick={onRowDoubleClick || onEdit}
                     showRowNumbers
                 />
             </div>
+
+            {activeColumnMenu && activeColumnSchema && draftColumnFilter && typeof document !== 'undefined' && createPortal(
+                <div
+                    data-definition-column-menu="1"
+                    className="fixed z-[9999] flex w-[20rem] flex-col overflow-hidden rounded-[22px] border border-sky-100/80 bg-white/95 text-right shadow-[0_24px_60px_rgba(15,23,42,0.16)] ring-1 ring-slate-900/5 backdrop-blur-xl"
+                    style={{
+                        top: activeColumnMenu.position.top,
+                        left: activeColumnMenu.position.left,
+                        maxHeight: activeColumnMenu.position.maxHeight,
+                        transformOrigin: activeColumnMenu.position.transformOrigin,
+                    }}
+                    dir="rtl"
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                    onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }}
+                >
+                    <div className="border-b border-slate-100 bg-gradient-to-l from-sky-50/90 via-white to-cyan-50/80 px-4 py-3.5">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-extrabold text-slate-800">{activeColumnMenu.label}</div>
+                                <div className="mt-1 text-[11px] text-slate-500">
+                                    {activeColumnMenu.source === 'cell'
+                                        ? 'أوامر سريعة على قيمة الخلية مع فلترة متقدمة لنفس العمود.'
+                                        : 'فرز وتصفية متقدمة للعمود الحالي بنفس أسلوب شاشة الأصناف.'}
+                                </div>
+                                {cellMenuHasValue && (
+                                    <div className="mt-2 max-w-[13rem] truncate rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 shadow-sm">
+                                        {activeColumnMenu.cellValue}
+                                    </div>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActiveColumnMenu(null)}
+                                className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500 transition hover:border-slate-300 hover:text-slate-800"
+                            >
+                                إغلاق
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3 overflow-auto p-4">
+                        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3">
+                            <div className="mb-2 text-[11px] font-bold text-slate-500">الفرز</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSort([{ key: activeColumnMenu.key, direction: 'asc' }]);
+                                        setActiveColumnMenu(null);
+                                    }}
+                                    className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition ${currentColumnSort?.direction === 'asc' ? 'border-sky-300 bg-sky-100 text-sky-700' : 'border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:text-sky-700'}`}
+                                >
+                                    <ArrowUpAZ size={14} />
+                                    <span>تصاعدي</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSort([{ key: activeColumnMenu.key, direction: 'desc' }]);
+                                        setActiveColumnMenu(null);
+                                    }}
+                                    className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition ${currentColumnSort?.direction === 'desc' ? 'border-sky-300 bg-sky-100 text-sky-700' : 'border-slate-200 bg-white text-slate-700 hover:border-sky-200 hover:text-sky-700'}`}
+                                >
+                                    <ArrowDownAZ size={14} />
+                                    <span>تنازلي</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {activeColumnMenu.source === 'cell' && cellMenuHasValue && (
+                            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3">
+                                <div className="mb-2 text-[11px] font-bold text-slate-500">أوامر سريعة على القيمة</div>
+                                <div className="grid gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setFilterForColumn(activeColumnMenu.key, {
+                                                operator: activeColumnSchema.type === 'enum' || activeColumnSchema.type === 'lookup' || activeColumnSchema.type === 'boolean' ? 'eq' : 'contains',
+                                                value: activeColumnMenu.cellValue || '',
+                                            });
+                                            setActiveColumnMenu(null);
+                                        }}
+                                        className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                                    >
+                                        <span>تصفية بهذه القيمة</span>
+                                        <Filter size={14} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            await navigator.clipboard.writeText(activeColumnMenu.cellValue || '');
+                                            setActiveColumnMenu(null);
+                                        }}
+                                        className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                                    >
+                                        <span>نسخ القيمة</span>
+                                        <Copy size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3">
+                            <div className="mb-2 text-[11px] font-bold text-slate-500">الفلترة المتقدمة</div>
+                            <div className="grid gap-2">
+                                <select
+                                    value={draftColumnFilter.operator}
+                                    onChange={(event) => setDraftColumnFilter((prev) => prev ? { ...prev, operator: event.target.value as FilterOperator } : prev)}
+                                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                                >
+                                    {activeColumnSchema.operatorSet.map((operator) => (
+                                        <option key={operator} value={operator}>
+                                            {getOperatorLabel(operator)}
+                                        </option>
+                                    ))}
+                                </select>
+                                {renderDraftFilterInput()}
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setFilters((prev) => prev.filter((item) => item.key !== activeColumnMenu.key));
+                                        setActiveColumnMenu(null);
+                                    }}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700 transition hover:bg-rose-100"
+                                >
+                                    <FilterX size={13} />
+                                    <span>مسح الفلتر</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setFilterForColumn(activeColumnMenu.key, draftColumnFilter);
+                                        setActiveColumnMenu(null);
+                                    }}
+                                    className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] font-bold text-sky-700 transition hover:bg-sky-100"
+                                >
+                                    <Filter size={13} />
+                                    <span>تطبيق</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3">
+                            <div className="mb-2 text-[11px] font-bold text-slate-500">العمود الحالي</div>
+                            <div className="grid gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        applyVisibleColumnsChange((prev) => prev.filter((key) => key !== activeColumnMenu.key));
+                                        setActiveColumnMenu(null);
+                                    }}
+                                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                                >
+                                    <span>إخفاء العمود</span>
+                                    <EyeOff size={14} />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setFiltersOpen(true);
+                                        setActiveColumnMenu(null);
+                                    }}
+                                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                                >
+                                    <span>فتح لوحة الفلاتر والخصائص</span>
+                                    <SlidersHorizontal size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body,
+            )}
 
             <FilterDrawer
                 open={filtersOpen}

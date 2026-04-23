@@ -1329,7 +1329,12 @@ export const PaymentVoucherList = () => {
                             transformOrigin: activeColumnMenu.position.transformOrigin,
                         }}
                         dir="rtl"
-                        onContextMenu={(event) => event.preventDefault()}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => event.stopPropagation()}
+                        onContextMenu={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                        }}
                     >
                         <div className="border-b border-sky-50/80 bg-gradient-to-l from-sky-40/50 via-white to-cyan-40/30 px-2.5 py-2">
                             <div className="flex items-start justify-between gap-2">

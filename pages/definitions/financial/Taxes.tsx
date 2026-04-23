@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
     Percent,
     Plus,
@@ -13,6 +13,7 @@ import {
     Hash
 } from 'lucide-react';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 
 export const Taxes = () => {
     const [taxes, setTaxes] = useState<any[]>([]);
@@ -27,7 +28,7 @@ export const Taxes = () => {
         rate: 0,
         amount: 0,
         is_fixed: 0, // 0: Percentage, 1: Fixed
-        type: 'إضافة' // or 'خصم'
+        type: 'ط¥ط¶ط§ظپط©' // or 'ط®طµظ…'
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export const Taxes = () => {
             setTaxes(data);
         } catch (err) {
             console.error(err);
-            setError('فشل في تحميل البيانات');
+            setError('ظپط´ظ„ ظپظٹ طھط­ظ…ظٹظ„ ط§ظ„ط¨ظٹط§ظ†ط§طھ');
         } finally {
             setLoading(false);
         }
@@ -58,7 +59,7 @@ export const Taxes = () => {
             rate: tax.rate || 0,
             amount: tax.amount || 0,
             is_fixed: tax.is_fixed || 0,
-            type: tax.type || 'إضافة'
+            type: tax.type || 'ط¥ط¶ط§ظپط©'
         });
         setEditingId(tax.id);
         setIsAdding(true);
@@ -73,7 +74,7 @@ export const Taxes = () => {
             rate: 0,
             amount: 0,
             is_fixed: 0,
-            type: 'إضافة'
+            type: 'ط¥ط¶ط§ظپط©'
         });
         setError(null);
     };
@@ -83,7 +84,7 @@ export const Taxes = () => {
         setError(null);
 
         if (!formData.name_ar) {
-            setError('الاسم العربي مطلوب');
+            setError('ط§ظ„ط§ط³ظ… ط§ظ„ط¹ط±ط¨ظٹ ظ…ط·ظ„ظˆط¨');
             return;
         }
 
@@ -116,21 +117,21 @@ export const Taxes = () => {
             loadTaxes();
         } catch (err: any) {
             console.error(err);
-            setError('حدث خطأ أثناء الحفظ.');
+            setError('ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط§ظ„ط­ظپط¸.');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('هل أنت متأكد من الحذف؟')) return;
+        if (!confirm('ظ‡ظ„ ط£ظ†طھ ظ…طھط£ظƒط¯ ظ…ظ† ط§ظ„ط­ط°ظپطں')) return;
 
         try {
             await api.crudOperation({ operation: 'DELETE', table: 'taxes', id });
             loadTaxes();
         } catch (err) {
             console.error(err);
-            alert('فشل في الحذف');
+            alert('ظپط´ظ„ ظپظٹ ط§ظ„ط­ط°ظپ');
         }
     };
 
@@ -141,7 +142,7 @@ export const Taxes = () => {
 
     const handleDeleteRows = async (rows: any[]) => {
         if (rows.length === 0) return;
-        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من الحذف؟' : `هل أنت متأكد من حذف ${rows.length} ضرائب/رسوم؟`)) return;
+        if (!confirm(rows.length === 1 ? 'ظ‡ظ„ ط£ظ†طھ ظ…طھط£ظƒط¯ ظ…ظ† ط§ظ„ط­ط°ظپطں' : `ظ‡ظ„ ط£ظ†طھ ظ…طھط£ظƒط¯ ظ…ظ† ط­ط°ظپ ${rows.length} ط¶ط±ط§ط¦ط¨/ط±ط³ظˆظ…طں`)) return;
 
         try {
             for (const row of rows) {
@@ -150,14 +151,14 @@ export const Taxes = () => {
             await loadTaxes();
         } catch (err) {
             console.error(err);
-            alert('فشل في الحذف');
+            alert('ظپط´ظ„ ظپظٹ ط§ظ„ط­ط°ظپ');
         }
     };
 
     const columns = React.useMemo<DefinitionListColumn<any>[]>(() => [
         {
             key: 'name_ar',
-            label: 'الاسم',
+            label: 'ط§ظ„ط§ط³ظ…',
             width: 220,
             defaultVisible: true,
             getSearchValue: (tax) => `${tax.name_ar || ''} ${tax.name_en || ''}`,
@@ -170,30 +171,30 @@ export const Taxes = () => {
         },
         {
             key: 'is_fixed',
-            label: 'النوع',
+            label: 'ط§ظ„ظ†ظˆط¹',
             type: 'enum',
             filterType: 'enum',
             width: 170,
             defaultVisible: true,
             options: [
-                { value: '0', label: 'نسبة مئوية' },
-                { value: '1', label: 'مبلغ ثابت' },
+                { value: '0', label: 'ظ†ط³ط¨ط© ظ…ط¦ظˆظٹط©' },
+                { value: '1', label: 'ظ…ط¨ظ„ط؛ ط«ط§ط¨طھ' },
             ],
             getValue: (tax) => Number(tax.is_fixed || 0),
-            getDisplayValue: (tax) => Number(tax.is_fixed || 0) === 1 ? 'مبلغ ثابت' : 'نسبة مئوية',
+            getDisplayValue: (tax) => Number(tax.is_fixed || 0) === 1 ? 'ظ…ط¨ظ„ط؛ ط«ط§ط¨طھ' : 'ظ†ط³ط¨ط© ظ…ط¦ظˆظٹط©',
             renderCell: (tax) => Number(tax.is_fixed || 0) === 1 ? (
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                    <DollarSign size={12} /> مبلغ ثابت
+                    <DollarSign size={12} /> ظ…ط¨ظ„ط؛ ط«ط§ط¨طھ
                 </span>
             ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-100 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
-                    <Percent size={12} /> نسبة مئوية
+                    <Percent size={12} /> ظ†ط³ط¨ط© ظ…ط¦ظˆظٹط©
                 </span>
             ),
         },
         {
             key: 'amount_or_rate',
-            label: 'القيمة / النسبة',
+            label: 'ط§ظ„ظ‚ظٹظ…ط© / ط§ظ„ظ†ط³ط¨ط©',
             type: 'number',
             filterType: 'number',
             width: 150,
@@ -208,25 +209,25 @@ export const Taxes = () => {
         },
         {
             key: 'type',
-            label: 'التأثير',
+            label: 'ط§ظ„طھط£ط«ظٹط±',
             type: 'enum',
             filterType: 'enum',
             width: 140,
             defaultVisible: true,
             options: [
-                { value: 'إضافة', label: 'إضافة' },
-                { value: 'خصم', label: 'خصم' },
+                { value: 'ط¥ط¶ط§ظپط©', label: 'ط¥ط¶ط§ظپط©' },
+                { value: 'ط®طµظ…', label: 'ط®طµظ…' },
             ],
-            getDisplayValue: (tax) => tax.type || 'إضافة',
+            getDisplayValue: (tax) => tax.type || 'ط¥ط¶ط§ظپط©',
             renderCell: (tax) => (
-                <span className={`rounded-md px-2.5 py-1 text-xs font-medium ${tax.type === 'خصم' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                    {tax.type || 'إضافة'}
+                <span className={`rounded-md px-2.5 py-1 text-xs font-medium ${tax.type === 'ط®طµظ…' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    {tax.type || 'ط¥ط¶ط§ظپط©'}
                 </span>
             ),
         },
         {
             key: 'actions',
-            label: 'إجراءات',
+            label: 'ط¥ط¬ط±ط§ط،ط§طھ',
             width: 120,
             sortable: false,
             filterable: false,
@@ -235,10 +236,10 @@ export const Taxes = () => {
             align: 'center',
             renderCell: (tax) => (
                 <div className="flex justify-center gap-2">
-                    <button onClick={() => handleEdit(tax)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                    <button onClick={() => handleEdit(tax)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="طھط¹ط¯ظٹظ„">
                         <Edit size={18} />
                     </button>
-                    <button onClick={() => handleDelete(tax.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                    <button onClick={() => handleDelete(tax.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="ط­ط°ظپ">
                         <Trash2 size={18} />
                     </button>
                 </div>
@@ -248,26 +249,27 @@ export const Taxes = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                        <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
-                            <Percent size={24} />
-                        </div>
-                        الضرائب والرسوم
-                    </h1>
-                    <p className="text-gray-500 mt-1 mr-12">إدارة ضرائب القيمة المضافة والرسوم الثابتة</p>
-                </div>
-
-                <button
-                    onClick={() => setIsAdding(true)}
-                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
-                >
-                    <Plus size={20} />
-                    إضافة جديد
-                </button>
-            </div>
+            <WorkspaceHeader
+                icon={<Percent size={22} />}
+                title="الضرائب والرسوم"
+                subtitle="إدارة الضرائب والرسوم الثابتة والنسبية ضمن نفس تجربة التعريفات الاحترافية."
+                badges={[
+                    { label: `${taxes.length} ضريبة/رسم`, tone: 'info' },
+                    { label: `${taxes.filter((tax) => Number(tax.is_fixed) === 1).length} ثابت`, tone: 'warning' },
+                ]}
+                actions={(
+                    <button
+                        onClick={() => setIsAdding(true)}
+                        className="rounded-xl bg-gradient-to-r from-emerald-600 to-green-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:brightness-105"
+                    >
+                        <span className="inline-flex items-center gap-2">
+                            <Plus size={16} />
+                            <span>إضافة ضريبة أو رسم</span>
+                        </span>
+                    </button>
+                )}
+                className="mb-8"
+            />
 
             {/* Error Alert */}
             {error && (
@@ -286,9 +288,9 @@ export const Taxes = () => {
                 loading={loading}
                 columns={columns}
                 rowKey={(tax) => String(tax.id)}
-                searchPlaceholder="بحث في الضرائب والرسوم..."
-                emptyMessage="لا توجد ضرائب أو رسوم مطابقة"
-                createLabel="إضافة جديد"
+                searchPlaceholder="ط¨ط­ط« ظپظٹ ط§ظ„ط¶ط±ط§ط¦ط¨ ظˆط§ظ„ط±ط³ظˆظ…..."
+                emptyMessage="ظ„ط§ طھظˆط¬ط¯ ط¶ط±ط§ط¦ط¨ ط£ظˆ ط±ط³ظˆظ… ظ…ط·ط§ط¨ظ‚ط©"
+                createLabel="ط¥ط¶ط§ظپط© ط¬ط¯ظٹط¯"
                 onCreate={() => setIsAdding(true)}
                 onEdit={handleEdit}
                 onDelete={handleDeleteRows}
@@ -304,7 +306,7 @@ export const Taxes = () => {
                     <div className="relative w-full sm:w-96">
                         <input
                             type="text"
-                            placeholder="بحث في الضرائب والرسوم..."
+                            placeholder="ط¨ط­ط« ظپظٹ ط§ظ„ط¶ط±ط§ط¦ط¨ ظˆط§ظ„ط±ط³ظˆظ…..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="w-full pl-4 pr-10 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm"
@@ -312,25 +314,25 @@ export const Taxes = () => {
                         <Search className="absolute right-3 top-3 text-gray-400" size={18} />
                     </div>
                     <div className="text-sm text-gray-500 font-medium bg-white px-3 py-1 rounded-md border shadow-sm">
-                        الإجمالي: <span className="text-emerald-600 font-bold">{filteredTaxes.length}</span>
+                        ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ: <span className="text-emerald-600 font-bold">{filteredTaxes.length}</span>
                     </div>
                 </div>
 
                 {loading ? (
                     <div className="p-12 text-center flex flex-col items-center justify-center text-gray-400">
                         <Loader2 size={40} className="animate-spin mb-4 text-emerald-500" />
-                        <p>جاري تحميل البيانات...</p>
+                        <p>ط¬ط§ط±ظٹ طھط­ظ…ظٹظ„ ط§ظ„ط¨ظٹط§ظ†ط§طھ...</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-right">
                             <thead className="bg-[#f8fafc] text-gray-600 font-semibold text-sm uppercase tracking-wider border-b">
                                 <tr>
-                                    <th className="px-6 py-4">الاسم</th>
-                                    <th className="px-6 py-4">النوع</th>
-                                    <th className="px-6 py-4">القيمة / النسبة</th>
-                                    <th className="px-6 py-4">التأثير</th>
-                                    <th className="px-6 py-4 text-center w-32">إجراءات</th>
+                                    <th className="px-6 py-4">ط§ظ„ط§ط³ظ…</th>
+                                    <th className="px-6 py-4">ط§ظ„ظ†ظˆط¹</th>
+                                    <th className="px-6 py-4">ط§ظ„ظ‚ظٹظ…ط© / ط§ظ„ظ†ط³ط¨ط©</th>
+                                    <th className="px-6 py-4">ط§ظ„طھط£ط«ظٹط±</th>
+                                    <th className="px-6 py-4 text-center w-32">ط¥ط¬ط±ط§ط،ط§طھ</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -344,11 +346,11 @@ export const Taxes = () => {
                                             <td className="px-6 py-4">
                                                 {tax.is_fixed === 1 ? (
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
-                                                        <DollarSign size={12} /> مبلغ ثابت
+                                                        <DollarSign size={12} /> ظ…ط¨ظ„ط؛ ط«ط§ط¨طھ
                                                     </span>
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-50 text-purple-700 text-xs font-medium border border-purple-100">
-                                                        <Percent size={12} /> نسبة مئوية
+                                                        <Percent size={12} /> ظ†ط³ط¨ط© ظ…ط¦ظˆظٹط©
                                                     </span>
                                                 )}
                                             </td>
@@ -358,25 +360,25 @@ export const Taxes = () => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${tax.type === 'إضافة'
+                                                <span className={`px-2.5 py-1 rounded-md text-xs font-medium ${tax.type === 'ط¥ط¶ط§ظپط©'
                                                     ? 'bg-emerald-100 text-emerald-700'
                                                     : 'bg-red-100 text-red-700'
                                                     }`}>
-                                                    {tax.type || 'إضافة'}
+                                                    {tax.type || 'ط¥ط¶ط§ظپط©'}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
                                                     onClick={() => handleEdit(tax)}
                                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="تعديل"
+                                                    title="طھط¹ط¯ظٹظ„"
                                                 >
                                                     <Edit size={18} />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(tax.id)}
                                                     className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="حذف"
+                                                    title="ط­ط°ظپ"
                                                 >
                                                     <Trash2 size={18} />
                                                 </button>
@@ -390,7 +392,7 @@ export const Taxes = () => {
                                                 <div className="bg-gray-50 p-4 rounded-full">
                                                     <Search size={32} className="text-gray-300" />
                                                 </div>
-                                                <p>لا توجد بيانات</p>
+                                                <p>ظ„ط§ طھظˆط¬ط¯ ط¨ظٹط§ظ†ط§طھ</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -411,7 +413,7 @@ export const Taxes = () => {
                         <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
                             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                                 {editingId ? <Edit className="text-emerald-600" size={20} /> : <Plus className="text-emerald-600" size={20} />}
-                                {editingId ? 'تعديل البيانات' : 'إضافة جديد'}
+                                {editingId ? 'طھط¹ط¯ظٹظ„ ط§ظ„ط¨ظٹط§ظ†ط§طھ' : 'ط¥ط¶ط§ظپط© ط¬ط¯ظٹط¯'}
                             </h3>
                             <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
                                 <X size={20} />
@@ -422,19 +424,19 @@ export const Taxes = () => {
                             {/* Names */}
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (عربي) <span className="text-red-500">*</span></label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">ط§ظ„ط§ط³ظ… (ط¹ط±ط¨ظٹ) <span className="text-red-500">*</span></label>
                                     <input
                                         type="text"
                                         value={formData.name_ar}
                                         onChange={e => setFormData({ ...formData, name_ar: e.target.value })}
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all placeholder:text-right"
-                                        placeholder="مثال: ضريبة القيمة المضافة"
+                                        placeholder="ظ…ط«ط§ظ„: ط¶ط±ظٹط¨ط© ط§ظ„ظ‚ظٹظ…ط© ط§ظ„ظ…ط¶ط§ظپط©"
                                         dir="rtl"
                                         autoFocus
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">الاسم (English)</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">ط§ظ„ط§ط³ظ… (English)</label>
                                     <input
                                         type="text"
                                         value={formData.name_en}
@@ -453,14 +455,14 @@ export const Taxes = () => {
                                     className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${formData.is_fixed === 0 ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                     onClick={() => setFormData({ ...formData, is_fixed: 0 })}
                                 >
-                                    <Percent size={14} /> Percentage نسبة
+                                    <Percent size={14} /> Percentage ظ†ط³ط¨ط©
                                 </button>
                                 <button
                                     type="button"
                                     className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${formData.is_fixed === 1 ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                     onClick={() => setFormData({ ...formData, is_fixed: 1 })}
                                 >
-                                    <DollarSign size={14} /> Fixed Amount مبلغ
+                                    <DollarSign size={14} /> Fixed Amount ظ…ط¨ظ„ط؛
                                 </button>
                             </div>
 
@@ -468,7 +470,7 @@ export const Taxes = () => {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                                        {formData.is_fixed === 0 ? 'النسبة (%)' : 'المبلغ'}
+                                        {formData.is_fixed === 0 ? 'ط§ظ„ظ†ط³ط¨ط© (%)' : 'ط§ظ„ظ…ط¨ظ„ط؛'}
                                     </label>
                                     <div className="relative">
                                         <input
@@ -491,14 +493,14 @@ export const Taxes = () => {
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">التأثير</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">ط§ظ„طھط£ط«ظٹط±</label>
                                     <select
                                         value={formData.type}
                                         onChange={e => setFormData({ ...formData, type: e.target.value })}
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                                     >
-                                        <option value="إضافة">إضافة (Added)</option>
-                                        <option value="خصم">خصم (Deducted)</option>
+                                        <option value="ط¥ط¶ط§ظپط©">ط¥ط¶ط§ظپط© (Added)</option>
+                                        <option value="ط®طµظ…">ط®طµظ… (Deducted)</option>
                                     </select>
                                 </div>
                             </div>
@@ -510,7 +512,7 @@ export const Taxes = () => {
                                     onClick={handleClose}
                                     className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
                                 >
-                                    إلغاء
+                                    ط¥ظ„ط؛ط§ط،
                                 </button>
                                 <button
                                     type="submit"
@@ -518,7 +520,7 @@ export const Taxes = () => {
                                     className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium shadow-sm shadow-emerald-200 transition-all flex justify-center items-center gap-2 disabled:opacity-70"
                                 >
                                     {saving && <Loader2 size={16} className="animate-spin" />}
-                                    {editingId ? 'حفظ التعديلات' : 'إضافة'}
+                                    {editingId ? 'ط­ظپط¸ ط§ظ„طھط¹ط¯ظٹظ„ط§طھ' : 'ط¥ط¶ط§ظپط©'}
                                 </button>
                             </div>
                         </form>
@@ -528,4 +530,6 @@ export const Taxes = () => {
         </div>
     );
 };
+
+
 

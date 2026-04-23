@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     ArrowDown,
@@ -15,7 +16,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import { useEnterNavigation } from '../src/hooks/useEnterNavigation';
-import { getFloatingMenuPositionFromRect } from '../src/lib/floatingMenu';
+import { getFloatingMenuPositionFromPoint, getFloatingMenuPositionFromRect } from '../src/lib/floatingMenu';
 import { authService } from '../services/authService';
 
 interface Column {
@@ -361,19 +362,38 @@ export const GenericMasterData: React.FC<GenericMasterDataProps> = ({
 
     const isColumnFilterActive = (columnKey: string) => String(columnFilters[columnKey] || '').trim().length > 0;
 
-    const openColumnFilterMenu = (columnKey: string, triggerElement?: HTMLElement | null) => {
-        const trigger = triggerElement || document.querySelector<HTMLElement>(`[data-column-filter-trigger-key="${columnKey}"]`);
-        if (!trigger) return;
+    const openColumnFilterMenu = (
+        columnKey: string,
+        options?: {
+            triggerElement?: HTMLElement | null;
+            clientX?: number;
+            clientY?: number;
+        },
+    ) => {
+        let position: ActiveColumnMenuState['position'] | null = null;
 
-        const rect = trigger.getBoundingClientRect();
-        const position = getFloatingMenuPositionFromRect(rect, {
-            menuWidth: 304,
-            menuHeight: 260,
-            preferredAlign: 'right',
-            offset: 10,
-            margin: 14,
-            minHeight: 180,
-        });
+        if (typeof options?.clientX === 'number' && typeof options?.clientY === 'number') {
+            position = getFloatingMenuPositionFromPoint(options.clientX, options.clientY, {
+                menuWidth: 304,
+                menuHeight: 260,
+                preferredAlign: 'right',
+                offset: 10,
+                margin: 14,
+                minHeight: 180,
+            });
+        } else {
+            const trigger = options?.triggerElement || document.querySelector<HTMLElement>(`[data-column-filter-trigger-key="${columnKey}"]`);
+            if (!trigger) return;
+
+            position = getFloatingMenuPositionFromRect(trigger.getBoundingClientRect(), {
+                menuWidth: 304,
+                menuHeight: 260,
+                preferredAlign: 'right',
+                offset: 10,
+                margin: 14,
+                minHeight: 180,
+            });
+        }
 
         setActiveColumnMenu({ key: columnKey, position });
     };
@@ -788,7 +808,25 @@ export const GenericMasterData: React.FC<GenericMasterDataProps> = ({
                                     {visibleColumns.map((column) => {
                                         const isSorted = sortBy === column.key;
                                         return (
-                                            <th key={column.key} className={`${rowPaddingClass} relative cursor-pointer select-none`} onClick={() => toggleSort(column.key)}>
+                                            <th
+                                                key={column.key}
+                                                className={`${rowPaddingClass} relative cursor-pointer select-none`}
+                                                onClick={(event) => {
+                                                    const target = event.target as HTMLElement | null;
+                                                    if (target?.closest('[data-column-filter-trigger="1"], [data-column-filter-menu="1"]')) {
+                                                        return;
+                                                    }
+                                                    toggleSort(column.key);
+                                                }}
+                                                onContextMenu={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    openColumnFilterMenu(column.key, {
+                                                        clientX: event.clientX,
+                                                        clientY: event.clientY,
+                                                    });
+                                                }}
+                                            >
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div className="min-w-0">
                                                         <div className="flex items-center gap-1">
@@ -811,7 +849,15 @@ export const GenericMasterData: React.FC<GenericMasterDataProps> = ({
                                                                 setActiveColumnMenu(null);
                                                                 return;
                                                             }
-                                                            openColumnFilterMenu(column.key, event.currentTarget);
+                                                            openColumnFilterMenu(column.key, { triggerElement: event.currentTarget });
+                                                        }}
+                                                        onContextMenu={(event) => {
+                                                            event.preventDefault();
+                                                            event.stopPropagation();
+                                                            openColumnFilterMenu(column.key, {
+                                                                clientX: event.clientX,
+                                                                clientY: event.clientY,
+                                                            });
                                                         }}
                                                         className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border transition ${isColumnFilterActive(column.key)
                                                             ? 'border-sky-300 bg-sky-100 text-sky-700 shadow-sm shadow-sky-100/80'
@@ -824,13 +870,19 @@ export const GenericMasterData: React.FC<GenericMasterDataProps> = ({
                                                 </div>
 
                                                 <AnimatePresence>
-                                                    {activeColumnMenu?.key === column.key && (
+                                                    {activeColumnMenu?.key === column.key && typeof document !== 'undefined' && createPortal(
                                                         <motion.div
                                                             data-column-filter-menu="1"
                                                             initial={{ opacity: 0, scale: 0.96, y: 8 }}
                                                             animate={{ opacity: 1, scale: 1, y: 0 }}
                                                             exit={{ opacity: 0, scale: 0.98, y: 4 }}
                                                             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                                                            onMouseDown={(event) => event.stopPropagation()}
+                                                            onClick={(event) => event.stopPropagation()}
+                                                            onContextMenu={(event) => {
+                                                                event.preventDefault();
+                                                                event.stopPropagation();
+                                                            }}
                                                             className="fixed z-[88] w-[19rem] overflow-hidden rounded-[22px] border border-sky-100/80 bg-white/95 text-right shadow-[0_24px_60px_rgba(15,23,42,0.16)] ring-1 ring-slate-900/5 backdrop-blur-xl"
                                                             style={{
                                                                 top: activeColumnMenu.position.top,
@@ -854,6 +906,7 @@ export const GenericMasterData: React.FC<GenericMasterDataProps> = ({
                                                                 <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3">
                                                                     <label className="mb-1.5 block text-[11px] font-bold text-slate-500">قيمة التصفية</label>
                                                                     <input
+                                                                        autoFocus
                                                                         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
                                                                         placeholder={`${tr('ui.filter.by', 'Filter by')} ${column.label}`}
                                                                         value={columnFilters[column.key] || ''}
@@ -883,7 +936,8 @@ export const GenericMasterData: React.FC<GenericMasterDataProps> = ({
                                                                     </button>
                                                                 </div>
                                                             </div>
-                                                        </motion.div>
+                                                        </motion.div>,
+                                                        document.body,
                                                     )}
                                                 </AnimatePresence>
                                             </th>

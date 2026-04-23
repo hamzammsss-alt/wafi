@@ -11,14 +11,30 @@ export interface Tab {
     component?: ReactNode; // The actual component to render (for keep-alive)
 }
 
+export interface WorkspaceOverlay {
+    id: string;
+    title: string;
+    content: ReactNode;
+    widthClassName?: string;
+}
+
+type WorkspaceViewMode = 'single' | 'grid';
+
 interface TabsContextType {
     tabs: Tab[];
     activeTabPath: string;
+    workspaceViewMode: WorkspaceViewMode;
+    overlays: WorkspaceOverlay[];
     openTab: (tab: Tab) => void;
     closeTab: (path: string) => void;
     switchTab: (path: string) => void;
     navigateInTab: (path: string, title?: string) => void;
     updateTabTitle: (path: string, newTitle: string) => void;
+    setWorkspaceViewMode: (mode: WorkspaceViewMode) => void;
+    toggleWorkspaceViewMode: () => void;
+    openOverlay: (overlay: WorkspaceOverlay) => void;
+    closeOverlay: (id: string) => void;
+    closeTopOverlay: () => void;
 }
 
 const TabsContext = createContext<TabsContextType | undefined>(undefined);
@@ -34,6 +50,8 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         { id: 'dashboard', path: '/', title: 'الرئيسية', isClosable: false }
     ]);
     const [activeTabPath, setActiveTabPath] = useState<string>('/');
+    const [workspaceViewMode, setWorkspaceViewMode] = useState<WorkspaceViewMode>('single');
+    const [overlays, setOverlays] = useState<WorkspaceOverlay[]>([]);
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -92,6 +110,26 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setTabs(prev => prev.map(t => t.path === path ? { ...t, title: newTitle } : t));
     }, []);
 
+    const toggleWorkspaceViewMode = useCallback(() => {
+        setWorkspaceViewMode((prev) => (prev === 'single' ? 'grid' : 'single'));
+    }, []);
+
+    const openOverlay = useCallback((overlay: WorkspaceOverlay) => {
+        setOverlays((prev) => {
+            const next = prev.filter((item) => item.id !== overlay.id);
+            next.push(overlay);
+            return next;
+        });
+    }, []);
+
+    const closeOverlay = useCallback((id: string) => {
+        setOverlays((prev) => prev.filter((overlay) => overlay.id !== id));
+    }, []);
+
+    const closeTopOverlay = useCallback(() => {
+        setOverlays((prev) => prev.slice(0, -1));
+    }, []);
+
     useEffect(() => {
         const currentPath = buildPathWithSearch(location);
         if (!currentPath || currentPath === '/system/login') return;
@@ -114,7 +152,24 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [location]);
 
     return (
-        <TabsContext.Provider value={{ tabs, activeTabPath, openTab, closeTab, switchTab, navigateInTab, updateTabTitle }}>
+        <TabsContext.Provider
+            value={{
+                tabs,
+                activeTabPath,
+                workspaceViewMode,
+                overlays,
+                openTab,
+                closeTab,
+                switchTab,
+                navigateInTab,
+                updateTabTitle,
+                setWorkspaceViewMode,
+                toggleWorkspaceViewMode,
+                openOverlay,
+                closeOverlay,
+                closeTopOverlay,
+            }}
+        >
             {children}
         </TabsContext.Provider>
     );

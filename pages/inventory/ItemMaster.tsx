@@ -1788,13 +1788,19 @@ const ItemMaster: React.FC<ItemMasterProps> = ({ defaultType, pickerMode = false
                                         </div>
 
                                         <AnimatePresence>
-                                        {activeColumnMenu?.key === column.key && (
+                                        {activeColumnMenu?.key === column.key && typeof document !== 'undefined' && createPortal(
                                             <motion.div
                                                 data-column-filter-menu="1"
                                                 initial={{ opacity: 0, scale: 0.96, y: 8 }}
                                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                                 exit={{ opacity: 0, scale: 0.98, y: 4 }}
                                                 transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                                                onMouseDown={(event) => event.stopPropagation()}
+                                                onClick={(event) => event.stopPropagation()}
+                                                onContextMenu={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                }}
                                                 className="fixed z-[88] w-[19rem] overflow-hidden rounded-[22px] border border-sky-100/80 bg-white/95 text-right shadow-[0_24px_60px_rgba(15,23,42,0.16)] ring-1 ring-slate-900/5 backdrop-blur-xl"
                                                 style={{
                                                     top: activeColumnMenu.position.top,
@@ -1896,7 +1902,8 @@ const ItemMaster: React.FC<ItemMasterProps> = ({ defaultType, pickerMode = false
                                                         </button>
                                                     </div>
                                                 </div>
-                                            </motion.div>
+                                            </motion.div>,
+                                            document.body,
                                         )}
                                         </AnimatePresence>
                                     </th>

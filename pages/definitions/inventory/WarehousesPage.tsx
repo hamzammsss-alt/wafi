@@ -246,7 +246,7 @@ export const WarehousesPage = () => {
                 subtitle="ضبط المستودعات ومعلومات التشغيل بنفس الهوية الموحدة لباقي الشاشات المرجعية."
                 badges={[
                     { label: `${warehouses.length} مستودعات`, tone: 'info' },
-                    { label: `${filteredWarehouses.length} مطابق`, tone: 'neutral' },
+                    { label: `${warehouses.filter((warehouse) => warehouse.is_active).length} نشط`, tone: 'neutral' },
                 ]}
                 actions={(
                     <button

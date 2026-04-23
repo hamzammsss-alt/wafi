@@ -286,7 +286,7 @@ export const BrandsPage = () => {
                 subtitle="تجهيز العلامات التجارية وربطها بالأصناف داخل نفس تجربة العمل الموحدة."
                 badges={[
                     { label: `${brands.length} ماركات`, tone: 'info' },
-                    { label: `${filteredBrands.length} مطابق`, tone: 'neutral' },
+                    { label: `${brands.filter((brand) => brand.is_active).length} نشطة`, tone: 'neutral' },
                 ]}
                 actions={(
                     <button

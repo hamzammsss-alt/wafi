@@ -238,7 +238,7 @@ export const SalesRepsPage = () => {
                 subtitle="إدارة فريق المبيعات والعمولات والأهداف بنفس أسلوب الشاشات المرجعية الموحد."
                 badges={[
                     { label: `${reps.length} مندوبين`, tone: 'info' },
-                    { label: `${filteredReps.length} مطابق`, tone: 'neutral' },
+                    { label: `${reps.filter((rep) => rep.is_active).length} نشط`, tone: 'neutral' },
                 ]}
                 actions={(
                     <button

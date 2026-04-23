@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SquareArrowOutUpLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DocumentDefinition, ValidationIssue } from '../../types/DocumentDefinition';
 import { DocumentShell } from '../../components/documents/DocumentShell';
@@ -12,7 +13,8 @@ import { AccountLookupModal } from '../../components/lookups/AccountLookupModal'
 import PostConfirmDialog from '../../components/ui/PostConfirmDialog';
 import { useEnterNavigation } from '../../hooks/useEnterNavigation';
 import { DocumentSupportDock } from '../../components/workspace/DocumentSupportDock';
-import { buildDocumentSupportSections } from '../../components/workspace/documentSupportSections';
+import { buildDocumentSupportSections, resolveDocumentSupportSectionForField } from '../../components/workspace/documentSupportSections';
+import { useTabs } from '../../contexts/TabsContext';
 
 interface DocumentPageProps {
     definition: DocumentDefinition<any, any>;
@@ -48,6 +50,7 @@ function issueText(issue: ValidationIssue): string {
 
 export default function DocumentPage({ definition, id }: DocumentPageProps) {
     const navigate = useNavigate();
+    const { openOverlay } = useTabs();
     const { can, whyNot, isLoading: permissionsLoading } = useMyPermissions();
     const {
         status,
@@ -120,6 +123,7 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
         (postingPolicy?.submitOnMissingPostPermission ?? definition.workflow?.submitOnMissingPostPermission) && canUpdate,
     );
     const supportSections = useMemo(() => buildDocumentSupportSections(definition), [definition]);
+    const supportSectionById = useMemo(() => new Map(supportSections.map((section) => [section.id, section])), [supportSections]);
 
     const isEditableByStatus = editableStatuses.has(String(status || 'DRAFT'));
     const isPostableStatus = postableStatuses.has(String(status || ''));
@@ -183,6 +187,24 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
             type: 'item' as LookupMode,
         };
     }, [definition.lineLookup]);
+
+    const lineReferenceSection = useMemo(() => {
+        const section = resolveDocumentSupportSectionForField(definition, lineLookup.fieldKey);
+        if (!section) return null;
+        return supportSectionById.get(section.id) || section;
+    }, [definition, lineLookup.fieldKey, supportSectionById]);
+
+    const openSupportOverlay = useCallback((fieldKey: string) => {
+        const section = resolveDocumentSupportSectionForField(definition, fieldKey);
+        if (!section) return;
+        const resolved = supportSectionById.get(section.id) || section;
+        openOverlay({
+            id: `doc-field:${resolved.id}`,
+            title: resolved.label,
+            content: resolved.render(),
+            widthClassName: resolved.widthClassName,
+        });
+    }, [definition, openOverlay, supportSectionById]);
 
     const applyItemToRow = useCallback((rowIndex: number, item: any) => {
         grid.setRows((prev) => {
@@ -752,10 +774,25 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
                                     })).filter((option: any) => option.id)
                                 ).concat(selectMap[field.key] || []);
                                 const label = tr(field.labelI18nKey || '', field.label);
+                                const quickAccessSection = resolveDocumentSupportSectionForField(definition, field.key);
+                                const canOpenQuickAccess = Boolean(quickAccessSection);
 
                                 return (
                                     <div key={field.key} className={field.span === 2 ? 'md:col-span-2 xl:col-span-2' : 'col-span-1'}>
-                                        <label className="mb-1 block text-xs font-semibold text-slate-600">{label}</label>
+                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                            <label className="block text-xs font-semibold text-slate-600">{label}</label>
+                                            {canOpenQuickAccess && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openSupportOverlay(field.key)}
+                                                    className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-bold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                                                    title={`فتح ${quickAccessSection?.label}`}
+                                                >
+                                                    <SquareArrowOutUpLeft size={12} />
+                                                    <span>فتح</span>
+                                                </button>
+                                            )}
+                                        </div>
                                         {field.type === 'readonly' ? (
                                             <div className="flex h-10 w-full items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-700">
                                                 {String(value || '-')}
@@ -793,9 +830,22 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
                     </div>
 
                     <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm">
-                        <div className="border-b border-slate-100 px-6">
+                        <div className="flex items-center justify-between border-b border-slate-100 px-6">
                             <h2 className="py-4 text-sm font-extrabold tracking-wide text-slate-800">{tr('doc.common.lines', 'تفاصيل السند')}</h2>
                         </div>
+                        {lineReferenceSection && (
+                            <div className="border-b border-slate-100 px-6 py-2">
+                                <button
+                                    type="button"
+                                    onClick={() => openSupportOverlay(lineLookup.fieldKey)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-[11px] font-bold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                                    title={`فتح ${lineReferenceSection.label}`}
+                                >
+                                    <SquareArrowOutUpLeft size={12} />
+                                    <span>{lineReferenceSection.label}</span>
+                                </button>
+                            </div>
+                        )}
                         <SmartGrid
                             gridRef={grid.gridRef}
                             rows={grid.rows}

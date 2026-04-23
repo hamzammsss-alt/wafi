@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Layers3, ListTree, Settings2, X } from 'lucide-react';
+import { useTabs } from '../../contexts/TabsContext';
 
-const DOCUMENT_SUPPORT_DOCK_ENABLED = false;
+const DOCUMENT_SUPPORT_DOCK_ENABLED = true;
 
 export type DocumentSupportSection = {
     id: string;
@@ -10,6 +11,7 @@ export type DocumentSupportSection = {
     description?: string;
     group?: 'definitions' | 'lists';
     render: () => React.ReactNode;
+    widthClassName?: string;
 };
 
 interface DocumentSupportDockProps {
@@ -43,12 +45,13 @@ function dedupeSections(sections: DocumentSupportSection[]): DocumentSupportSect
 
 export function DocumentSupportDock({
     title = 'لوحة التعريفات والقوائم',
-    description = 'يمكنك إدارة التعريفات أو مراجعة القوائم من فوق السند مباشرة دون مغادرة الشاشة.',
+    description = 'افتح الشاشات المرجعية فوق المستند الحالي ثم عد مباشرة إلى الإدخال دون مغادرة الشاشة.',
     sections,
     defaultSectionId,
     quickOpenLimit = 5,
     className = '',
 }: DocumentSupportDockProps) {
+    const { openOverlay } = useTabs();
     const normalizedSections = useMemo(() => dedupeSections(sections || []), [sections]);
     const [open, setOpen] = useState(false);
     const [activeId, setActiveId] = useState<string>(defaultSectionId || normalizedSections[0]?.id || '');
@@ -82,6 +85,16 @@ export function DocumentSupportDock({
         return acc;
     }, {});
 
+    const launchSection = (section: DocumentSupportSection) => {
+        openOverlay({
+            id: `doc-support:${section.id}`,
+            title: section.label,
+            content: section.render(),
+            widthClassName: section.widthClassName,
+        });
+        setOpen(false);
+    };
+
     if (!DOCUMENT_SUPPORT_DOCK_ENABLED || !normalizedSections.length) return null;
 
     return (
@@ -105,29 +118,28 @@ export function DocumentSupportDock({
                             <button
                                 key={section.id}
                                 type="button"
-                                onClick={() => {
-                                    setActiveId(section.id);
-                                    setOpen(true);
-                                }}
+                                onClick={() => launchSection(section)}
                                 className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:border-sky-200 hover:text-sky-700 hover:shadow-sm"
                             >
                                 {section.label}
                             </button>
                         ))}
-                        <button
-                            type="button"
-                            onClick={() => setOpen(true)}
-                            className="rounded-xl bg-gradient-to-r from-teal-600 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-900/15 transition hover:brightness-105"
-                        >
-                            فتح اللوحة
-                        </button>
+                        {normalizedSections.length > quickOpenLimit && (
+                            <button
+                                type="button"
+                                onClick={() => setOpen(true)}
+                                className="rounded-xl bg-gradient-to-r from-teal-600 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-900/15 transition hover:brightness-105"
+                            >
+                                المزيد
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
 
             {open && typeof document !== 'undefined' && createPortal(
-                <div className="fixed inset-0 z-[95] bg-slate-950/30 p-4 backdrop-blur-sm md:p-6" dir="rtl">
-                    <div className="mx-auto flex h-full max-w-[1680px] overflow-hidden rounded-[30px] border border-slate-200 bg-[#eef3fb] shadow-2xl shadow-slate-900/20">
+                <div className="fixed inset-0 z-[95] bg-slate-950/25 p-4 backdrop-blur-sm md:p-6" dir="rtl">
+                    <div className="mx-auto flex h-full max-w-[1240px] overflow-hidden rounded-[30px] border border-slate-200 bg-[#eef3fb] shadow-2xl shadow-slate-900/20">
                         <aside className="hidden w-80 shrink-0 border-l border-slate-200 bg-white/85 p-4 backdrop-blur md:flex md:flex-col">
                             <div className="mb-4 border-b border-slate-100 pb-4">
                                 <div className="text-xs font-bold uppercase tracking-[0.22em] text-sky-600">Workspace</div>
@@ -185,22 +197,13 @@ export function DocumentSupportDock({
                                     </div>
 
                                     <div className="flex items-center gap-2">
-                                        <div className="flex flex-wrap gap-2 md:hidden">
-                                            {quickSections.map((section) => (
-                                                <button
-                                                    key={section.id}
-                                                    type="button"
-                                                    onClick={() => setActiveId(section.id)}
-                                                    className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
-                                                        activeSection?.id === section.id
-                                                            ? 'border-sky-200 bg-sky-50 text-sky-700'
-                                                            : 'border-slate-200 bg-white text-slate-600'
-                                                    }`}
-                                                >
-                                                    {section.label}
-                                                </button>
-                                            ))}
-                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => activeSection && launchSection(activeSection)}
+                                            className="rounded-xl bg-gradient-to-r from-teal-600 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-900/15 transition hover:brightness-105"
+                                        >
+                                            فتح فوق المستند
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={() => setOpen(false)}
@@ -214,8 +217,8 @@ export function DocumentSupportDock({
                             </div>
 
                             <div className="min-h-0 flex-1 overflow-auto bg-[#eef3fb] p-3 md:p-5">
-                                <div className="min-h-full overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-sm">
-                                    {activeSection ? activeSection.render() : null}
+                                <div className="rounded-2xl border border-dashed border-sky-200 bg-white/80 p-6 text-right text-sm leading-7 text-slate-600 shadow-sm">
+                                    اختر الشاشة المرجعية ثم اضغط "فتح فوق المستند" ليتم عرضها فوق الشاشة الحالية مع بقاء المستند ظاهرًا في الخلفية.
                                 </div>
                             </div>
                         </div>
