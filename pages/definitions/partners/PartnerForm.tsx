@@ -35,6 +35,14 @@ export const PartnerForm: React.FC = () => {
     const [accountPickerOpen, setAccountPickerOpen] = useState(false);
     const [feedback, setFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
+    const formatAccountDisplay = (accountId?: string | null) => {
+        const account = accounts.find((item) => item.id === accountId);
+        if (!account) return '';
+        const code = String(account.account_code || account.code || '').trim();
+        const name = String(account.name_ar || account.name || '').trim();
+        return [code, name].filter(Boolean).join(' - ');
+    };
+
     // Form State
     const initialFormState: Partial<BusinessPartner> = {
         name_ar: '',
@@ -674,7 +682,7 @@ export const PartnerForm: React.FC = () => {
                                             <input
                                                 readOnly
                                                 className="w-full px-4 py-2.5 rounded-lg border border-blue-200 outline-none bg-white cursor-pointer hover:bg-blue-50 transition-colors"
-                                                value={partners.find(p => p.id === formData.id)?.linked_account_id ? (accounts.find(a => a.id === formData.linked_account_id)?.name_ar || 'تم الاختيار') : (accounts.find(a => a.id === formData.linked_account_id)?.name_ar || '')}
+                                                value={formatAccountDisplay(formData.linked_account_id) || (formData.linked_account_id ? 'تم الاختيار' : '')}
                                                 // Actually better to just show the name if we can find it
                                                 // Current issue: we only have 'accounts' list which might be filtered.
                                                 // Let's use a function to get name or just show 'Click to select'

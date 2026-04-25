@@ -20,6 +20,7 @@ import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHead
 
 export const PaymentMethods = () => {
     const [methods, setMethods] = useState<any[]>([]);
+    const [accounts, setAccounts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [isAdding, setIsAdding] = useState(false);
@@ -47,8 +48,12 @@ export const PaymentMethods = () => {
     const loadMethods = async () => {
         try {
             setLoading(true);
-            const data = await api.getPaymentMethods();
+            const [data, accountRows] = await Promise.all([
+                api.getPaymentMethods(),
+                (window as any).electronAPI?.getAccounts?.() || [],
+            ]);
             setMethods(data);
+            setAccounts(accountRows || []);
         } catch (err) {
             console.error(err);
             setError('ظپط´ظ„ ظپظٹ طھط­ظ…ظٹظ„ ط·ط±ظ‚ ط§ظ„ط¯ظپط¹');
@@ -147,6 +152,14 @@ export const PaymentMethods = () => {
         }
     };
 
+    const formatAccountDisplay = (accountId?: string | null) => {
+        const account = accounts.find((item) => item.id === accountId);
+        if (!account) return accountId || '-';
+        const code = String(account.account_code || account.code || '').trim();
+        const name = String(account.name_ar || account.name || '').trim();
+        return [code, name].filter(Boolean).join(' - ') || accountId || '-';
+    };
+
     const columns = React.useMemo<DefinitionListColumn<any>[]>(() => [
         {
             key: 'name_ar',
@@ -189,7 +202,7 @@ export const PaymentMethods = () => {
             label: 'ط§ظ„ط­ط³ط§ط¨ ط§ظ„ظ…ط±طھط¨ط·',
             width: 180,
             defaultVisible: true,
-            getDisplayValue: (method) => method.gl_account_id || '-',
+            getDisplayValue: (method) => formatAccountDisplay(method.gl_account_id),
         },
         {
             key: 'commission_rate',
@@ -467,7 +480,7 @@ export const PaymentMethods = () => {
                                     onClick={() => setShowAccountPicker(true)}
                                 >
                                     <span className={formData.gl_account_id ? 'text-gray-900' : 'text-gray-400'}>
-                                        {formData.gl_account_id || 'ط§ط¶ط؛ط· ظ„ط§ط®طھظٹط§ط± ط§ظ„ط­ط³ط§ط¨...'}
+                                        {formData.gl_account_id ? formatAccountDisplay(formData.gl_account_id) : 'ط§ط¶ط؛ط· ظ„ط§ط®طھظٹط§ط± ط§ظ„ط­ط³ط§ط¨...'}
                                     </span>
                                     <Edit size={16} className="text-gray-400" />
                                 </div>

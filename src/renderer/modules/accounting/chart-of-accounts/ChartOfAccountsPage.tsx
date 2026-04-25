@@ -72,6 +72,13 @@ const REFERENCE_BY_SUBTYPE_DEFAULT: Record<string, AccountFormModel['referenceTy
     CASH: 'USER',
 };
 
+function normalizeAccountCodeInput(value: string): string {
+    return String(value || '')
+        .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+        .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+        .replace(/\D+/g, '');
+}
+
 function toFormModel(row: AccountRowDto): AccountFormModel {
     return {
         id: row.id,
@@ -204,8 +211,11 @@ export default function ChartOfAccountsPage() {
 
     const validateForm = useCallback((): AccountFormErrors => {
         const nextErrors: AccountFormErrors = {};
-        if (!form.accountCode.trim()) {
+        const normalizedAccountCode = normalizeAccountCodeInput(form.accountCode);
+        if (!normalizedAccountCode) {
             nextErrors.accountCode = t('coa.form.error.accountCode.required');
+        } else if (normalizedAccountCode !== form.accountCode.trim()) {
+            nextErrors.accountCode = 'كود الحساب يجب أن يحتوي على أرقام فقط.';
         }
         if (!form.name.trim()) {
             nextErrors.name = t('coa.form.error.name.required');
@@ -238,7 +248,7 @@ export default function ChartOfAccountsPage() {
         if (form.parentId) {
             const parent = flatAccounts.find((item) => item.id === form.parentId);
             if (parent) {
-                const childCode = form.accountCode.trim().toUpperCase();
+                const childCode = normalizedAccountCode;
                 const parentCode = String(parent.accountCode || '').trim().toUpperCase();
                 if (childCode && parentCode && !childCode.startsWith(parentCode)) {
                     nextErrors.accountCode = 'كود الحساب الفرعي يجب أن يبدأ بكود الحساب الأب.';
@@ -335,7 +345,7 @@ export default function ChartOfAccountsPage() {
 
         const payload = {
             id: form.id,
-            accountCode: form.accountCode.trim(),
+            accountCode: normalizeAccountCodeInput(form.accountCode),
             name: form.name.trim(),
             parentId: form.parentId || null,
             accountType: form.accountType,
@@ -575,4 +585,3 @@ export default function ChartOfAccountsPage() {
         </div>
     );
 }
-

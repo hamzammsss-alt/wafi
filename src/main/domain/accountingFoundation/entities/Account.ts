@@ -33,7 +33,7 @@ export interface AccountProps {
     requiresAnalysisCode: boolean;
 }
 
-const ACCOUNT_CODE_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,31}$/;
+const ACCOUNT_CODE_PATTERN = /^\d{1,32}$/;
 
 export class Account {
     private constructor(private readonly props: AccountProps) { }
@@ -49,7 +49,7 @@ export class Account {
     }
 
     private static validate(props: AccountProps): void {
-        const code = String(props.accountCode || '').trim().toUpperCase();
+        const code = String(props.accountCode || '').trim();
         if (!code) {
             throw new DomainError(AccountingErrorCode.ERR_ACCOUNT_CODE_REQUIRED, 'Account code is required', {
                 messageKey: 'error.account.code.required',
@@ -207,4 +207,3 @@ export class Account {
         }
     }
 }
-

@@ -85,7 +85,10 @@ const REFERENCE_BY_SUBTYPE_DEFAULT: Record<AccountSubtype, AccountReferenceType>
 
 export class ChartOfAccountsPolicy {
     static normalizeCode(input: string): string {
-        return String(input || '').trim().toUpperCase();
+        return String(input || '')
+            .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+            .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+            .replace(/\D+/g, '');
     }
 
     static deriveLevel(parent: Account | null): number {
@@ -273,4 +276,3 @@ export class ChartOfAccountsPolicy {
         }
     }
 }
-

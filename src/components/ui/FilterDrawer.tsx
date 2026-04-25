@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Columns2, Filter, Save, Search, Trash2, X, ChevronUp, ChevronDown, ListFilter } from 'lucide-react';
 import { ColumnSchema, FilterOperator, FilterSchema } from '../../config/screenRegistry';
 import {
@@ -275,10 +276,10 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
 
     const activeView = views.find((item) => item.id === selectedViewId) || null;
 
-    if (!open) return null;
+    if (!open || typeof document === 'undefined') return null;
 
-    return (
-        <div className="fixed inset-0 z-50 bg-black/35">
+    return createPortal(
+        <div className="fixed inset-0 z-[9998] bg-black/35">
             <div className="absolute inset-y-0 end-0 w-full max-w-2xl bg-white shadow-2xl border-s border-slate-200 flex flex-col" dir={currentDir}>
                 <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 text-slate-800 font-semibold">
@@ -611,7 +612,8 @@ export const FilterDrawer: React.FC<FilterDrawerProps> = ({
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 };
 

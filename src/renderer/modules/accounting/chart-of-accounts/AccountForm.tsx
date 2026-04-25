@@ -44,6 +44,32 @@ const REFERENCE_HINT_BY_SUBTYPE: Record<string, string> = {
 
 const ACCOUNT_REFERENCE_TYPES: AccountReferenceType[] = ['NONE', 'USER', 'GUIDE', 'BANK_CHEQUE', 'FIXED_ASSET'];
 
+function normalizeAccountCodeInput(value: string): string {
+    return String(value || '')
+        .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+        .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+        .replace(/\D+/g, '');
+}
+
+function shouldAllowAccountCodeKey(event: React.KeyboardEvent<HTMLInputElement>): boolean {
+    if (event.ctrlKey || event.metaKey || event.altKey) return true;
+    const allowedKeys = new Set([
+        'Backspace',
+        'Delete',
+        'Tab',
+        'Escape',
+        'Enter',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'ArrowDown',
+        'Home',
+        'End',
+    ]);
+    if (allowedKeys.has(event.key)) return true;
+    return /[0-9٠-٩۰-۹]/.test(event.key);
+}
+
 function moveFocusForward(event: React.KeyboardEvent): void {
     if (event.key !== 'Enter') return;
     const target = event.target as HTMLElement;
@@ -80,7 +106,20 @@ export function AccountForm(props: AccountFormProps) {
                     ref={firstFieldRef}
                     className={inputClass('accountCode')}
                     value={form.accountCode}
-                    onChange={(event) => onChange({ accountCode: event.target.value })}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    dir="ltr"
+                    onKeyDown={(event) => {
+                        if (!shouldAllowAccountCodeKey(event)) {
+                            event.preventDefault();
+                        }
+                    }}
+                    onPaste={(event) => {
+                        event.preventDefault();
+                        const pasted = event.clipboardData.getData('text');
+                        onChange({ accountCode: normalizeAccountCodeInput(pasted) });
+                    }}
+                    onChange={(event) => onChange({ accountCode: normalizeAccountCodeInput(event.target.value) })}
                 />
                 {showError('accountCode') ? <span className="text-xs text-red-600">{showError('accountCode')}</span> : null}
             </label>
@@ -250,4 +289,3 @@ export function AccountForm(props: AccountFormProps) {
         </form>
     );
 }
-

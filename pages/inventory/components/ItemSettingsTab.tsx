@@ -9,6 +9,7 @@ interface Props {
 
 const ItemSettingsTab: React.FC<Props> = ({ data, onChange }) => {
     const [warehouses, setWarehouses] = useState<any[]>([]);
+    const [accounts, setAccounts] = useState<Account[]>([]);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [activeField, setActiveField] = useState<'sales' | 'cogs' | 'inventory' | null>(null);
     const [displayAccounts, setDisplayAccounts] = useState({
@@ -19,7 +20,16 @@ const ItemSettingsTab: React.FC<Props> = ({ data, onChange }) => {
 
     useEffect(() => {
         window.electronAPI.inventory.getWarehouses?.().then(setWarehouses);
+        window.electronAPI.getAccounts?.().then((rows: Account[]) => setAccounts(rows || []));
     }, []);
+
+    const formatAccountDisplay = (accountId?: string | null) => {
+        const account = accounts.find((item) => item.id === accountId);
+        if (!account) return accountId || '';
+        const code = String(account.account_code || account.code || '').trim();
+        const name = String(account.name_ar || account.name || '').trim();
+        return [code, name].filter(Boolean).join(' - ');
+    };
 
     const openPicker = (field: 'sales' | 'cogs' | 'inventory') => {
         setActiveField(field);
@@ -40,7 +50,9 @@ const ItemSettingsTab: React.FC<Props> = ({ data, onChange }) => {
             onChange({ ...data, [targetField]: account.id });
         }
 
-        setDisplayAccounts(prev => ({ ...prev, [activeField]: account.name_ar }));
+        const code = String(account.account_code || account.code || '').trim();
+        const name = String(account.name_ar || account.name || '').trim();
+        setDisplayAccounts(prev => ({ ...prev, [activeField]: [code, name].filter(Boolean).join(' - ') }));
         setPickerOpen(false);
     };
 
@@ -129,7 +141,7 @@ const ItemSettingsTab: React.FC<Props> = ({ data, onChange }) => {
                         <input
                             type="text"
                             readOnly
-                            value={displayAccounts.inventory || (data as any).inventory_account_id || ''}
+                            value={displayAccounts.inventory || formatAccountDisplay((data as any).inventory_account_id) || ''}
                             className="flex-1 border rounded p-2 bg-gray-50"
                             placeholder="اضغط للاختيار..."
                             onClick={() => openPicker('inventory')}
@@ -146,7 +158,7 @@ const ItemSettingsTab: React.FC<Props> = ({ data, onChange }) => {
                         <input
                             type="text"
                             readOnly
-                            value={displayAccounts.sales || (data as any).sales_account_id || ''}
+                            value={displayAccounts.sales || formatAccountDisplay((data as any).sales_account_id) || ''}
                             className="flex-1 border rounded p-2 bg-gray-50"
                             placeholder="اضغط للاختيار..."
                             onClick={() => openPicker('sales')}
@@ -163,7 +175,7 @@ const ItemSettingsTab: React.FC<Props> = ({ data, onChange }) => {
                         <input
                             type="text"
                             readOnly
-                            value={displayAccounts.cogs || (data as any).cogs_account_id || ''}
+                            value={displayAccounts.cogs || formatAccountDisplay((data as any).cogs_account_id) || ''}
                             className="flex-1 border rounded p-2 bg-gray-50"
                             placeholder="اضغط للاختيار..."
                             onClick={() => openPicker('cogs')}

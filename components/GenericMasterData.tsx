@@ -342,12 +342,19 @@ export const GenericMasterData: React.FC<GenericMasterDataProps> = ({
         if (!activeColumnMenu) return;
 
         const closeMenu = () => setActiveColumnMenu(null);
+        const onScroll = (event: Event) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest('[data-column-filter-menu="1"]')) {
+                return;
+            }
+            closeMenu();
+        };
         window.addEventListener('resize', closeMenu);
-        window.addEventListener('scroll', closeMenu, true);
+        window.addEventListener('scroll', onScroll, true);
 
         return () => {
             window.removeEventListener('resize', closeMenu);
-            window.removeEventListener('scroll', closeMenu, true);
+            window.removeEventListener('scroll', onScroll, true);
         };
     }, [activeColumnMenu]);
 

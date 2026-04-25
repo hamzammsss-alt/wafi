@@ -489,17 +489,24 @@ export function DefinitionMasterList<T>({
         };
 
         const closeMenu = () => setActiveColumnMenu(null);
+        const onScroll = (event: Event) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest('[data-definition-column-menu="1"]')) {
+                return;
+            }
+            closeMenu();
+        };
 
         document.addEventListener('mousedown', onMouseDown);
         document.addEventListener('keydown', onKeyDown);
         window.addEventListener('resize', closeMenu);
-        window.addEventListener('scroll', closeMenu, true);
+        window.addEventListener('scroll', onScroll, true);
 
         return () => {
             document.removeEventListener('mousedown', onMouseDown);
             document.removeEventListener('keydown', onKeyDown);
             window.removeEventListener('resize', closeMenu);
-            window.removeEventListener('scroll', closeMenu, true);
+            window.removeEventListener('scroll', onScroll, true);
         };
     }, [activeColumnMenu]);
 
@@ -917,61 +924,63 @@ export function DefinitionMasterList<T>({
                 </div>
             )}
 
-            <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
-                <WafiDataGrid
-                    ref={gridRef}
-                    data={filteredRows}
-                    columns={wafiColumns}
-                    keyExtractor={rowKey}
-                    loading={loading}
-                    emptyMessage={emptyMessage}
-                    selectedRowIds={selectedRowIds}
-                    onSelectionChange={setSelectedRowIds}
-                    visibleColumns={visibleColumns}
-                    onVisibleColumnsChange={applyVisibleColumnsChange}
-                    columnWidths={columnWidths}
-                    onColumnWidthsChange={setColumnWidths}
-                    sortKey={sort[0]?.key || ''}
-                    sortDir={sort[0]?.direction || 'asc'}
-                    onSortChange={(key, direction) => setSort(key ? [{ key, direction }] : [])}
-                    rowDensity={rowDensity}
-                    columnFilters={columnFilterValues}
-                    onHeaderContextMenu={(event, colKey, label) => {
-                        openColumnMenu({
-                            key: colKey,
-                            label,
-                            source: 'header',
-                            clientX: event.clientX,
-                            clientY: event.clientY,
-                        });
-                    }}
-                    onCellContextMenu={(event, colKey, label, cellValue, rowId) => {
-                        openColumnMenu({
-                            key: colKey,
-                            label,
-                            source: 'cell',
-                            clientX: event.clientX,
-                            clientY: event.clientY,
-                            cellValue,
-                            rowId,
-                        });
-                    }}
-                    onFilterClick={(event, colKey, label) => {
-                        if (activeColumnMenu?.key === colKey && activeColumnMenu.source === 'header' && !activeColumnMenu.rowId) {
-                            setActiveColumnMenu(null);
-                            return;
-                        }
-                        openColumnMenu({
-                            key: colKey,
-                            label,
-                            source: 'header',
-                            triggerElement: event.currentTarget as HTMLElement,
-                        });
-                    }}
-                    activeFilterColumn={activeColumnMenu?.source === 'header' ? activeColumnMenu.key : null}
-                    onRowDoubleClick={onRowDoubleClick || onEdit}
-                    showRowNumbers
-                />
+            <div className="rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm md:p-4">
+                <div className="overflow-hidden rounded-[18px] border border-slate-100 bg-slate-50/40">
+                    <WafiDataGrid
+                        ref={gridRef}
+                        data={filteredRows}
+                        columns={wafiColumns}
+                        keyExtractor={rowKey}
+                        loading={loading}
+                        emptyMessage={emptyMessage}
+                        selectedRowIds={selectedRowIds}
+                        onSelectionChange={setSelectedRowIds}
+                        visibleColumns={visibleColumns}
+                        onVisibleColumnsChange={applyVisibleColumnsChange}
+                        columnWidths={columnWidths}
+                        onColumnWidthsChange={setColumnWidths}
+                        sortKey={sort[0]?.key || ''}
+                        sortDir={sort[0]?.direction || 'asc'}
+                        onSortChange={(key, direction) => setSort(key ? [{ key, direction }] : [])}
+                        rowDensity={rowDensity}
+                        columnFilters={columnFilterValues}
+                        onHeaderContextMenu={(event, colKey, label) => {
+                            openColumnMenu({
+                                key: colKey,
+                                label,
+                                source: 'header',
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                            });
+                        }}
+                        onCellContextMenu={(event, colKey, label, cellValue, rowId) => {
+                            openColumnMenu({
+                                key: colKey,
+                                label,
+                                source: 'cell',
+                                clientX: event.clientX,
+                                clientY: event.clientY,
+                                cellValue,
+                                rowId,
+                            });
+                        }}
+                        onFilterClick={(event, colKey, label) => {
+                            if (activeColumnMenu?.key === colKey && activeColumnMenu.source === 'header' && !activeColumnMenu.rowId) {
+                                setActiveColumnMenu(null);
+                                return;
+                            }
+                            openColumnMenu({
+                                key: colKey,
+                                label,
+                                source: 'header',
+                                triggerElement: event.currentTarget as HTMLElement,
+                            });
+                        }}
+                        activeFilterColumn={activeColumnMenu?.source === 'header' ? activeColumnMenu.key : null}
+                        onRowDoubleClick={onRowDoubleClick || onEdit}
+                        showRowNumbers
+                    />
+                </div>
             </div>
 
             {activeColumnMenu && activeColumnSchema && draftColumnFilter && typeof document !== 'undefined' && createPortal(
