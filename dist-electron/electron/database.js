@@ -338,6 +338,7 @@ const initDB = (dbPath) => {
     loadSchema('electron/database/schema_v64_crm_receivables_foundation.sql', 'CRM + Receivables Foundation V64');
     loadSchema('electron/database/schema_v65_vendor_payables_foundation.sql', 'Vendor + Payables Foundation V65');
     loadSchema('electron/database/schema_v66_accounting_engine_foundation.sql', 'Accounting Engine Foundation V66');
+    loadSchema('electron/database/schema_v67_settings_engine.sql', 'Settings Engine V67');
     // Approvals + Permissions Engine migrations are maintained under electron/database.
     // Keep legacy lookup first for compatibility with older branches, then canonical electron path.
     loadSchema('database/schema_v46_approvals.sql', 'Approvals Workflow V46 (legacy path)');

@@ -208,6 +208,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
         record: (payload: any) => invokeStrict('audit.record', payload),
     },
 
+    settings: {
+        getAll: (scope?: any) => invokeStrict('settings:getAll', scope || {}),
+        getSection: (sectionCode: string, scope?: any) => invokeStrict('settings:getSection', sectionCode, scope || {}),
+        putSection: (sectionCode: string, values: Record<string, unknown>, scope?: any) =>
+            invokeStrict('settings:putSection', sectionCode, values || {}, scope || {}),
+        patchKey: (key: string, value: unknown, scope?: any) =>
+            invokeStrict('settings:patchKey', key, value, scope || {}),
+        getSettings: (scope?: any) => invokeStrict('settings:getLegacyRows', scope || {}),
+        saveSetting: (key: string, value: unknown, scope?: any) =>
+            invokeStrict('settings:saveLegacySetting', key, value, scope || {}),
+        getAuditLogs: (limit?: number) => invokeStrict('settings:auditLogs', limit || 200),
+    },
+
     views: {
         list: (screenKey: string) => invokeStrict('views.list', screenKey),
         save: (payload: any) => invokeStrict('views.save', payload),

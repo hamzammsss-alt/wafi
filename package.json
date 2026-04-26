@@ -38,6 +38,7 @@
     "verify:account-resolution": "ts-node --transpile-only -P tsconfig.verif.json scripts/verify_account_resolution_engine.ts",
     "test:ae-scenarios": "ts-node --transpile-only -P tsconfig.verif.json scripts/test_ae_voucher_scenarios.ts",
     "test:ae-scenarios:electron": "node scripts/compile-electron.js && npx electron scripts/test_ae_voucher_scenarios_electron.cjs",
+    "test:settings:electron": "node scripts/compile-electron.js && npx electron scripts/test_settings_service_electron.cjs",
     "verify:partners:js": "node verify_partners.js",
     "verify:partners:ts": "ts-node --transpile-only -P tsconfig.verif.json verify_partners.ts"
   },

@@ -83,7 +83,10 @@ const REFERENCE_BY_SUBTYPE_DEFAULT = {
 };
 class ChartOfAccountsPolicy {
     static normalizeCode(input) {
-        return String(input || '').trim().toUpperCase();
+        return String(input || '')
+            .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
+            .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+            .replace(/\D+/g, '');
     }
     static deriveLevel(parent) {
         return parent ? parent.level + 1 : 1;

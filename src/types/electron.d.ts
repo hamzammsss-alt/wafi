@@ -1860,6 +1860,34 @@ export interface ElectronAPI {
         record: (payload: any) => Promise<{ id: string; duplicate: boolean }>;
     };
 
+    settings: {
+        getAll: (scope?: { companyId?: string; branchId?: string; userId?: string }) => Promise<any>;
+        getSection: (sectionCode: string, scope?: { companyId?: string; branchId?: string; userId?: string }) => Promise<any>;
+        putSection: (
+            sectionCode: string,
+            values: Record<string, unknown>,
+            scope?: { companyId?: string; branchId?: string; userId?: string }
+        ) => Promise<any>;
+        patchKey: (
+            key: string,
+            value: unknown,
+            scope?: { companyId?: string; branchId?: string; userId?: string }
+        ) => Promise<any>;
+        getSettings: (scope?: { companyId?: string; branchId?: string; userId?: string }) => Promise<Array<{
+            key: string;
+            value: string;
+            group?: string;
+            label_ar?: string;
+            label_en?: string;
+        }>>;
+        saveSetting: (
+            key: string,
+            value: unknown,
+            scope?: { companyId?: string; branchId?: string; userId?: string }
+        ) => Promise<any>;
+        getAuditLogs: (limit?: number) => Promise<any[]>;
+    };
+
     views: {
         list: (screenKey: string) => Promise<any[]>;
         save: (payload: any) => Promise<any>;
@@ -1916,6 +1944,10 @@ export interface ElectronAPI {
         getPrinters: () => Promise<any[]>;
         toPDF: (filename: string) => Promise<Buffer>;
     };
+
+    getMachineId: () => Promise<string>;
+    validateLicense: () => Promise<{ status: string; key?: string }>;
+    activateProduct: (key: string) => Promise<{ success: boolean }>;
 }
 
 declare global {

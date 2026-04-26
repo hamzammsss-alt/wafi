@@ -14,7 +14,7 @@ var AccountStatus;
     AccountStatus["ACTIVE"] = "ACTIVE";
     AccountStatus["INACTIVE"] = "INACTIVE";
 })(AccountStatus || (exports.AccountStatus = AccountStatus = {}));
-const ACCOUNT_CODE_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,31}$/;
+const ACCOUNT_CODE_PATTERN = /^\d{1,32}$/;
 class Account {
     constructor(props) {
         this.props = props;
@@ -28,7 +28,7 @@ class Account {
         return new Account(props);
     }
     static validate(props) {
-        const code = String(props.accountCode || '').trim().toUpperCase();
+        const code = String(props.accountCode || '').trim();
         if (!code) {
             throw new errors_1.DomainError(AccountingErrorCode_1.AccountingErrorCode.ERR_ACCOUNT_CODE_REQUIRED, 'Account code is required', {
                 messageKey: 'error.account.code.required',

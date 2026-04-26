@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CapabilityRegistry = void 0;
-const CAPABILITY_REGISTRY_VERSION = 5;
+const CAPABILITY_REGISTRY_VERSION = 6;
 const CAPABILITIES = [
     // Core platform
     {
@@ -11,6 +11,24 @@ const CAPABILITIES = [
         permissions: ['security.permissions.manage', 'system.users', 'system.settings'],
         labelI18nKey: 'capability.core.security.permissions.manage.label',
         denyI18nKey: 'deny.core.security.permissions.manage',
+        defaultScope: 'COMPANY',
+    },
+    {
+        key: 'core.settings.read',
+        productKey: 'core',
+        moduleKey: 'settings',
+        permissions: ['settings.read', 'system.settings'],
+        labelI18nKey: 'capability.core.settings.read.label',
+        denyI18nKey: 'deny.core.settings.read',
+        defaultScope: 'COMPANY',
+    },
+    {
+        key: 'core.settings.manage',
+        productKey: 'core',
+        moduleKey: 'settings',
+        permissions: ['settings.manage', 'system.settings'],
+        labelI18nKey: 'capability.core.settings.manage.label',
+        denyI18nKey: 'deny.core.settings.manage',
         defaultScope: 'COMPANY',
     },
     {

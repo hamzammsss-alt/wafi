@@ -36,9 +36,9 @@ type CostCenterListRow = CostCenterRow & {
 };
 
 const typeLabelMap: Record<string, string> = {
-    DEPARTMENT: 'ظ‚ط³ظ…',
-    PROJECT: 'ظ…ط´ط±ظˆط¹',
-    BRANCH: 'ظپط±ط¹'
+    DEPARTMENT: 'قسم',
+    PROJECT: 'مشروع',
+    BRANCH: 'فرع'
 };
 
 const typeBadgeMap: Record<string, string> = {
@@ -87,7 +87,7 @@ export const CostCenters = () => {
             setExpanded((prev) => ({ ...initialExpanded, ...prev }));
         } catch (err) {
             console.error(err);
-            setError('ظپط´ظ„ ظپظٹ طھط­ظ…ظٹظ„ ظ…ط±ط§ظƒط² ط§ظ„طھظƒظ„ظپط©');
+            setError('فشل في تحميل مراكز التكلفة');
         } finally {
             setLoading(false);
         }
@@ -124,7 +124,7 @@ export const CostCenters = () => {
         setError(null);
 
         if (!formData.code || !formData.name_ar) {
-            setError('ط§ظ„ط±ظ…ط² ظˆط§ط³ظ… ط§ظ„ظ…ط±ظƒط² ظ…ط·ظ„ظˆط¨ط§ظ†');
+            setError('الرمز واسم المركز مطلوبان');
             return;
         }
 
@@ -142,29 +142,29 @@ export const CostCenters = () => {
             await loadCenters();
         } catch (err) {
             console.error(err);
-            setError('ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط§ظ„ط­ظپط¸. ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰.');
+            setError('حدث خطأ أثناء الحفظ. حاول مرة أخرى.');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('ظ‡ظ„ ط£ظ†طھ ظ…طھط£ظƒط¯ ظ…ظ† ط­ط°ظپ ظ‡ط°ط§ ط§ظ„ظ…ط±ظƒط²طں')) return;
+        if (!confirm('هل أنت متأكد من حذف هذا المركز؟')) return;
 
         try {
             await api.deleteCostCenter(id);
             await loadCenters();
         } catch (err) {
             console.error(err);
-            alert('ظپط´ظ„ ظپظٹ ط§ظ„ط­ط°ظپ');
+            alert('فشل في الحذف');
         }
     };
 
     const handleDeleteRows = async (rows: CostCenterRow[]) => {
         if (rows.length === 0) return;
         const message = rows.length === 1
-            ? 'ظ‡ظ„ ط£ظ†طھ ظ…طھط£ظƒط¯ ظ…ظ† ط­ط°ظپ ظ‡ط°ط§ ط§ظ„ظ…ط±ظƒط²طں'
-            : `ظ‡ظ„ ط£ظ†طھ ظ…طھط£ظƒط¯ ظ…ظ† ط­ط°ظپ ${rows.length} ظ…ط±ط§ظƒط² طھظƒظ„ظپط©طں`;
+            ? 'هل أنت متأكد من حذف هذا المركز؟'
+            : `هل أنت متأكد من حذف ${rows.length} مراكز تكلفة؟`;
         if (!confirm(message)) return;
 
         try {
@@ -174,7 +174,7 @@ export const CostCenters = () => {
             await loadCenters();
         } catch (err) {
             console.error(err);
-            alert('ظپط´ظ„ ظپظٹ ط§ظ„ط­ط°ظپ');
+            alert('فشل في الحذف');
         }
     };
 
@@ -254,7 +254,7 @@ export const CostCenters = () => {
     const columns = useMemo<DefinitionListColumn<CostCenterListRow>[]>(() => [
         {
             key: 'name_ar',
-            label: 'ط§ط³ظ… ط§ظ„ظ…ط±ظƒط²',
+            label: 'اسم المركز',
             width: 260,
             defaultVisible: true,
             getSearchValue: (center) => `${center.name_ar || ''} ${center.name_en || ''} ${center.code || ''}`,
@@ -272,7 +272,7 @@ export const CostCenters = () => {
         },
         {
             key: 'code',
-            label: 'ط§ظ„ط±ظ…ط²',
+            label: 'الرمز',
             width: 130,
             defaultVisible: true,
             getDisplayValue: (center) => center.code || '-',
@@ -284,43 +284,43 @@ export const CostCenters = () => {
         },
         {
             key: 'type',
-            label: 'ط§ظ„ظ†ظˆط¹',
+            label: 'النوع',
             type: 'enum',
             filterType: 'enum',
             width: 140,
             defaultVisible: true,
             options: [
-                { value: 'DEPARTMENT', label: 'ظ‚ط³ظ…' },
-                { value: 'PROJECT', label: 'ظ…ط´ط±ظˆط¹' },
-                { value: 'BRANCH', label: 'ظپط±ط¹' },
+                { value: 'DEPARTMENT', label: 'قسم' },
+                { value: 'PROJECT', label: 'مشروع' },
+                { value: 'BRANCH', label: 'فرع' },
             ],
-            getDisplayValue: (center) => typeLabelMap[String(center.type || 'DEPARTMENT')] || 'ظ‚ط³ظ…',
+            getDisplayValue: (center) => typeLabelMap[String(center.type || 'DEPARTMENT')] || 'قسم',
             renderCell: (center) => {
                 const typeKey = String(center.type || 'DEPARTMENT');
                 return (
                     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${typeBadgeMap[typeKey] || typeBadgeMap.DEPARTMENT}`}>
-                        {typeLabelMap[typeKey] || 'ظ‚ط³ظ…'}
+                        {typeLabelMap[typeKey] || 'قسم'}
                     </span>
                 );
             },
         },
         {
             key: 'parent_name',
-            label: 'ط§ظ„ظ…ط±ظƒط² ط§ظ„ط£ط¨',
+            label: 'المركز الأب',
             width: 220,
             defaultVisible: true,
             getDisplayValue: (center) => center.parent_name || '-',
         },
         {
             key: 'manager_name',
-            label: 'ط§ظ„ظ…ط¯ظٹط± ط§ظ„ظ…ط³ط¤ظˆظ„',
+            label: 'المدير المسؤول',
             width: 180,
             defaultVisible: true,
             getDisplayValue: (center) => center.manager_name || '-',
         },
         {
             key: 'child_count',
-            label: 'ط¹ط¯ط¯ ط§ظ„ظپط±ظˆط¹',
+            label: 'عدد الفروع',
             type: 'number',
             filterType: 'number',
             width: 110,
@@ -330,7 +330,7 @@ export const CostCenters = () => {
         },
         {
             key: 'actions',
-            label: 'ط¥ط¬ط±ط§ط،ط§طھ',
+            label: 'إجراءات',
             width: 140,
             sortable: false,
             filterable: false,
@@ -343,7 +343,7 @@ export const CostCenters = () => {
                         type="button"
                         onClick={() => handleAddSub(center.id)}
                         className="rounded-lg p-2 text-green-600 transition-colors hover:bg-green-50"
-                        title="ط¥ط¶ط§ظپط© ظپط±ط¹ظٹ"
+                        title="إضافة فرعي"
                     >
                         <Plus size={18} />
                     </button>
@@ -351,7 +351,7 @@ export const CostCenters = () => {
                         type="button"
                         onClick={() => handleEdit(center)}
                         className="rounded-lg p-2 text-blue-600 transition-colors hover:bg-blue-50"
-                        title="طھط¹ط¯ظٹظ„"
+                        title="تعديل"
                     >
                         <Edit size={18} />
                     </button>
@@ -359,7 +359,7 @@ export const CostCenters = () => {
                         type="button"
                         onClick={() => handleDelete(center.id)}
                         className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
-                        title="ط­ط°ظپ"
+                        title="حذف"
                     >
                         <Trash2 size={18} />
                     </button>
@@ -408,9 +408,9 @@ export const CostCenters = () => {
                 loading={loading}
                 columns={columns}
                 rowKey={(center) => String(center.id)}
-                searchPlaceholder="ط¨ط­ط« ط¨ط±ظ‚ظ… ط£ظˆ ط§ط³ظ… ظ…ط±ظƒط² ط§ظ„طھظƒظ„ظپط©..."
-                emptyMessage="ظ„ط§ طھظˆط¬ط¯ ظ…ط±ط§ظƒط² طھظƒظ„ظپط© ظ…ط·ط§ط¨ظ‚ط© ظ„ظ„ظ…ط¹ط§ظٹظٹط± ط§ظ„ط­ط§ظ„ظٹط©"
-                createLabel="ط¥ط¶ط§ظپط© ظ…ط±ظƒط² ط±ط¦ظٹط³ظٹ"
+                searchPlaceholder="بحث برقم أو اسم مركز التكلفة..."
+                emptyMessage="لا توجد مراكز تكلفة مطابقة للمعايير الحالية"
+                createLabel="إضافة مركز رئيسي"
                 onCreate={() => setIsAdding(true)}
                 onEdit={handleEdit}
                 onDelete={handleDeleteRows}
@@ -424,7 +424,7 @@ export const CostCenters = () => {
                     <div className="relative w-full sm:w-96">
                         <input
                             type="text"
-                            placeholder="ط¨ط­ط« ط¨ط±ظ‚ظ… ط£ظˆ ط§ط³ظ… ط§ظ„ظ…ط±ظƒط²..."
+                            placeholder="بحث برقم أو اسم المركز..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-4 pr-10 shadow-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -433,26 +433,26 @@ export const CostCenters = () => {
                     </div>
 
                     <div className="rounded-md border bg-white px-3 py-1 text-sm font-medium text-gray-500 shadow-sm">
-                        ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ: <span className="font-bold text-blue-600">{centers.length}</span>
+                        الإجمالي: <span className="font-bold text-blue-600">{centers.length}</span>
                     </div>
                 </div>
 
                 {loading ? (
                     <div className="flex flex-col items-center justify-center p-12 text-center text-gray-400">
                         <Loader2 size={40} className="mb-4 animate-spin text-blue-500" />
-                        <p>ط¬ط§ط±ظگ طھط­ظ…ظٹظ„ ط§ظ„ط¨ظٹط§ظ†ط§طھ...</p>
+                        <p>جارِ تحميل البيانات...</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-right" style={{ minWidth: '1100px' }}>
                             <thead className="border-b border-slate-200 bg-slate-50 text-sm font-semibold text-slate-600">
                                 <tr>
-                                    <th className="w-20 px-4 py-4 text-center">ط§ظ„ط±ظ‚ظ…</th>
-                                    <th className="min-w-[320px] px-6 py-4">ط§ط³ظ… ط§ظ„ظ…ط±ظƒط²</th>
-                                    <th className="w-40 px-6 py-4">ط§ظ„ط±ظ…ط²</th>
-                                    <th className="w-40 px-6 py-4">ط§ظ„ظ†ظˆط¹</th>
-                                    <th className="min-w-[220px] px-6 py-4">ط§ظ„ظ…ط¯ظٹط± ط§ظ„ظ…ط³ط¤ظˆظ„</th>
-                                    <th className="w-40 px-6 py-4 text-center">ط§ظ„ط¥ط¬ط±ط§ط،ط§طھ</th>
+                                    <th className="w-20 px-4 py-4 text-center">الرقم</th>
+                                    <th className="min-w-[320px] px-6 py-4">اسم المركز</th>
+                                    <th className="w-40 px-6 py-4">الرمز</th>
+                                    <th className="w-40 px-6 py-4">النوع</th>
+                                    <th className="min-w-[220px] px-6 py-4">المدير المسؤول</th>
+                                    <th className="w-40 px-6 py-4 text-center">الإجراءات</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -498,7 +498,7 @@ export const CostCenters = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-gray-600">
                                                     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${typeBadgeMap[typeKey] || typeBadgeMap.DEPARTMENT}`}>
-                                                        {typeLabelMap[typeKey] || 'ظ‚ط³ظ…'}
+                                                        {typeLabelMap[typeKey] || 'قسم'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-gray-500">{center.manager_name || '-'}</td>
@@ -507,21 +507,21 @@ export const CostCenters = () => {
                                                         <button
                                                             onClick={() => handleAddSub(center.id)}
                                                             className="rounded-lg p-2 text-green-600 transition-colors hover:bg-green-50"
-                                                            title="ط¥ط¶ط§ظپط© ظپط±ط¹ظٹ"
+                                                            title="إضافة فرعي"
                                                         >
                                                             <Plus size={18} />
                                                         </button>
                                                         <button
                                                             onClick={() => handleEdit(center)}
                                                             className="rounded-lg p-2 text-blue-600 transition-colors hover:bg-blue-50"
-                                                            title="طھط¹ط¯ظٹظ„"
+                                                            title="تعديل"
                                                         >
                                                             <Edit size={18} />
                                                         </button>
                                                         <button
                                                             onClick={() => handleDelete(center.id)}
                                                             className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
-                                                            title="ط­ط°ظپ"
+                                                            title="حذف"
                                                         >
                                                             <Trash2 size={18} />
                                                         </button>
@@ -537,7 +537,7 @@ export const CostCenters = () => {
                                                 <div className="rounded-full bg-gray-50 p-4">
                                                     <Search size={32} className="text-gray-300" />
                                                 </div>
-                                                <p>ظ„ط§ طھظˆط¬ط¯ ظ…ط±ط§ظƒط² طھظƒظ„ظپط©</p>
+                                                <p>لا توجد مراكز تكلفة</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -555,7 +555,7 @@ export const CostCenters = () => {
                         <div className="flex items-center justify-between border-b bg-gray-50 px-6 py-4">
                             <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
                                 {editingId ? <Edit className="text-blue-600" size={20} /> : <Plus className="text-blue-600" size={20} />}
-                                {editingId ? 'طھط¹ط¯ظٹظ„ ظ…ط±ظƒط² طھظƒظ„ظپط©' : 'ط¥ط¶ط§ظپط© ظ…ط±ظƒط² طھظƒظ„ظپط© ط¬ط¯ظٹط¯'}
+                                {editingId ? 'تعديل مركز تكلفة' : 'إضافة مركز تكلفة جديد'}
                             </h3>
                             <button onClick={handleClose} className="text-gray-400 transition-colors hover:text-gray-600">
                                 <X size={20} />
@@ -566,7 +566,7 @@ export const CostCenters = () => {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                                        ط§ظ„ط±ظ…ط² (Code) <span className="text-red-500">*</span>
+                                        الرمز (Code) <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="text"
@@ -579,35 +579,35 @@ export const CostCenters = () => {
                                 </div>
 
                                 <div>
-                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">ط§ظ„ظ†ظˆط¹</label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">النوع</label>
                                     <select
                                         value={formData.type}
                                         onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                         className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     >
-                                        <option value="DEPARTMENT">ظ‚ط³ظ… (Department)</option>
-                                        <option value="PROJECT">ظ…ط´ط±ظˆط¹ (Project)</option>
-                                        <option value="BRANCH">ظپط±ط¹ (Branch)</option>
+                                        <option value="DEPARTMENT">قسم (Department)</option>
+                                        <option value="PROJECT">مشروع (Project)</option>
+                                        <option value="BRANCH">فرع (Branch)</option>
                                     </select>
                                 </div>
                             </div>
 
                             <div>
                                 <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                                    ط§ط³ظ… ط§ظ„ظ…ط±ظƒط² (ط¹ط±ط¨ظٹ) <span className="text-red-500">*</span>
+                                    اسم المركز (عربي) <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.name_ar}
                                     onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
                                     className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                    placeholder="ظ…ط«ط§ظ„: ط§ظ„ط¥ط¯ط§ط±ط© ط§ظ„ط¹ط§ظ…ط©"
+                                    placeholder="مثال: الإدارة العامة"
                                     dir="rtl"
                                 />
                             </div>
 
                             <div>
-                                <label className="mb-1.5 block text-sm font-medium text-gray-700">ط§ظ„ط§ط³ظ… (English)</label>
+                                <label className="mb-1.5 block text-sm font-medium text-gray-700">الاسم (English)</label>
                                 <input
                                     type="text"
                                     value={formData.name_en}
@@ -620,13 +620,13 @@ export const CostCenters = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">ظٹطھط¨ط¹ ظ„ظ„ظ…ط±ظƒط²</label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">يتبع للمركز</label>
                                     <select
                                         value={formData.parent_id}
                                         onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
                                         className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     >
-                                        <option value="">-- ط±ط¦ظٹط³ظٹ --</option>
+                                        <option value="">-- رئيسي --</option>
                                         {centers.filter((center) => center.id !== editingId).map((center) => (
                                             <option key={center.id} value={center.id}>{center.name_ar}</option>
                                         ))}
@@ -634,7 +634,7 @@ export const CostCenters = () => {
                                 </div>
 
                                 <div>
-                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">ط§ظ„ظ…ط¯ظٹط± ط§ظ„ظ…ط³ط¤ظˆظ„</label>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">المدير المسؤول</label>
                                     <input
                                         type="text"
                                         value={formData.manager_name}
@@ -650,7 +650,7 @@ export const CostCenters = () => {
                                     onClick={handleClose}
                                     className="flex-1 rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-200"
                                 >
-                                    ط¥ظ„ط؛ط§ط،
+                                    إلغاء
                                 </button>
                                 <button
                                     type="submit"
@@ -658,7 +658,7 @@ export const CostCenters = () => {
                                     className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white shadow-sm shadow-blue-200 transition-all hover:bg-blue-700 disabled:opacity-70"
                                 >
                                     {saving && <Loader2 size={16} className="animate-spin" />}
-                                    {editingId ? 'ط­ظپط¸ ط§ظ„طھط¹ط¯ظٹظ„ط§طھ' : 'ط¥ط¶ط§ظپط© ط§ظ„ظ…ط±ظƒط²'}
+                                    {editingId ? 'حفظ التعديلات' : 'إضافة المركز'}
                                 </button>
                             </div>
                         </form>
@@ -668,4 +668,3 @@ export const CostCenters = () => {
         </div>
     );
 };
-

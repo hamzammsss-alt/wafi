@@ -21,6 +21,8 @@ const META_ALLOWLIST = new Set([
     'viewId',
     'operation',
     'module',
+    'section',
+    'settingKey',
     'reason',
     'docNo',
     'route',

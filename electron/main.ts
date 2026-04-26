@@ -161,6 +161,8 @@ import { registerPrintingIPC } from '../src/main/ipc/printing.ipc';
 import { AuditService, configureGlobalAuditService, getGlobalAuditService } from '../src/main/application/services/AuditService';
 import { SqliteAuditRepo } from '../src/main/infrastructure/adapters/SqliteAuditRepo';
 import { registerAuditIPC } from '../src/main/ipc/audit.ipc';
+import { SystemSettingsService } from '../src/main/application/services/SystemSettingsService';
+import { registerSettingsIPC } from '../src/main/ipc/settings.ipc';
 import { bindAuthSession, clearAuthSession, clearAuthSessionByWebContentsId, configureAuthContext, getContext } from '../src/main/ipc/AuthContext';
 import { SqliteFinancialPlatformRepo } from '../src/main/infrastructure/adapters/SqliteFinancialPlatformRepo';
 import { FinancialPlatformUseCases } from '../src/main/application/useCases/FinancialPlatformUseCases';
@@ -174,6 +176,7 @@ import { diffPlainObjects } from '../src/main/application/services/AuditDiffServ
 let db: any;
 let permissionSnapshotService: PermissionSnapshotService | null = null;
 let auditService: AuditService | null = null;
+let systemSettingsService: SystemSettingsService | null = null;
 let concurrentLicenseService: ConcurrentLicenseService | null = null;
 let attachmentStorageService: AttachmentStorageService | null = null;
 const DEFAULT_RENDERER_URL = 'http://localhost:4600';
@@ -1122,8 +1125,16 @@ const registerIPCHandlers = (db: any) => {
   safeHandle('purchase-create-return', (event, data) => PurchaseService.createReturn(data));
   safeHandle('purchase-get-returns', () => PurchaseService.getReturns());
   safeHandle('purchase-get-return', (event, id) => PurchaseService.getReturn(id));
-  safeHandle('get-settings', () => SystemService.getSettings());
-  safeHandle('save-settings', (event, data) => SystemService.saveSettings(data));
+  safeHandle('get-settings', (event, scope) =>
+    systemSettingsService
+      ? systemSettingsService.getLegacySettingsMap(getContext(event as any), scope || {})
+      : SystemService.getSettings()
+  );
+  safeHandle('save-settings', (event, data, scope) =>
+    systemSettingsService
+      ? systemSettingsService.saveLegacySettings(data || {}, getContext(event as any), scope || {})
+      : SystemService.saveSettings(data)
+  );
   safeHandle('save-logo', (event, { buffer, name }) => SystemService.saveLogo(buffer, name));
   safeHandle('system:save-image', (event, { buffer, name }) => SystemService.saveImage(buffer, name));
 
@@ -2138,6 +2149,9 @@ app.on('ready', async () => {
   auditService = new AuditService(auditRepo);
   configureGlobalAuditService(auditService);
   registerAuditIPC(auditService);
+
+  systemSettingsService = new SystemSettingsService(db, auditService);
+  registerSettingsIPC(systemSettingsService);
 
   registerSecurityIPC(permissionSnapshotService);
 

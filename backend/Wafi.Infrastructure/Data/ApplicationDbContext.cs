@@ -39,6 +39,10 @@ namespace Wafi.Infrastructure.Data
 
         // System
         public DbSet<SyncLog> SyncLogs { get; set; }
+        public DbSet<SettingsGroup> SettingsGroups { get; set; }
+        public DbSet<SystemSetting> Settings { get; set; }
+        public DbSet<SettingValue> SettingValues { get; set; }
+        public DbSet<SettingAuditLog> SettingAuditLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -89,6 +93,23 @@ namespace Wafi.Infrastructure.Data
                         ? new List<string>()
                         : JsonSerializer.Deserialize<List<string>>(value, (JsonSerializerOptions?)null) ?? new List<string>())
                 .Metadata.SetValueComparer(stringListComparer);
+
+            modelBuilder.Entity<SettingsGroup>()
+                .HasIndex(g => g.Code)
+                .IsUnique();
+
+            modelBuilder.Entity<SystemSetting>()
+                .HasIndex(s => s.Key)
+                .IsUnique();
+
+            modelBuilder.Entity<SystemSetting>()
+                .HasOne(s => s.SettingsGroup)
+                .WithMany(g => g.Settings)
+                .HasForeignKey(s => s.SettingsGroupId);
+
+            modelBuilder.Entity<SettingValue>()
+                .HasIndex(v => new { v.SystemSettingId, v.TenantId, v.BranchId, v.UserId })
+                .IsUnique();
 
             // GL Configurations
             modelBuilder.Entity<GlChartOfAccounts>()

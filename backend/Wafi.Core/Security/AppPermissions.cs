@@ -26,6 +26,12 @@ namespace Wafi.Core.Security
             public const string Create = "tenants.create";
         }
 
+        public static class Settings
+        {
+            public const string Read = "settings.read";
+            public const string Manage = "settings.manage";
+        }
+
         public static class Sync
         {
             public const string Push = "sync.push";

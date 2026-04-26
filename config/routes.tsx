@@ -313,6 +313,7 @@ const APP_ROUTES_RAW: RouteConfig[] = [
     { path: '/settings/company', description: 'ملف الشركة', component: <CompanyProfile /> },
     { path: '/settings/branches', description: 'الفروع', component: <Branches /> },
     { path: '/settings/preferences', description: 'خيارات النظام', component: <Settings /> },
+    { path: '/settings/display', description: 'أسلوب العرض والطباعة', component: <Settings /> },
     { path: '/settings/edition', description: 'إعداد النسخة', component: <EditionSettings /> },
 
     // System - Users & Permissions

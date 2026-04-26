@@ -23,6 +23,8 @@ namespace Wafi.Core.Security
                         AppPermissions.Roles.Read,
                         AppPermissions.Roles.Manage,
                         AppPermissions.Tenants.Read,
+                        AppPermissions.Settings.Read,
+                        AppPermissions.Settings.Manage,
                         AppPermissions.Sync.Push,
                         AppPermissions.Sync.Pull
                     }
@@ -36,6 +38,7 @@ namespace Wafi.Core.Security
                         AppPermissions.Auth.Me,
                         AppPermissions.Roles.Read,
                         AppPermissions.Tenants.Read,
+                        AppPermissions.Settings.Read,
                         AppPermissions.Sync.Push,
                         AppPermissions.Sync.Pull
                     }
@@ -47,6 +50,7 @@ namespace Wafi.Core.Security
                     Permissions = new[]
                     {
                         AppPermissions.Auth.Me,
+                        AppPermissions.Settings.Read,
                         AppPermissions.Sync.Push,
                         AppPermissions.Sync.Pull
                     }
@@ -60,6 +64,7 @@ namespace Wafi.Core.Security
                         AppPermissions.Auth.Me,
                         AppPermissions.Roles.Read,
                         AppPermissions.Tenants.Read,
+                        AppPermissions.Settings.Read,
                         AppPermissions.Sync.Pull
                     }
                 }

@@ -13,6 +13,7 @@ export const auditI18nPlaceholders = {
         'audit.event.view.set_default': 'View Set As Default',
         'audit.event.definition.create': 'Definition Created',
         'audit.event.definition.update': 'Definition Updated',
+        'audit.event.settings.update': 'Settings Updated',
     },
     ar: {
         'audit.event.document.create': 'تم إنشاء المستند',
@@ -28,6 +29,7 @@ export const auditI18nPlaceholders = {
         'audit.event.view.set_default': 'تم تعيين العرض كافتراضي',
         'audit.event.definition.create': 'تم إنشاء التعريف',
         'audit.event.definition.update': 'تم تحديث التعريف',
+        'audit.event.settings.update': 'تم تحديث الإعدادات',
     },
     he: {
         'audit.event.document.create': 'המסמך נוצר',
@@ -43,6 +45,7 @@ export const auditI18nPlaceholders = {
         'audit.event.view.set_default': 'תצוגה הוגדרה כברירת מחדל',
         'audit.event.definition.create': 'הגדרה נוצרה',
         'audit.event.definition.update': 'הגדרה עודכנה',
+        'audit.event.settings.update': 'הגדרות עודכנו',
     },
 } as const;
 

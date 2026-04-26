@@ -161,6 +161,8 @@ const printing_ipc_1 = require("../src/main/ipc/printing.ipc");
 const AuditService_1 = require("../src/main/application/services/AuditService");
 const SqliteAuditRepo_1 = require("../src/main/infrastructure/adapters/SqliteAuditRepo");
 const audit_ipc_1 = require("../src/main/ipc/audit.ipc");
+const SystemSettingsService_1 = require("../src/main/application/services/SystemSettingsService");
+const settings_ipc_1 = require("../src/main/ipc/settings.ipc");
 const AuthContext_1 = require("../src/main/ipc/AuthContext");
 const SqliteFinancialPlatformRepo_1 = require("../src/main/infrastructure/adapters/SqliteFinancialPlatformRepo");
 const FinancialPlatformUseCases_1 = require("../src/main/application/useCases/FinancialPlatformUseCases");
@@ -173,6 +175,7 @@ const AuditDiffService_1 = require("../src/main/application/services/AuditDiffSe
 let db;
 let permissionSnapshotService = null;
 let auditService = null;
+let systemSettingsService = null;
 let concurrentLicenseService = null;
 let attachmentStorageService = null;
 const DEFAULT_RENDERER_URL = 'http://localhost:4600';
@@ -972,8 +975,12 @@ const registerIPCHandlers = (db) => {
     safeHandle('purchase-create-return', (event, data) => PurchaseService_1.PurchaseService.createReturn(data));
     safeHandle('purchase-get-returns', () => PurchaseService_1.PurchaseService.getReturns());
     safeHandle('purchase-get-return', (event, id) => PurchaseService_1.PurchaseService.getReturn(id));
-    safeHandle('get-settings', () => SystemService_1.SystemService.getSettings());
-    safeHandle('save-settings', (event, data) => SystemService_1.SystemService.saveSettings(data));
+    safeHandle('get-settings', (event, scope) => systemSettingsService
+        ? systemSettingsService.getLegacySettingsMap((0, AuthContext_1.getContext)(event), scope || {})
+        : SystemService_1.SystemService.getSettings());
+    safeHandle('save-settings', (event, data, scope) => systemSettingsService
+        ? systemSettingsService.saveLegacySettings(data || {}, (0, AuthContext_1.getContext)(event), scope || {})
+        : SystemService_1.SystemService.saveSettings(data));
     safeHandle('save-logo', (event, { buffer, name }) => SystemService_1.SystemService.saveLogo(buffer, name));
     safeHandle('system:save-image', (event, { buffer, name }) => SystemService_1.SystemService.saveImage(buffer, name));
     safeHandle('dialog:open-file', async (event, options) => {
@@ -1848,6 +1855,8 @@ electron_1.app.on('ready', async () => {
     auditService = new AuditService_1.AuditService(auditRepo);
     (0, AuditService_1.configureGlobalAuditService)(auditService);
     (0, audit_ipc_1.registerAuditIPC)(auditService);
+    systemSettingsService = new SystemSettingsService_1.SystemSettingsService(db, auditService);
+    (0, settings_ipc_1.registerSettingsIPC)(systemSettingsService);
     (0, security_ipc_1.registerSecurityIPC)(permissionSnapshotService);
     // --- Dynamic Filters + Saved Views (screen registry + whitelisted query builder) ---
     const screenRegistry = new ScreenRegistry_1.ScreenRegistry();
