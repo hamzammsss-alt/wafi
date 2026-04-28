@@ -43,7 +43,8 @@ export const CustomerCard: React.FC = () => {
         credit_limit: 0,
         payment_term_days: 0,
         tax_number: '',
-        price_list_id: ''
+        price_list_id: '',
+        customer_discount_percent: 0
     });
 
     // --- Effects ---
@@ -146,7 +147,8 @@ export const CustomerCard: React.FC = () => {
             credit_limit: 0,
             payment_term_days: 0,
             tax_number: '',
-            price_list_id: ''
+            price_list_id: '',
+            customer_discount_percent: 0
         });
         setActiveTab('general');
     };
@@ -576,6 +578,18 @@ export const CustomerCard: React.FC = () => {
                                             <option value="">-- الافتراضي --</option>
                                             {priceLists.map(pl => <option key={pl.id} value={pl.id}>{pl.name_ar}</option>)}
                                         </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">نسبة الخصم على السعر</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500 outline-none transition-all"
+                                            value={formData.customer_discount_percent || 0}
+                                            onChange={(e) => setFormData({ ...formData, customer_discount_percent: Number(e.target.value) })}
+                                        />
                                     </div>
 
                                     <div>

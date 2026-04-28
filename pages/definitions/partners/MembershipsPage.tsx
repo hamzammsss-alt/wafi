@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { BadgeCheck, Plus, Search, Edit, Trash2, Save, X, Loader2, AlertCircle } from 'lucide-react';
+import { BadgeCheck, Plus, Search, Edit, Trash2, Save, X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 interface MembershipRow {
     id: string;
@@ -117,6 +118,81 @@ export const MembershipsPage: React.FC = () => {
         );
     });
 
+    const handleDeleteRows = async (selectedRows: MembershipRow[]) => {
+        if (selectedRows.length === 0) return;
+        if (!confirm(selectedRows.length === 1 ? 'هل تريد حذف هذه العضوية؟' : `هل تريد حذف ${selectedRows.length} عضويات؟`)) return;
+
+        try {
+            for (const row of selectedRows) {
+                await window.electronAPI.partner.deleteMembership(row.id);
+            }
+            await loadRows();
+        } catch (err: any) {
+            alert(err?.message || 'تعذر حذف العضويات المحددة');
+        }
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<MembershipRow>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'اسم العضوية',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (row) => `${row.name_ar || ''} ${row.name_en || ''} ${row.code || ''}`,
+            renderCell: (row) => (
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{row.name_ar || '-'}</div>
+                    <div className="truncate text-xs text-slate-400">{row.name_en || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (row) => row.code || '-',
+            renderCell: (row) => row.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{row.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 140,
+            defaultVisible: true,
+            getValue: (row) => (row.is_active ? 1 : 0),
+            renderCell: (row) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${row.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {row.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {row.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (row) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => openEdit(row)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => onDelete(row.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [rows]);
+
     return (
         <div className="app-page" dir="rtl">
             <WorkspaceHeader
@@ -158,6 +234,24 @@ export const MembershipsPage: React.FC = () => {
                 </button>
             </div>
 
+            <DefinitionMasterList
+                screenKey="definitions.memberships"
+                data={rows}
+                loading={loading}
+                columns={columns}
+                rowKey={(row) => String(row.id)}
+                searchPlaceholder="بحث عن عضوية..."
+                emptyMessage="لا توجد عضويات مطابقة للمعايير الحالية"
+                createLabel="عضوية جديدة"
+                onCreate={openCreate}
+                onEdit={openEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadRows}
+                defaultSort={{ key: 'name_ar', direction: 'asc' }}
+            />
+
+            {false && (
+            <>
             <div className="card overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
                     <div className="relative w-full sm:w-96">
@@ -222,6 +316,8 @@ export const MembershipsPage: React.FC = () => {
                     </div>
                 )}
             </div>
+            </>
+            )}
 
             {isOpen && (
                 <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">

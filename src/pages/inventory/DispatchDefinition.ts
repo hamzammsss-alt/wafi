@@ -1,9 +1,58 @@
+import React, { useState } from 'react';
 import { dispatchClient } from '../../lib/dispatchClient';
 import { DocumentDefinition } from '../../types/DocumentDefinition';
 
 function toNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function DispatchWorkflowPanel(context: any) {
+    const { docId, header } = context;
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState('');
+    const status = String(header?.status || 'DRAFT').toUpperCase();
+
+    if (!docId || status !== 'PENDING_APPROVAL_L1') return null;
+
+    const convert = async () => {
+        if (!docId || busy) return;
+        setBusy(true);
+        setMessage('');
+        try {
+            const invoiceId = await (window as any).electronAPI?.dispatch?.invoiceFromDispatch?.(docId);
+            const targetId = String(invoiceId || '');
+            setMessage('تم تحويل الإرسالية إلى فاتورة مبيعات');
+            if (targetId) {
+                window.location.hash = `/sales/invoices/${targetId}`;
+            }
+        } catch (error: any) {
+            setMessage(String(error?.message || 'تعذر تحويل الإرسالية إلى فاتورة'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return React.createElement(
+        'div',
+        { className: 'mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3' },
+        React.createElement('div', { className: 'text-sm font-semibold text-indigo-800' }, 'الإرسالية عالقة للفوترة'),
+        React.createElement(
+            'div',
+            { className: 'flex flex-wrap items-center gap-2' },
+            message ? React.createElement('span', { className: 'text-xs font-medium text-slate-600' }, message) : null,
+            React.createElement(
+                'button',
+                {
+                    type: 'button',
+                    disabled: busy,
+                    onClick: convert,
+                    className: 'rounded-lg bg-indigo-700 px-3 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-60',
+                },
+                busy ? 'جاري التحويل...' : 'تحويل إلى فاتورة',
+            ),
+        ),
+    );
 }
 
 export const DispatchDefinition: DocumentDefinition<any, any> = {
@@ -63,6 +112,10 @@ export const DispatchDefinition: DocumentDefinition<any, any> = {
         { key: 'customer_id', label: 'العميل', type: 'lookup', span: 1 },
         { key: 'from_warehouse_id', label: 'المستودع', type: 'select', span: 1 },
         { key: 'truck_id', label: 'الشاحنة', type: 'select', span: 1 },
+        { key: 'region_id', label: 'المنطقة', type: 'select', span: 1 },
+        { key: 'loading_area', label: 'منطقة التحميل', type: 'text', span: 1 },
+        { key: 'loading_sheet_no', label: 'كشف التحميل', type: 'text', span: 1 },
+        { key: 'order_loading_list_no', label: 'كشف تحميل الطلبية', type: 'text', span: 1 },
         { key: 'sales_rep_id', label: 'مندوب المبيعات', type: 'select', span: 1 },
         { key: 'tracking_no', label: 'رقم التتبع', type: 'text', span: 1 },
         { key: 'status', label: 'الحالة', type: 'readonly', span: 1 },
@@ -109,6 +162,10 @@ export const DispatchDefinition: DocumentDefinition<any, any> = {
             customer_id: String(header?.customer_id || '').trim(),
             from_warehouse_id: String(header?.from_warehouse_id || '').trim(),
             truck_id: String(header?.truck_id || '').trim(),
+            region_id: String(header?.region_id || '').trim(),
+            loading_area: String(header?.loading_area || '').trim(),
+            loading_sheet_no: String(header?.loading_sheet_no || '').trim(),
+            order_loading_list_no: String(header?.order_loading_list_no || '').trim(),
             sales_rep_id: String(header?.sales_rep_id || '').trim(),
             tracking_no: String(header?.tracking_no || '').trim(),
             receiver_name: String(header?.receiver_name || '').trim(),
@@ -173,11 +230,14 @@ export const DispatchDefinition: DocumentDefinition<any, any> = {
     saveOnHeaderCommit: false,
     createDraftOnOpen: false,
 
+    renderBeforeLines: (context) => React.createElement(DispatchWorkflowPanel, context),
+
     loadSelectOptions: async () => {
         const api = (window as any).electronAPI;
-        const [vehicles, salesReps] = await Promise.all([
+        const [vehicles, salesReps, regions] = await Promise.all([
             api?.logistics?.getVehicles?.() || Promise.resolve([]),
             api?.partner?.getSalesReps?.() || Promise.resolve([]),
+            api?.partner?.getRegions?.() || Promise.resolve([]),
         ]);
         return {
             truck_id: (Array.isArray(vehicles) ? vehicles : []).map((vehicle: any) => ({
@@ -187,6 +247,10 @@ export const DispatchDefinition: DocumentDefinition<any, any> = {
             sales_rep_id: (Array.isArray(salesReps) ? salesReps : []).map((partner: any) => ({
                 id: String(partner?.id || ''),
                 label: String(partner?.name_ar || partner?.name || partner?.code || ''),
+            })).filter((option: any) => option.id),
+            region_id: (Array.isArray(regions) ? regions : []).map((region: any) => ({
+                id: String(region?.id || ''),
+                label: String(region?.name_ar || region?.name_en || region?.name || region?.code || ''),
             })).filter((option: any) => option.id),
         };
     },

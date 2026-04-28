@@ -17,6 +17,81 @@ function wrapResult(fn) {
 class DocumentServiceFactory {
     static createService(config) {
         const { docType, tableName, lineTableName, foreignKey, headerPrefix, partnerField, hasTotals } = config;
+        const docNoField = config.docNoField || (docType === 'sales_invoice' || docType === 'purchase_invoice' ? 'invoice_no' :
+            docType.includes('order') ? 'order_no' :
+                docType.includes('quotation') ? 'quotation_no' :
+                    docType.includes('request') ? 'request_no' : 'doc_no');
+        function getColumns(table) {
+            try {
+                const rows = database_1.db.prepare(`PRAGMA table_info(${table})`).all();
+                return new Set(rows.map((row) => String(row.name || '').trim()).filter(Boolean));
+            }
+            catch {
+                return new Set();
+            }
+        }
+        function hasColumn(table, column) {
+            return getColumns(table).has(column);
+        }
+        function addColumn(table, column, ddl) {
+            try {
+                if (!hasColumn(table, column)) {
+                    database_1.db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`).run();
+                }
+            }
+            catch (error) {
+                if (!String(error?.message || '').includes('duplicate column name')) {
+                    console.warn(`[DocumentServiceFactory] Could not add ${table}.${column}: ${error?.message || error}`);
+                }
+            }
+        }
+        function firstId(table, extraWhere = '1=1') {
+            try {
+                const row = database_1.db.prepare(`SELECT id FROM ${table} WHERE ${extraWhere} LIMIT 1`).get();
+                return String(row?.id || '').trim();
+            }
+            catch {
+                return '';
+            }
+        }
+        function defaultPartnerId() {
+            return partnerField === 'requester_id'
+                ? firstId('employees')
+                : firstId('business_partners');
+        }
+        function defaultBranchId() {
+            try {
+                const main = database_1.db.prepare(`SELECT id FROM branches WHERE COALESCE(is_main, 0) = 1 LIMIT 1`).get();
+                if (main?.id)
+                    return String(main.id);
+            }
+            catch { }
+            return firstId('branches') || 'MAIN';
+        }
+        function defaultCurrencyId() {
+            try {
+                const row = database_1.db.prepare(`
+                    SELECT COALESCE(NULLIF(TRIM(id), ''), code) AS id
+                    FROM currencies
+                    WHERE UPPER(COALESCE(code, id, '')) = 'ILS'
+                    LIMIT 1
+                `).get();
+                if (row?.id)
+                    return String(row.id);
+            }
+            catch { }
+            return 'ILS';
+        }
+        function insertRow(table, values) {
+            const columns = getColumns(table);
+            const entries = Object.entries(values).filter(([key]) => columns.has(key));
+            if (!entries.length)
+                return;
+            const names = entries.map(([key]) => key);
+            const placeholders = names.map((key) => `@${key}`);
+            const payload = Object.fromEntries(entries);
+            database_1.db.prepare(`INSERT INTO ${table} (${names.join(', ')}) VALUES (${placeholders.join(', ')})`).run(payload);
+        }
         function nextDocNo() {
             const sequence = database_1.db.prepare(`SELECT next_no FROM doc_sequences WHERE doc_type = ?`).get(docType);
             if (!sequence) {
@@ -50,9 +125,6 @@ class DocumentServiceFactory {
                 }
                 // Generic Search using the partnerField and doc_no
                 if (params.search) {
-                    const docNoField = docType === 'sales_invoice' || docType === 'purchase_invoice' ? 'invoice_no' :
-                        docType.includes('order') ? 'order_no' :
-                            docType.includes('request') ? 'request_no' : 'doc_no';
                     where.push(`(i.${docNoField} LIKE ? OR bp.name_ar LIKE ? OR bp.name_en LIKE ?)`);
                     const pct = `%${params.search}%`;
                     args.push(pct, pct, pct);
@@ -76,8 +148,7 @@ class DocumentServiceFactory {
                     }
                 }
                 const orderDir = sort === 'date_asc' ? 'ASC' : 'DESC';
-                const docNoSelect = docType === 'sales_invoice' || docType === 'purchase_invoice' ? 'i.invoice_no' :
-                    docType.includes('order') ? 'i.order_no as invoice_no' : 'i.request_no as invoice_no'; // Alias to invoice_no for generic UI compatibility
+                const docNoSelect = `i.${docNoField} as invoice_no`; // Alias to invoice_no for generic UI compatibility
                 const partnerNameSelect = partnerField === 'requester_id' ? 'bp.name' : 'bp.name_ar'; // Employees use name, Partners use name_ar
                 const joinTable = partnerField === 'requester_id' ? 'employees' : 'business_partners';
                 const sql = `
@@ -106,9 +177,25 @@ class DocumentServiceFactory {
             static get(id) {
                 const joinTable = partnerField === 'requester_id' ? 'employees' : 'business_partners';
                 const partnerNameSelect = partnerField === 'requester_id' ? 'bp.name' : 'bp.name_ar';
+                const lineColumns = getColumns(lineTableName);
+                const lineExpr = (preferred, fallback, literal = '0') => lineColumns.has(preferred) ? `l.${preferred}` : lineColumns.has(fallback) ? `l.${fallback}` : literal;
+                const itemLookupExpr = lineColumns.has('item_id') ? 'l.item_id' : "''";
+                const descriptionExpr = lineColumns.has('description') ? 'l.description' : "''";
+                const qtyExpr = lineExpr('quantity', 'qty');
+                const priceExpr = lineExpr('unit_price', 'price');
+                const discountExpr = lineExpr('discount', 'discount_amount');
+                const taxRateExpr = lineColumns.has('tax_rate') ? 'l.tax_rate' : '0';
+                const lineTotalExpr = lineColumns.has('net_total')
+                    ? 'l.net_total'
+                    : lineColumns.has('total_price')
+                        ? 'l.total_price'
+                        : lineColumns.has('line_total')
+                            ? 'l.line_total'
+                            : '0';
                 const header = database_1.db.prepare(`
                     SELECT
                         i.*,
+                        i.${docNoField} AS invoice_no,
                         COALESCE(i.doc_date, i.date) AS doc_date,
                         COALESCE(${partnerNameSelect}, '') AS customer_name,
                         i.${partnerField} as customer_id
@@ -121,15 +208,15 @@ class DocumentServiceFactory {
                 const lines = database_1.db.prepare(`
                     SELECT
                         l.*,
-                        COALESCE(it.name_ar, l.description, '') AS item_name,
+                        COALESCE(it.name_ar, ${descriptionExpr}, '') AS item_name,
                         COALESCE(it.code, '')    AS item_code_lookup,
-                        COALESCE(l.quantity, l.qty, 0) AS qty,
-                        COALESCE(l.unit_price, l.price, 0) AS price,
-                        COALESCE(l.discount, 0)   AS discount,
-                        COALESCE(l.tax_rate, 0)   AS tax_rate,
-                        COALESCE(l.net_total, l.total_price, l.line_total, 0) AS line_total
+                        COALESCE(${qtyExpr}, 0) AS qty,
+                        COALESCE(${priceExpr}, 0) AS price,
+                        COALESCE(${discountExpr}, 0) AS discount,
+                        COALESCE(${taxRateExpr}, 0) AS tax_rate,
+                        COALESCE(${lineTotalExpr}, 0) AS line_total
                     FROM ${lineTableName} l
-                    LEFT JOIN items it ON l.item_id = it.id
+                    LEFT JOIN items it ON ${itemLookupExpr} = it.id
                     WHERE l.${foreignKey} = ?
                     ORDER BY COALESCE(l.line_no, l.rowid)
                 `).all(id);
@@ -139,16 +226,27 @@ class DocumentServiceFactory {
                 const id = (0, uuid_1.v4)();
                 const no = nextDocNo();
                 const today = new Date().toISOString().split('T')[0];
-                const docNoField = docType === 'sales_invoice' || docType === 'purchase_invoice' ? 'invoice_no' :
-                    docType.includes('order') ? 'order_no' : 'request_no';
-                let cols = `id, ${docNoField}, status, version, date, doc_date, created_by, created_at`;
-                let vals = `?, ?, 'DRAFT', 1, ?, ?, ?, CURRENT_TIMESTAMP`;
-                let args = [id, no, today, today, userId];
-                if (hasTotals) {
-                    cols += `, subtotal, tax_total, grand_total`;
-                    vals += `, 0, 0, 0`;
-                }
-                database_1.db.prepare(`INSERT INTO ${tableName}(${cols}) VALUES(${vals})`).run(...args);
+                const values = {
+                    id,
+                    [docNoField]: no,
+                    status: 'DRAFT',
+                    version: 1,
+                    date: today,
+                    doc_date: today,
+                    created_by: userId,
+                    created_at: new Date().toISOString(),
+                    [partnerField]: defaultPartnerId(),
+                    branch_id: defaultBranchId(),
+                    currency_id: defaultCurrencyId(),
+                    exchange_rate: 1,
+                    subtotal: 0,
+                    tax_total: 0,
+                    discount_total: 0,
+                    grand_total: 0,
+                    total_value: 0,
+                    posted_once: 0,
+                };
+                insertRow(tableName, values);
                 return { id, invoice_no: no, status: 'DRAFT' };
             }
             static save(params) {
@@ -169,35 +267,108 @@ class DocumentServiceFactory {
                     grandTotal = subtotal + taxTotal;
                 }
                 database_1.db.transaction(() => {
-                    let updateSql = `UPDATE ${tableName} SET ${partnerField} = ?, date = ?, doc_date = ?, version = version + 1`;
-                    let updateArgs = [
-                        header.customer_id ?? null,
-                        header.doc_date ?? header.date ?? new Date().toISOString().split('T')[0],
-                        header.doc_date ?? header.date ?? new Date().toISOString().split('T')[0]
-                    ];
-                    if (hasTotals) {
-                        updateSql += `, subtotal = ?, tax_total = ?, grand_total = ?, currency_id = ?, exchange_rate = ?`;
-                        updateArgs.push(subtotal, taxTotal, grandTotal, header.currency_id ?? null, header.exchange_rate ?? 1);
+                    const headerColumns = getColumns(tableName);
+                    const docDate = header.doc_date ?? header.date ?? new Date().toISOString().split('T')[0];
+                    const assignments = [];
+                    const updateArgs = [];
+                    const assignHeaderField = (field, value) => {
+                        if (!headerColumns.has(field) || value === undefined)
+                            return;
+                        assignments.push(`${field} = ?`);
+                        updateArgs.push(value);
+                    };
+                    if (headerColumns.has(partnerField)) {
+                        assignments.push(`${partnerField} = ?`);
+                        updateArgs.push(header.customer_id ?? header[partnerField] ?? null);
                     }
-                    if (header.notes !== undefined) {
-                        updateSql += `, notes = ?`;
+                    if (headerColumns.has('date')) {
+                        assignments.push('date = ?');
+                        updateArgs.push(docDate);
+                    }
+                    if (headerColumns.has('doc_date')) {
+                        assignments.push('doc_date = ?');
+                        updateArgs.push(docDate);
+                    }
+                    if (headerColumns.has('version')) {
+                        assignments.push('version = COALESCE(version, 1) + 1');
+                    }
+                    if (hasTotals) {
+                        if (headerColumns.has('subtotal')) {
+                            assignments.push('subtotal = ?');
+                            updateArgs.push(subtotal);
+                        }
+                        if (headerColumns.has('tax_total')) {
+                            assignments.push('tax_total = ?');
+                            updateArgs.push(taxTotal);
+                        }
+                        if (headerColumns.has('grand_total')) {
+                            assignments.push('grand_total = ?');
+                            updateArgs.push(grandTotal);
+                        }
+                        if (headerColumns.has('currency_id')) {
+                            assignments.push('currency_id = ?');
+                            updateArgs.push(header.currency_id ?? defaultCurrencyId());
+                        }
+                        if (headerColumns.has('exchange_rate')) {
+                            assignments.push('exchange_rate = ?');
+                            updateArgs.push(header.exchange_rate ?? 1);
+                        }
+                    }
+                    if (header.notes !== undefined && headerColumns.has('notes')) {
+                        assignments.push('notes = ?');
                         updateArgs.push(header.notes);
                     }
-                    updateSql += ` WHERE id = ? AND version = ?`;
-                    updateArgs.push(id, existing.version || 1);
+                    assignHeaderField('branch_id', header.branch_id);
+                    assignHeaderField('warehouse_id', header.warehouse_id);
+                    assignHeaderField('delivery_date', header.delivery_date);
+                    assignHeaderField('expiry_date', header.expiry_date);
+                    assignHeaderField('due_date', header.due_date);
+                    assignHeaderField('price_list_id', header.price_list_id);
+                    assignHeaderField('sales_rep_id', header.sales_rep_id);
+                    const versionGuard = headerColumns.has('version') ? ' AND COALESCE(version, 1) = ?' : '';
+                    const updateSql = `UPDATE ${tableName} SET ${assignments.join(', ')} WHERE id = ?${versionGuard}`;
+                    updateArgs.push(id);
+                    if (versionGuard) {
+                        updateArgs.push(existing.version || 1);
+                    }
                     database_1.db.prepare(updateSql).run(...updateArgs);
                     database_1.db.prepare(`DELETE FROM ${lineTableName} WHERE ${foreignKey} = ?`).run(id);
-                    const insertCols = `id, ${foreignKey}, line_no, item_id, description, quantity, unit_price, discount, tax_rate, total_price, tax_amount, net_total`;
-                    const insertLine = database_1.db.prepare(`INSERT INTO ${lineTableName}(${insertCols}) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                    const lineColumns = getColumns(lineTableName);
                     lines.forEach((l, idx) => {
                         const qty = Number(l.qty || l.quantity || 0);
                         const price = Number(l.price || l.unit_price || 0);
                         const discPct = Number(l.discount || 0);
                         const taxRate = Number(l.tax_rate || 0);
-                        const lineNet = qty * price * (1 - discPct / 100);
+                        const discountAmount = qty * price * (discPct / 100);
+                        const lineNet = qty * price - discountAmount;
                         const taxAmt = lineNet * taxRate / 100;
                         const lineTotal = lineNet + taxAmt;
-                        insertLine.run((0, uuid_1.v4)(), id, idx + 1, l.item_id || null, l.item_name || l.description || '', qty, price, discPct, taxRate, lineNet, taxAmt, lineTotal);
+                        const row = {
+                            id: (0, uuid_1.v4)(),
+                            [foreignKey]: id,
+                            line_no: idx + 1,
+                            item_id: l.item_id || null,
+                            description: l.item_name || l.description || '',
+                            quantity: qty,
+                            qty,
+                            unit_id: l.unit_id || l.base_unit_id || 'PCS',
+                            unit_price: price,
+                            price,
+                            discount: discPct,
+                            discount_amount: discountAmount,
+                            tax_rate: taxRate,
+                            total_price: lineNet,
+                            line_total: lineTotal,
+                            tax_amount: taxAmt,
+                            net_total: lineTotal,
+                        };
+                        const entries = Object.entries(row).filter(([key]) => lineColumns.has(key));
+                        if (!entries.length)
+                            return;
+                        const names = entries.map(([key]) => key);
+                        const placeholders = names.map((key) => `@${key}`);
+                        database_1.db.prepare(`INSERT INTO ${lineTableName} (${names.join(', ')}) VALUES (${placeholders.join(', ')})`)
+                            .run(Object.fromEntries(entries));
                     });
                 })();
                 return this.get(id);
@@ -276,20 +447,22 @@ class DocumentServiceFactory {
             }
             static register(channelPrefix) {
                 // Ensure base schema exists for dynamic tables
-                try {
-                    database_1.db.exec(`
-                        ALTER TABLE ${tableName} ADD COLUMN version INTEGER DEFAULT 1;
-                        ALTER TABLE ${tableName} ADD COLUMN submitted_at DATETIME;
-                        ALTER TABLE ${tableName} ADD COLUMN submitted_by TEXT;
-                        ALTER TABLE ${tableName} ADD COLUMN posted_at DATETIME;
-                        ALTER TABLE ${tableName} ADD COLUMN posted_by TEXT;
-                        ALTER TABLE ${tableName} ADD COLUMN rejected_at DATETIME;
-                        ALTER TABLE ${tableName} ADD COLUMN rejected_by TEXT;
-                        ALTER TABLE ${tableName} ADD COLUMN rejection_reason TEXT;
-                        ALTER TABLE ${lineTableName} ADD COLUMN line_no INTEGER DEFAULT 0;
-                    `);
-                }
-                catch (e) { } // Ignore if columns exist
+                addColumn(tableName, 'version', 'INTEGER DEFAULT 1');
+                addColumn(tableName, 'doc_date', 'TEXT');
+                addColumn(tableName, 'created_by', 'TEXT');
+                addColumn(tableName, 'submitted_at', 'DATETIME');
+                addColumn(tableName, 'submitted_by', 'TEXT');
+                addColumn(tableName, 'posted_at', 'DATETIME');
+                addColumn(tableName, 'posted_by', 'TEXT');
+                addColumn(tableName, 'posted_once', 'INTEGER DEFAULT 0');
+                addColumn(tableName, 'posted_token', 'TEXT');
+                addColumn(tableName, 'rejected_at', 'DATETIME');
+                addColumn(tableName, 'rejected_by', 'TEXT');
+                addColumn(tableName, 'rejection_reason', 'TEXT');
+                addColumn(lineTableName, 'line_no', 'INTEGER DEFAULT 0');
+                addColumn(lineTableName, 'discount', 'REAL DEFAULT 0');
+                addColumn(lineTableName, 'tax_rate', 'REAL DEFAULT 0');
+                addColumn(lineTableName, 'line_total', 'REAL DEFAULT 0');
                 electron_1.ipcMain.handle(`${channelPrefix}:list`, (_, params) => wrapResult(() => this.listKeyset(params || {})));
                 electron_1.ipcMain.handle(`${channelPrefix}:get`, (_, id) => wrapResult(() => this.get(id)));
                 electron_1.ipcMain.handle(`${channelPrefix}:createDraft`, (_, userId) => wrapResult(() => this.createDraft(userId || 'admin')));

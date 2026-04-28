@@ -203,7 +203,15 @@ export class JournalVoucherService {
             WHERE id = ? OR code = ?
             LIMIT 1
         `).get(normalized, normalized) as any;
-        return String(row?.id || normalized);
+        if (row?.id) return String(row.id);
+
+        const glRow = db.prepare(`
+            SELECT id
+            FROM gl_chart_of_accounts
+            WHERE id = ? OR account_code = ?
+            LIMIT 1
+        `).get(normalized, normalized) as any;
+        return String(glRow?.id || normalized);
     }
 
     private static validatePayload(header: Record<string, any>, lines: any[]) {
@@ -376,8 +384,8 @@ export class JournalVoucherService {
             SELECT
                 l.*,
                 COALESCE(l.line_no, 0) AS line_no,
-                COALESCE(a.code, '') AS account_code_lookup,
-                COALESCE(a.name, '') AS account_name,
+                COALESCE(a.code, ga.account_code, '') AS account_code_lookup,
+                COALESCE(a.name, ga.name_ar, ga.name_en, '') AS account_name,
                 COALESCE(l.line_description, '') AS description,
                 COALESCE(l.invoice_ref, '') AS invoice_ref,
                 COALESCE(l.tax_ref, '') AS tax_ref,
@@ -390,6 +398,7 @@ export class JournalVoucherService {
                 CAST(COALESCE(l.credit, 0) AS REAL) AS credit
             FROM journal_entry_lines l
             LEFT JOIN accounts a ON a.id = l.account_id
+            LEFT JOIN gl_chart_of_accounts ga ON ga.id = l.account_id
             WHERE l.journal_entry_id = ?
             ORDER BY COALESCE(l.line_no, l.rowid)
         `).all(id);
@@ -1064,9 +1073,19 @@ export class JournalVoucherService {
                             WHERE
                                 COALESCE(code, '') LIKE ?
                                 OR COALESCE(name, '') LIKE ?
-                            ORDER BY COALESCE(code, '')
+                            UNION
+                            SELECT
+                                id,
+                                COALESCE(account_code, '') AS code,
+                                COALESCE(name_ar, name_en, account_code, '') AS name
+                            FROM gl_chart_of_accounts
+                            WHERE
+                                COALESCE(account_code, '') LIKE ?
+                                OR COALESCE(name_ar, '') LIKE ?
+                                OR COALESCE(name_en, '') LIKE ?
+                            ORDER BY code
                             LIMIT 50
-                        `).all(q, q);
+                        `).all(q, q, q, q, q);
                     },
                 ),
             ),

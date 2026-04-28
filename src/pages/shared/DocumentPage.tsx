@@ -21,7 +21,7 @@ interface DocumentPageProps {
     id?: string;
 }
 
-type SelectOption = { id: string; label: string };
+type SelectOption = { id: string; label: string; [key: string]: any };
 type LookupMode = 'item' | 'account';
 
 const nextLineId = () => `line_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -194,6 +194,51 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
         return supportSectionById.get(section.id) || section;
     }, [definition, lineLookup.fieldKey, supportSectionById]);
 
+    const repriceRowsForHeader = useCallback(async (
+        nextHeader: any,
+        options: { applyDiscount?: boolean } = {},
+    ) => {
+        const resolveItemPrice = definition.client.resolveItemPrice;
+        if (typeof resolveItemPrice !== 'function') return;
+
+        const rows = gridRowsRef.current;
+        const pricedRows = await Promise.all(rows.map(async (row, index) => {
+            const itemId = String(row?.item_id || '').trim();
+            if (!itemId) return null;
+
+            const response = await resolveItemPrice({
+                itemId,
+                unitId: row?.unit_id,
+                qty: row?.qty ?? row?.quantity ?? 1,
+                customerId: nextHeader?.customer_id,
+                priceListId: nextHeader?.price_list_id,
+            });
+
+            if (!response?.ok || !response.data) return null;
+            return { index, pricing: response.data };
+        }));
+
+        const resolved = pricedRows.filter(Boolean) as Array<{ index: number; pricing: any }>;
+        if (!resolved.length) return;
+
+        gridSetRowsRef.current((previousRows) => {
+            const nextRows = [...previousRows];
+            for (const result of resolved) {
+                if (!nextRows[result.index]) continue;
+                const current = { ...nextRows[result.index] };
+                current.price = toNumber(result.pricing?.price ?? current.price, 0);
+                if (options.applyDiscount || toNumber(current.discount, 0) === 0) {
+                    current.discount = toNumber(result.pricing?.discount_percent ?? nextHeader?.customer_discount_percent, 0);
+                }
+                if (result.pricing?.tax_rate !== undefined) {
+                    current.tax_rate = toNumber(result.pricing.tax_rate, current.tax_rate || 0);
+                }
+                nextRows[result.index] = ensureLine(recalcLine(current), emptyLine);
+            }
+            return nextRows;
+        });
+    }, [definition.client, emptyLine, recalcLine]);
+
     const openSupportOverlay = useCallback((fieldKey: string) => {
         const section = resolveDocumentSupportSectionForField(definition, fieldKey);
         if (!section) return;
@@ -214,12 +259,16 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
             current.item_code_lookup = String(item?.code || '');
             current.item_name = String(item?.name || item?.name_ar || item?.name_en || '');
             current.qty = toNumber(current.qty, 1) || 1;
-            current.price = toNumber(item?.price ?? current.price, 0);
+            current.price = toNumber(item?.price ?? item?.default_price ?? current.price, 0);
+            current.discount = toNumber(item?.discount_percent ?? header?.customer_discount_percent ?? current.discount, 0);
+            if (item?.tax_rate !== undefined) {
+                current.tax_rate = toNumber(item.tax_rate, current.tax_rate || 0);
+            }
             next[rowIndex] = ensureLine(recalcLine(current), emptyLine);
             return next;
         });
         markDirty();
-    }, [emptyLine, recalcLine]);
+    }, [emptyLine, header?.customer_discount_percent, markDirty, recalcLine]);
 
     const applyAccountToRow = useCallback((rowIndex: number, account: any) => {
         grid.setRows((prev) => {
@@ -250,14 +299,14 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
 
         const searchItems = definition.client.searchItems;
         if (typeof searchItems === 'function') {
-            const response = await searchItems(search);
+            const response = await searchItems(search, { header });
             setLookupItems(response?.ok && Array.isArray(response.data) ? response.data : []);
         } else {
             setLookupItems([]);
         }
         setLookupRowIndex(rowIndex);
         setShowItemLookup(true);
-    }, [definition.client]);
+    }, [definition.client, header]);
 
     // Keep refs in sync with current grid state so callbacks don't need grid in their deps
     const grid = useSmartGridPro<any>({
@@ -338,7 +387,13 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
             ]);
 
             if (partnersRes?.ok && Array.isArray(partnersRes.data)) {
-                setPartners(partnersRes.data.map((x: any) => ({ id: String(x.id || ''), label: String(x.name || x.name_ar || x.name_en || x.code || '') })).filter((x: SelectOption) => x.id));
+                setPartners(partnersRes.data.map((x: any) => ({
+                    ...x,
+                    id: String(x.id || ''),
+                    label: String(x.name || x.name_ar || x.name_en || x.code || ''),
+                    price_list_id: String(x.price_list_id || ''),
+                    customer_discount_percent: toNumber(x.customer_discount_percent, 0),
+                })).filter((x: SelectOption) => x.id));
             }
             if (Array.isArray(branchesRes)) {
                 setBranches(branchesRes.map((x: any) => ({ id: String(x.id || ''), label: String(x.name_ar || x.name_en || x.name || x.code || x.id || '') })).filter((x: SelectOption) => x.id));
@@ -444,9 +499,22 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
 
     const handleHeaderChange = useCallback((field: string, value: any) => {
         if (isReadOnly) return;
-        setHeader((prev: any) => ({ ...prev, [field]: value }));
+        const patch: Record<string, any> = { [field]: value };
+
+        if (field === 'customer_id') {
+            const selectedPartner = partners.find((partner) => String(partner.id) === String(value));
+            patch.customer_name = selectedPartner?.label || '';
+            patch.price_list_id = selectedPartner?.price_list_id || '';
+            patch.customer_discount_percent = toNumber(selectedPartner?.customer_discount_percent, 0);
+        }
+
+        const nextHeader = { ...header, ...patch };
+        setHeader(nextHeader);
         markDirty();
-    }, [isReadOnly, markDirty]);
+        if (field === 'customer_id' || field === 'price_list_id') {
+            void repriceRowsForHeader(nextHeader, { applyDiscount: field === 'customer_id' });
+        }
+    }, [header, isReadOnly, markDirty, partners, repriceRowsForHeader]);
 
     const handleUpdateRow = useCallback((rowIndex: number, field: string, value: any) => {
         if (isReadOnly) return;
@@ -828,6 +896,16 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
                             })}
                         </div>
                     </div>
+
+                    {definition.renderBeforeLines?.({
+                        docId,
+                        header,
+                        setHeader,
+                        rows: grid.rows,
+                        setRows: grid.setRows,
+                        isReadOnly,
+                        markDirty,
+                    })}
 
                     <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white/90 shadow-sm">
                         <div className="flex items-center justify-between border-b border-slate-100 px-6">

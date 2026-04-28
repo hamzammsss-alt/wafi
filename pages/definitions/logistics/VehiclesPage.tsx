@@ -1,366 +1,530 @@
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, Calendar, CheckCircle2, Edit, FileText, Loader2, Plus, Save, Trash2, Truck, X } from 'lucide-react';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
-import React, { useState, useEffect } from 'react';
-import { Save, Trash2, Edit, Search, Truck, Fuel, Calendar, FileText } from 'lucide-react';
+type DriverOption = {
+    id: string;
+    name: string;
+};
+
+type VehicleRow = {
+    id?: string;
+    vehicle_code?: string;
+    plate_no: string;
+    description?: string;
+    brand?: string;
+    model?: string;
+    color?: string;
+    type?: string;
+    driver_id?: string;
+    driver_name?: string;
+    license_expiry?: string;
+    insurance_expiry?: string;
+    notes?: string;
+    is_active?: number | boolean;
+};
+
+const emptyVehicle: VehicleRow = {
+    vehicle_code: '',
+    plate_no: '',
+    description: '',
+    brand: '',
+    model: '',
+    color: '',
+    type: '',
+    driver_id: '',
+    license_expiry: '',
+    insurance_expiry: '',
+    notes: '',
+    is_active: 1,
+};
+
+const isActive = (value: unknown) => value !== 0 && value !== false;
 
 export const VehiclesPage: React.FC = () => {
-    const [vehicles, setVehicles] = useState<any[]>([]);
-    const [drivers, setDrivers] = useState<any[]>([]); // Drivers list
-    const [isEditing, setIsEditing] = useState(false);
-    const [current, setCurrent] = useState<any>({});
-    const [search, setSearch] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
+    const [drivers, setDrivers] = useState<DriverOption[]>([]);
+    const [current, setCurrent] = useState<VehicleRow>(emptyVehicle);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        loadData();
+        void loadData();
     }, []);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            // @ts-ignore
-            if (window.electronAPI && window.electronAPI.logistics) {
-                // @ts-ignore
-                const [vehRows, drvRows] = await Promise.all([
-                    // @ts-ignore
-                    window.electronAPI.logistics.getVehicles(),
-                    // @ts-ignore
-                    window.electronAPI.logistics.getDrivers()
-                ]);
-                setVehicles(vehRows);
-                setDrivers(drvRows);
-            }
+            const [vehicleRows, driverRows] = await Promise.all([
+                window.electronAPI.logistics.getVehicles(),
+                window.electronAPI.logistics.getDrivers(),
+            ]);
+            setVehicles(Array.isArray(vehicleRows) ? vehicleRows : []);
+            setDrivers(Array.isArray(driverRows) ? driverRows : []);
         } catch (err) {
             console.error(err);
+            setError('تعذر تحميل المركبات');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSave = async () => {
-        if (!current.plate_no) {
-            alert("الرجاء إدخال رقم اللوحة");
+    const closeModal = () => {
+        setCurrent(emptyVehicle);
+        setEditingId(null);
+        setIsModalOpen(false);
+        setError(null);
+    };
+
+    const openCreate = () => {
+        setCurrent(emptyVehicle);
+        setEditingId(null);
+        setError(null);
+        setIsModalOpen(true);
+    };
+
+    const openEdit = (vehicle: VehicleRow) => {
+        setCurrent({ ...emptyVehicle, ...vehicle });
+        setEditingId(vehicle.id || null);
+        setError(null);
+        setIsModalOpen(true);
+    };
+
+    useCreateIntent(openCreate);
+
+    const driverName = (vehicle: VehicleRow) => {
+        if (vehicle.driver_name) return vehicle.driver_name;
+        if (!vehicle.driver_id) return '-';
+        return drivers.find((driver) => driver.id === vehicle.driver_id)?.name || '-';
+    };
+
+    const handleSave = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!String(current.plate_no || '').trim()) {
+            setError('رقم اللوحة مطلوب');
             return;
         }
 
         try {
-            // @ts-ignore
-            if (window.electronAPI && window.electronAPI.logistics) {
-                // @ts-ignore
-                await window.electronAPI.logistics.saveVehicle(current);
-                loadData();
-                setIsEditing(false);
-                setCurrent({});
-                alert("تم الحفظ بنجاح");
-            }
+            setSaving(true);
+            await window.electronAPI.logistics.saveVehicle({
+                ...current,
+                id: editingId || current.id,
+                is_active: isActive(current.is_active) ? 1 : 0,
+            });
+            await loadData();
+            closeModal();
         } catch (err: any) {
-            alert('خطأ في الحفظ: ' + err.message);
+            setError(err?.message || 'تعذر حفظ المركبة');
+        } finally {
+            setSaving(false);
         }
     };
 
-    const handleEdit = (item: any) => {
-        setCurrent({ ...item });
-        setIsEditing(true);
+    const handleDelete = async (id?: string) => {
+        if (!id) return;
+        if (!confirm('هل أنت متأكد من حذف هذه المركبة؟')) return;
+
+        try {
+            await window.electronAPI.logistics.deleteVehicle(id);
+            await loadData();
+        } catch (err: any) {
+            alert(err?.message || 'تعذر حذف المركبة');
+        }
     };
 
-    const handleDelete = async (id: string) => {
-        if (confirm('هل أنت متأكد من الحذف؟')) {
-            try {
-                // @ts-ignore
-                if (window.electronAPI) {
-                    // @ts-ignore
-                    await window.electronAPI.logistics.deleteVehicle(id);
-                    loadData();
-                }
-            } catch (err: any) {
-                alert(err.message);
+    const handleDeleteRows = async (rows: VehicleRow[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذه المركبة؟' : `هل أنت متأكد من حذف ${rows.length} مركبات؟`)) return;
+
+        try {
+            for (const row of rows) {
+                if (row.id) await window.electronAPI.logistics.deleteVehicle(row.id);
             }
+            await loadData();
+        } catch (err: any) {
+            alert(err?.message || 'تعذر حذف المركبات المحددة');
         }
     };
 
-    const filteredData = vehicles.filter(item =>
-        item.plate_no.toLowerCase().includes(search.toLowerCase()) ||
-        (item.model && item.model.toLowerCase().includes(search.toLowerCase())) ||
-        (item.brand && item.brand.toLowerCase().includes(search.toLowerCase())) ||
-        (item.vehicle_code && item.vehicle_code.toLowerCase().includes(search.toLowerCase())) ||
-        (item.driver_name && item.driver_name.toLowerCase().includes(search.toLowerCase()))
+    const expiryBadge = (date?: string) => {
+        if (!date) return '-';
+        const expired = new Date(date) < new Date();
+        return (
+            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${expired ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                {date}
+            </span>
+        );
+    };
+
+    const driverOptions = React.useMemo(
+        () => drivers.map((driver) => ({ value: driver.id, label: driver.name })),
+        [drivers],
     );
 
-    return (
-        <div className="p-6 bg-[#f0f2f5] min-h-screen animate-in fade-in duration-300">
-            <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <div className="p-2 bg-orange-100 rounded-lg text-orange-600">
-                    <Truck size={24} />
+    const columns = React.useMemo<DefinitionListColumn<VehicleRow>[]>(() => [
+        {
+            key: 'vehicle_code',
+            label: 'رقم السيارة',
+            width: 140,
+            defaultVisible: true,
+            getSearchValue: (vehicle) => `${vehicle.vehicle_code || ''} ${vehicle.plate_no || ''} ${vehicle.description || ''} ${vehicle.brand || ''} ${vehicle.model || ''} ${driverName(vehicle)}`,
+            renderCell: (vehicle) => vehicle.vehicle_code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-700">{vehicle.vehicle_code}</span>
+            ) : '-',
+        },
+        {
+            key: 'plate_no',
+            label: 'رقم اللوحة',
+            width: 150,
+            defaultVisible: true,
+            getDisplayValue: (vehicle) => vehicle.plate_no || '-',
+            renderCell: (vehicle) => <span className="font-mono font-bold text-slate-800" dir="ltr">{vehicle.plate_no || '-'}</span>,
+        },
+        {
+            key: 'description',
+            label: 'وصف السيارة',
+            width: 240,
+            defaultVisible: true,
+            getDisplayValue: (vehicle) => vehicle.description || '-',
+        },
+        {
+            key: 'brand_model',
+            label: 'الماركة / الموديل',
+            width: 180,
+            defaultVisible: true,
+            getValue: (vehicle) => `${vehicle.brand || ''} ${vehicle.model || ''}`.trim(),
+            getDisplayValue: (vehicle) => [vehicle.brand, vehicle.model].filter(Boolean).join(' / ') || '-',
+            renderCell: (vehicle) => (
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{vehicle.brand || '-'}</div>
+                    <div className="truncate text-xs text-slate-400">{vehicle.model || '-'}</div>
                 </div>
-                <span>تعريف السيارات والمركبات</span>
-            </h1>
+            ),
+        },
+        {
+            key: 'driver_id',
+            label: 'السائق',
+            type: 'enum',
+            filterType: 'lookup',
+            options: driverOptions,
+            width: 180,
+            defaultVisible: true,
+            getValue: (vehicle) => vehicle.driver_id || '',
+            getDisplayValue: (vehicle) => driverName(vehicle),
+            renderCell: (vehicle) => vehicle.driver_id || vehicle.driver_name ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                    <Truck size={12} />
+                    {driverName(vehicle)}
+                </span>
+            ) : '-',
+        },
+        {
+            key: 'license_expiry',
+            label: 'انتهاء الترخيص',
+            type: 'date',
+            filterType: 'date',
+            width: 150,
+            defaultVisible: true,
+            getDisplayValue: (vehicle) => vehicle.license_expiry || '-',
+            renderCell: (vehicle) => expiryBadge(vehicle.license_expiry),
+        },
+        {
+            key: 'insurance_expiry',
+            label: 'انتهاء التأمين',
+            type: 'date',
+            filterType: 'date',
+            width: 150,
+            defaultVisible: false,
+            getDisplayValue: (vehicle) => vehicle.insurance_expiry || '-',
+            renderCell: (vehicle) => expiryBadge(vehicle.insurance_expiry),
+        },
+        {
+            key: 'type',
+            label: 'النوع',
+            width: 140,
+            defaultVisible: false,
+            getDisplayValue: (vehicle) => vehicle.type || '-',
+        },
+        {
+            key: 'color',
+            label: 'اللون',
+            width: 120,
+            defaultVisible: false,
+            getDisplayValue: (vehicle) => vehicle.color || '-',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 130,
+            defaultVisible: true,
+            getValue: (vehicle) => (isActive(vehicle.is_active) ? 1 : 0),
+            renderCell: (vehicle) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${isActive(vehicle.is_active) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {isActive(vehicle.is_active) ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {isActive(vehicle.is_active) ? 'نشطة' : 'غير نشطة'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (vehicle) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => openEdit(vehicle)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(vehicle.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [driverOptions, drivers, vehicles]);
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Form */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
-                    <h2 className="font-bold text-gray-700 mb-4 pb-2 border-b flex items-center gap-2">
-                        {isEditing ? <Edit size={18} /> : <Truck size={18} />}
-                        {isEditing ? 'تعديل بيانات مركبة' : 'إضافة مركبة جديدة'}
-                    </h2>
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">رقم السيارة</label>
-                                <input
-                                    type="text"
-                                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                    value={current.vehicle_code || ''}
-                                    onChange={e => setCurrent({ ...current, vehicle_code: e.target.value })}
-                                    placeholder="رمز..."
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">رقم اللوحة <span className="text-red-500">*</span></label>
-                                <input
-                                    type="text"
-                                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all font-mono text-left"
-                                    value={current.plate_no || ''}
-                                    onChange={e => setCurrent({ ...current, plate_no: e.target.value })}
-                                    placeholder="12-3456"
-                                    dir="ltr"
-                                />
-                            </div>
-                        </div>
+    return (
+        <div className="app-page" dir="rtl">
+            <WorkspaceHeader
+                icon={<Truck size={24} />}
+                title="تعريف السيارات والمركبات"
+                subtitle="إدارة المركبات والسائقين والترخيص والتأمين من خلال جدول موحد قابل للتصفية."
+                badges={[
+                    { label: `المركبات ${vehicles.length}`, tone: 'warning' },
+                    { label: `النشطة ${vehicles.filter((vehicle) => isActive(vehicle.is_active)).length}`, tone: 'success' },
+                    { label: `السائقين ${drivers.length}`, tone: 'info' },
+                ]}
+                actions={(
+                    <button
+                        onClick={openCreate}
+                        className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-orange-700"
+                    >
+                        <Plus size={18} />
+                        مركبة جديدة
+                    </button>
+                )}
+                className="mb-6"
+            />
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">وصف السيارة</label>
-                            <input
-                                type="text"
-                                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                value={current.description || ''}
-                                onChange={e => setCurrent({ ...current, description: e.target.value })}
-                                placeholder="وصف عام..."
-                            />
-                        </div>
+            {error && !isModalOpen && (
+                <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    <AlertCircle size={18} />
+                    <span>{error}</span>
+                    <button onClick={() => setError(null)} className="mr-auto rounded-md p-1 hover:bg-rose-100">
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">الماركة</label>
-                                <input
-                                    type="text"
-                                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                    value={current.brand || ''}
-                                    onChange={e => setCurrent({ ...current, brand: e.target.value })}
-                                    placeholder="Toyota..."
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">الموديل</label>
-                                <input
-                                    type="text"
-                                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                    value={current.model || ''}
-                                    onChange={e => setCurrent({ ...current, model: e.target.value })}
-                                    placeholder="2024..."
-                                />
-                            </div>
-                        </div>
+            <DefinitionMasterList
+                screenKey="definitions.vehicles"
+                data={vehicles}
+                loading={loading}
+                columns={columns}
+                rowKey={(vehicle) => String(vehicle.id || vehicle.plate_no)}
+                searchPlaceholder="بحث عن مركبة..."
+                emptyMessage="لا توجد مركبات مطابقة للمعايير الحالية"
+                createLabel="مركبة جديدة"
+                onCreate={openCreate}
+                onEdit={openEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadData}
+                defaultSort={{ key: 'plate_no', direction: 'asc' }}
+            />
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">اللون</label>
-                                <input
-                                    type="text"
-                                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                    value={current.color || ''}
-                                    onChange={e => setCurrent({ ...current, color: e.target.value })}
-                                    placeholder="أبيض..."
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">النوع / الفئة</label>
-                                <input
-                                    type="text"
-                                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                    value={current.type || ''}
-                                    onChange={e => setCurrent({ ...current, type: e.target.value })}
-                                    placeholder="شاحنة..."
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">السائق المسئول</label>
-                            <select
-                                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                value={current.driver_id || ''}
-                                onChange={e => setCurrent({ ...current, driver_id: e.target.value })}
-                            >
-                                <option value="">بدون سائق</option>
-                                {drivers.map(d => (
-                                    <option key={d.id} value={d.id}>{d.name}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">انتهاء الترخيص</label>
-                                <input
-                                    type="date"
-                                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                    value={current.license_expiry || ''}
-                                    onChange={e => setCurrent({ ...current, license_expiry: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">انتهاء التأمين</label>
-                                <input
-                                    type="date"
-                                    className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                    value={current.insurance_expiry || ''}
-                                    onChange={e => setCurrent({ ...current, insurance_expiry: e.target.value })}
-                                />
-                            </div>
-                        </div>
-
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات</label>
-                            <textarea
-                                className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all h-20 resize-none"
-                                value={current.notes || ''}
-                                onChange={e => setCurrent({ ...current, notes: e.target.value })}
-                                placeholder="أي ملاحظات إضافية..."
-                            />
-                        </div>
-
-                        <div className="flex items-center gap-2 mt-2 p-3 bg-slate-50 rounded-lg">
-                            <input
-                                type="checkbox"
-                                id="isActive"
-                                className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
-                                checked={current.is_active !== 0} // Default true
-                                onChange={e => setCurrent({ ...current, is_active: e.target.checked ? 1 : 0 })}
-                            />
-                            <label htmlFor="isActive" className="text-sm font-medium text-gray-700 cursor-pointer">مركبة نشطة</label>
-                        </div>
-
-                        <div className="flex gap-3 mt-6">
-                            <button
-                                onClick={handleSave}
-                                className="flex-1 bg-orange-600 text-white py-2.5 rounded-lg font-bold hover:bg-orange-700 flex justify-center items-center gap-2 shadow-sm transition-all active:scale-95"
-                            >
-                                <Save size={18} /> حفظ
+            {isModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+                    <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl" dir="rtl">
+                        <div className="flex items-center justify-between border-b bg-gray-50 px-6 py-4">
+                            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                                {editingId ? <Edit size={20} className="text-orange-600" /> : <Truck size={20} className="text-orange-600" />}
+                                {editingId ? 'تعديل بيانات مركبة' : 'إضافة مركبة جديدة'}
+                            </h3>
+                            <button onClick={closeModal} className="text-gray-400 transition hover:text-red-500">
+                                <X size={22} />
                             </button>
-                            {isEditing && (
-                                <button
-                                    onClick={() => { setIsEditing(false); setCurrent({}); }}
-                                    className="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                                >
+                        </div>
+
+                        <form onSubmit={handleSave} className="max-h-[calc(92vh-4.5rem)] space-y-4 overflow-y-auto p-6">
+                            {error && (
+                                <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+                                    <AlertCircle size={16} />
+                                    <span>{error}</span>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">رقم السيارة</label>
+                                    <input
+                                        type="text"
+                                        value={current.vehicle_code || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, vehicle_code: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                        placeholder="رمز..."
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">رقم اللوحة <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="text"
+                                        value={current.plate_no || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, plate_no: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 font-mono outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                        placeholder="12-3456"
+                                        dir="ltr"
+                                        autoFocus
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">وصف السيارة</label>
+                                    <input
+                                        type="text"
+                                        value={current.description || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, description: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                        placeholder="وصف عام..."
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">الماركة</label>
+                                    <input
+                                        type="text"
+                                        value={current.brand || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, brand: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                        placeholder="Toyota"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">الموديل</label>
+                                    <input
+                                        type="text"
+                                        value={current.model || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, model: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                        placeholder="2024"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">اللون</label>
+                                    <input
+                                        type="text"
+                                        value={current.color || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, color: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                        placeholder="أبيض"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">النوع / الفئة</label>
+                                    <input
+                                        type="text"
+                                        value={current.type || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, type: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                        placeholder="شاحنة"
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="mb-1.5 block text-sm font-medium text-gray-700">السائق المسؤول</label>
+                                    <select
+                                        value={current.driver_id || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, driver_id: event.target.value }))}
+                                        className="w-full rounded-lg border bg-white px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                    >
+                                        <option value="">بدون سائق</option>
+                                        {drivers.map((driver) => (
+                                            <option key={driver.id} value={driver.id}>{driver.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                        <Calendar size={16} />
+                                        انتهاء الترخيص
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={current.license_expiry || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, license_expiry: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                        <Calendar size={16} />
+                                        انتهاء التأمين
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={current.insurance_expiry || ''}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, insurance_expiry: event.target.value }))}
+                                        className="w-full rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                    />
+                                </div>
+
+                                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 md:col-span-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={isActive(current.is_active)}
+                                        onChange={(event) => setCurrent((prev) => ({ ...prev, is_active: event.target.checked ? 1 : 0 }))}
+                                    />
+                                    مركبة نشطة
+                                </label>
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-gray-700">
+                                    <FileText size={16} />
+                                    ملاحظات
+                                </label>
+                                <textarea
+                                    value={current.notes || ''}
+                                    onChange={(event) => setCurrent((prev) => ({ ...prev, notes: event.target.value }))}
+                                    className="h-24 w-full resize-none rounded-lg border px-3 py-2 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+                                    placeholder="أي ملاحظات إضافية..."
+                                />
+                            </div>
+
+                            <div className="flex gap-3 border-t pt-4">
+                                <button type="button" onClick={closeModal} className="flex-1 rounded-lg bg-gray-100 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-200">
                                     إلغاء
                                 </button>
-                            )}
-                        </div>
+                                <button
+                                    type="submit"
+                                    disabled={saving}
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-70"
+                                >
+                                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                    حفظ
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
-
-                {/* List */}
-                <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[600px]">
-                    {/* Toolbar */}
-                    <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-gray-50/50">
-                        <div className="relative w-72">
-                            <input
-                                className="w-full p-2.5 pr-10 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                                placeholder="بحث عن مركبة..."
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                            />
-                            <Search size={18} className="absolute top-2.5 right-3 text-gray-400" />
-                        </div>
-                        <div className="text-sm text-gray-500 font-medium bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">
-                            العدد: <span className="text-orange-600 font-bold">{filteredData.length}</span>
-                        </div>
-                    </div>
-
-                    <div className="overflow-auto flex-1 custom-scrollbar">
-                        <table className="w-full text-right">
-                            <thead className="bg-gray-50 text-gray-600 font-bold text-xs uppercase tracking-wider border-b border-slate-200 sticky top-0">
-                                <tr>
-                                    <th className="p-4 text-left">رقم السيارة</th>
-                                    <th className="p-4 text-left">رقم اللوحة</th>   {/* LTR aware */}
-                                    <th className="p-4 text-right">وصف السيارة</th>
-                                    <th className="p-4 text-right">الماركة / الموديل</th>
-                                    <th className="p-4 text-right">السائق</th>
-                                    <th className="p-4 text-right">انتهاء الترخيص</th>
-                                    <th className="p-4 text-center">الحالة</th>
-                                    <th className="p-4 w-24 text-center">إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {loading ? (
-                                    <tr><td colSpan={8} className="p-12 text-center text-gray-500">
-                                        <div className="flex flex-col items-center gap-3">
-                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
-                                            <span>جاري التحميل...</span>
-                                        </div>
-                                    </td></tr>
-                                ) : filteredData.length > 0 ? (
-                                    filteredData.map(item => (
-                                        <tr key={item.id} className="hover:bg-orange-50/30 transition-colors group">
-                                            <td className="p-4 font-bold text-gray-700 text-sm">{item.vehicle_code || '-'}</td>
-                                            <td className="p-4 font-bold text-slate-800 font-mono text-left" dir="ltr">
-                                                {item.plate_no}
-                                            </td>
-                                            <td className="p-4 text-gray-600 text-sm max-w-xs truncate" title={item.description || ''}>{item.description || '-'}</td>
-                                            <td className="p-4 text-gray-700 text-sm">
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold">{item.brand}</span>
-                                                    <span className="text-slate-500 text-xs">{item.model}</span>
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-gray-600 text-sm">
-                                                {item.driver_name ? (
-                                                    <span className="flex items-center gap-1 text-blue-600 font-medium">
-                                                        <Truck size={14} /> {item.driver_name}
-                                                    </span>
-                                                ) : <span className="text-gray-400 text-xs">غير محدد</span>}
-                                            </td>
-                                            <td className="p-4 text-gray-600 text-sm">
-                                                {item.license_expiry ? (
-                                                    <span className={`px-2 py-0.5 rounded text-xs ${new Date(item.license_expiry) < new Date() ? 'bg-red-100 text-red-600 font-bold' : 'bg-gray-100'
-                                                        }`}>
-                                                        {item.license_expiry}
-                                                    </span>
-                                                ) : '-'}
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${item.is_active
-                                                    ? 'bg-emerald-100 text-emerald-700'
-                                                    : 'bg-red-100 text-red-700'
-                                                    }`}>
-                                                    {item.is_active ? 'نشط' : 'غير نشط'}
-                                                </span>
-                                            </td>
-                                            <td className="p-4">
-                                                <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => handleEdit(item)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors" title="تعديل">
-                                                        <Edit size={16} />
-                                                    </button>
-                                                    <button onClick={() => handleDelete(item.id)} className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors" title="حذف">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={8} className="p-12 text-center text-gray-400 flex flex-col items-center gap-3">
-                                            <Truck size={48} className="opacity-20" />
-                                            <span>لا توجد بيانات</span>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+            )}
         </div>
     );
 };

@@ -39,6 +39,7 @@ export interface InvoiceHeader {
     tax_group_id?: string;
     exchange_rate?: number;
     price_list_id?: string;
+    customer_discount_percent?: number;
     payment_method_id?: string;
     sales_rep_id?: string;
     cost_center_id?: string;
@@ -137,6 +138,9 @@ export const salesInvoiceClient = {
     searchCustomers: (search: string): Promise<Result<{ id: string; name: string; code: string; phone: string }[]>> =>
         normalizeResult<{ id: string; name: string; code: string; phone: string }[]>(api().searchCustomers(search)),
 
-    searchItems: (search: string): Promise<Result<{ id: string; code: string; name: string; price: number; tax_rate?: number }[]>> =>
-        normalizeResult<{ id: string; code: string; name: string; price: number; tax_rate?: number }[]>(api().searchItems(search)),
+    searchItems: (search: string, pricingContext?: any): Promise<Result<{ id: string; code: string; name: string; price: number; tax_rate?: number; discount_percent?: number }[]>> =>
+        normalizeResult<{ id: string; code: string; name: string; price: number; tax_rate?: number; discount_percent?: number }[]>(api().searchItems(search, pricingContext)),
+
+    resolveItemPrice: (input: any): Promise<Result<{ price: number; price_list_id?: string | null; discount_percent?: number; tax_rate?: number; source?: string }>> =>
+        normalizeResult<{ price: number; price_list_id?: string | null; discount_percent?: number; tax_rate?: number; source?: string }>(api().resolveItemPrice(input)),
 };

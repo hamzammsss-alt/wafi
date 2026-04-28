@@ -22,6 +22,10 @@ export interface DispatchHeader {
     customer_name?: string;
     from_warehouse_id?: string;
     truck_id?: string;
+    region_id?: string;
+    loading_area?: string;
+    loading_sheet_no?: string;
+    order_loading_list_no?: string;
     sales_rep_id?: string;
     tracking_no?: string;
     receiver_name?: string;
@@ -91,6 +95,10 @@ function withDispatchHeaderDefaults(header: any, fallbackDate?: string, fallback
         ledger_id: String(header?.ledger_id || header?.customer_id || '').trim() || null,
         sales_rep_id: String(header?.sales_rep_id || '').trim() || null,
         truck_id: String(header?.truck_id || '').trim() || null,
+        region_id: String(header?.region_id || '').trim() || null,
+        loading_area: String(header?.loading_area || '').trim() || null,
+        loading_sheet_no: String(header?.loading_sheet_no || '').trim() || null,
+        order_loading_list_no: String(header?.order_loading_list_no || header?.loading_sheet_no || '').trim() || null,
         carrier_id: String(header?.carrier_id || '').trim() || null,
         tracking_no: String(header?.tracking_no || '').trim() || null,
         is_sent: Number(header?.is_sent ? 1 : 0),
@@ -146,6 +154,10 @@ function mapHeader(header: any): DispatchHeader {
         customer_name: String(header?.ledger_name || '').trim(),
         from_warehouse_id: String(header?.from_warehouse_id || '').trim(),
         truck_id: String(header?.truck_id || '').trim(),
+        region_id: String(header?.region_id || '').trim(),
+        loading_area: String(header?.loading_area || '').trim(),
+        loading_sheet_no: String(header?.loading_sheet_no || '').trim(),
+        order_loading_list_no: String(header?.order_loading_list_no || '').trim(),
         sales_rep_id: String(header?.sales_rep_id || '').trim(),
         tracking_no: String(header?.tracking_no || '').trim(),
         receiver_name: String(header?.receiver_name || '').trim(),
@@ -297,6 +309,10 @@ export const dispatchClient = {
             ledger_id: customerId || null,
             sales_rep_id: String(currentHeader.sales_rep_id || '').trim() || null,
             truck_id: String(currentHeader.truck_id || '').trim() || null,
+            region_id: String(currentHeader.region_id || '').trim() || null,
+            loading_area: String(currentHeader.loading_area || '').trim() || null,
+            loading_sheet_no: String(currentHeader.loading_sheet_no || '').trim() || null,
+            order_loading_list_no: String(currentHeader.order_loading_list_no || currentHeader.loading_sheet_no || '').trim() || null,
             tracking_no: String(currentHeader.tracking_no || '').trim() || null,
             receiver_name: String(currentHeader.receiver_name || '').trim() || null,
             delivery_address: String(currentHeader.delivery_address || '').trim() || null,

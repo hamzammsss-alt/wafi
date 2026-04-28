@@ -524,6 +524,182 @@ class SalesInvoiceService {
     static roundAmount(value) {
         return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
     }
+    static ensurePartnerPricingColumns() {
+        const cols = database_1.db.prepare("PRAGMA table_info('business_partners')").all();
+        const names = new Set((cols || []).map((col) => String(col.name)));
+        const add = (column, definition) => {
+            if (names.has(column))
+                return;
+            try {
+                database_1.db.prepare(`ALTER TABLE business_partners ADD COLUMN ${column} ${definition}`).run();
+                names.add(column);
+            }
+            catch (error) {
+                console.warn(`[SalesInvoiceService] Unable to add business_partners.${column}`, error);
+            }
+        };
+        add('price_list_id', 'TEXT');
+        add('customer_discount_percent', 'REAL DEFAULT 0');
+    }
+    static ensurePriceListSchema() {
+        database_1.db.exec(`
+            CREATE TABLE IF NOT EXISTS price_lists (
+                id TEXT PRIMARY KEY,
+                name_ar TEXT NOT NULL,
+                name_en TEXT,
+                currency_id TEXT,
+                is_active INTEGER DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS price_list_items (
+                id TEXT PRIMARY KEY,
+                price_list_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                unit_id TEXT NOT NULL,
+                price REAL NOT NULL DEFAULT 0,
+                min_quantity REAL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS item_prices (
+                id TEXT PRIMARY KEY,
+                price_list_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                unit_id TEXT NOT NULL,
+                price REAL DEFAULT 0
+            );
+        `);
+        const insertList = database_1.db.prepare(`
+            INSERT OR IGNORE INTO price_lists (id, name_ar, name_en, currency_id, is_active)
+            VALUES (@id, @name_ar, @name_en, @currency_id, 1)
+        `);
+        [
+            { id: 'PL_PURCHASE', name_ar: 'سعر الشراء', name_en: 'Purchase Price', currency_id: 'ILS' },
+            { id: 'PL_WHOLESALE', name_ar: 'سعر البيع جملة', name_en: 'Wholesale Sale Price', currency_id: 'ILS' },
+            { id: 'PL_RETAIL', name_ar: 'سعر البيع مفرق', name_en: 'Retail Sale Price', currency_id: 'ILS' },
+        ].forEach((list) => insertList.run(list));
+        const itemCols = database_1.db.prepare("PRAGMA table_info('items')").all();
+        const itemColNames = new Set((itemCols || []).map((col) => String(col.name)));
+        if (!itemColNames.has('wholesale_price')) {
+            try {
+                database_1.db.prepare(`ALTER TABLE items ADD COLUMN wholesale_price REAL DEFAULT 0`).run();
+            }
+            catch (error) {
+                console.warn('[SalesInvoiceService] Unable to add items.wholesale_price', error);
+            }
+        }
+    }
+    static getCustomerPricing(customerId) {
+        if (!customerId)
+            return { priceListId: null, discountPercent: 0 };
+        SalesInvoiceService.ensurePartnerPricingColumns();
+        const row = database_1.db.prepare(`
+            SELECT price_list_id, customer_discount_percent
+            FROM business_partners
+            WHERE id = ?
+            LIMIT 1
+        `).get(customerId);
+        return {
+            priceListId: SalesInvoiceService.normalizeNullableId(row?.price_list_id),
+            discountPercent: SalesInvoiceService.toNumber(row?.customer_discount_percent),
+        };
+    }
+    static inferFallbackItemPrice(item, priceList) {
+        const listBucket = [
+            priceList?.id,
+            priceList?.name_ar,
+            priceList?.name_en,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (listBucket.includes('purchase') || listBucket.includes('شراء')) {
+            return { price: SalesInvoiceService.toNumber(item?.cost_price), source: 'item.cost_price' };
+        }
+        if (listBucket.includes('wholesale') || listBucket.includes('جملة')) {
+            const wholesale = SalesInvoiceService.toNumber(item?.wholesale_price);
+            return {
+                price: wholesale || SalesInvoiceService.toNumber(item?.sale_price),
+                source: wholesale ? 'item.wholesale_price' : 'item.sale_price',
+            };
+        }
+        return { price: SalesInvoiceService.toNumber(item?.sale_price), source: 'item.sale_price' };
+    }
+    static resolveItemPrice(input) {
+        SalesInvoiceService.ensurePriceListSchema();
+        const itemId = SalesInvoiceService.normalizeNullableId(input?.itemId || input?.item_id);
+        if (!itemId) {
+            return { price: 0, price_list_id: null, discount_percent: 0, source: 'missing_item' };
+        }
+        const item = database_1.db.prepare(`
+            SELECT
+                id,
+                base_unit_id,
+                cost_price,
+                sale_price,
+                wholesale_price,
+                tax_rate
+            FROM items
+            WHERE id = ?
+            LIMIT 1
+        `).get(itemId);
+        if (!item) {
+            return { price: 0, price_list_id: null, discount_percent: 0, source: 'item_not_found' };
+        }
+        const customerId = SalesInvoiceService.normalizeNullableId(input?.customerId || input?.customer_id);
+        const customerPricing = SalesInvoiceService.getCustomerPricing(customerId);
+        const priceListId = SalesInvoiceService.normalizeNullableId(input?.priceListId || input?.price_list_id) ||
+            customerPricing.priceListId;
+        const unitId = SalesInvoiceService.normalizeNullableId(input?.unitId || input?.unit_id) || SalesInvoiceService.normalizeNullableId(item?.base_unit_id);
+        const qty = Math.max(SalesInvoiceService.toNumber(input?.qty ?? input?.quantity ?? 1), 1);
+        let priceList = null;
+        if (priceListId) {
+            priceList = database_1.db.prepare('SELECT * FROM price_lists WHERE id = ? LIMIT 1').get(priceListId) || null;
+            const itemPrice = database_1.db.prepare(`
+                SELECT price
+                FROM price_list_items
+                WHERE price_list_id = ?
+                  AND item_id = ?
+                  AND (? IS NULL OR unit_id = ?)
+                  AND COALESCE(min_quantity, 1) <= ?
+                ORDER BY
+                  CASE WHEN unit_id = ? THEN 0 ELSE 1 END,
+                  COALESCE(min_quantity, 1) DESC
+                LIMIT 1
+            `).get(priceListId, itemId, unitId, unitId, qty, unitId);
+            if (itemPrice) {
+                return {
+                    price: SalesInvoiceService.toNumber(itemPrice.price),
+                    price_list_id: priceListId,
+                    discount_percent: customerPricing.discountPercent,
+                    source: 'price_list_items',
+                    tax_rate: SalesInvoiceService.toNumber(item?.tax_rate),
+                };
+            }
+            const legacyPrice = database_1.db.prepare(`
+                SELECT price
+                FROM item_prices
+                WHERE price_list_id = ?
+                  AND item_id = ?
+                  AND (? IS NULL OR unit_id = ?)
+                ORDER BY CASE WHEN unit_id = ? THEN 0 ELSE 1 END
+                LIMIT 1
+            `).get(priceListId, itemId, unitId, unitId, unitId);
+            if (legacyPrice) {
+                return {
+                    price: SalesInvoiceService.toNumber(legacyPrice.price),
+                    price_list_id: priceListId,
+                    discount_percent: customerPricing.discountPercent,
+                    source: 'item_prices',
+                    tax_rate: SalesInvoiceService.toNumber(item?.tax_rate),
+                };
+            }
+        }
+        const fallback = SalesInvoiceService.inferFallbackItemPrice(item, priceList);
+        return {
+            price: fallback.price,
+            price_list_id: priceListId,
+            discount_percent: customerPricing.discountPercent,
+            source: fallback.source,
+            tax_rate: SalesInvoiceService.toNumber(item?.tax_rate),
+        };
+    }
     static isServiceLine(line) {
         const explicit = String(line?.line_type || line?.lineType || '').trim().toUpperCase();
         if (explicit === 'SERVICE')
@@ -1182,13 +1358,16 @@ class SalesInvoiceService {
             requiredCapabilities: [SALES_INVOICE_CAPABILITIES.read],
             legacyPermissions: SALES_INVOICE_LEGACY.read,
         }, async (_ctx, _event, search) => {
+            SalesInvoiceService.ensurePartnerPricingColumns();
             const q = `%${String(search || '').trim()}%`;
             return database_1.db.prepare(`
                             SELECT
                                 id,
                                 COALESCE(name_ar, name_en, name, code, '') AS name,
                                 phone,
-                                code
+                                code,
+                                price_list_id,
+                                COALESCE(customer_discount_percent, 0) AS customer_discount_percent
                             FROM business_partners
                             WHERE (
                                 type = 'Customer' OR
@@ -1210,8 +1389,36 @@ class SalesInvoiceService {
             eventName: 'salesInvoices.searchItems',
             requiredCapabilities: [SALES_INVOICE_CAPABILITIES.read],
             legacyPermissions: SALES_INVOICE_LEGACY.read,
-        }, async (_ctx, _event, search) => {
-            return ItemService_1.ItemService.searchItemProfiles(search, 50);
+        }, async (_ctx, _event, search, pricingContext) => {
+            const contextHeader = pricingContext?.header || pricingContext || {};
+            const customerId = contextHeader.customer_id || contextHeader.customerId || pricingContext?.customerId;
+            const priceListId = contextHeader.price_list_id || contextHeader.priceListId || pricingContext?.priceListId;
+            const rows = ItemService_1.ItemService.searchItemProfiles(search, 50);
+            return rows.map((row) => {
+                const pricing = SalesInvoiceService.resolveItemPrice({
+                    itemId: row.id,
+                    unitId: row.base_unit_id,
+                    qty: 1,
+                    customerId,
+                    priceListId,
+                });
+                return {
+                    ...row,
+                    price: pricing.price,
+                    default_price: pricing.price,
+                    price_list_id: pricing.price_list_id,
+                    discount_percent: pricing.discount_percent,
+                    tax_rate: pricing.tax_rate ?? row.tax_rate,
+                    price_source: pricing.source,
+                };
+            });
+        })));
+        electron_1.ipcMain.handle('salesInvoices:resolveItemPrice', (0, ipcWrap_1.ipcWrap)((0, withGuards_1.withGuards)({
+            eventName: 'salesInvoices.resolveItemPrice',
+            requiredCapabilities: [SALES_INVOICE_CAPABILITIES.read],
+            legacyPermissions: SALES_INVOICE_LEGACY.read,
+        }, async (_ctx, _event, input) => {
+            return SalesInvoiceService.resolveItemPrice(input || {});
         })));
         console.log('[SalesInvoiceService] IPC handlers registered');
     }

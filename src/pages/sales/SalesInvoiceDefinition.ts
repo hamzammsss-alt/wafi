@@ -38,6 +38,7 @@ function normalizeHeader(header: Partial<InvoiceHeader>): Partial<InvoiceHeader>
         exchange_rate: toNumber(header.exchange_rate, 1) || 1,
         tax_group_id: String(header.tax_group_id || '').trim(),
         price_list_id: String(header.price_list_id || '').trim(),
+        customer_discount_percent: toNumber((header as any).customer_discount_percent, 0),
         payment_method_id: String(header.payment_method_id || '').trim(),
         sales_rep_id: String(header.sales_rep_id || '').trim(),
         cost_center_id: String(header.cost_center_id || '').trim(),
@@ -335,6 +336,7 @@ export const SalesInvoiceDefinition: DocumentDefinition<InvoiceHeader, InvoiceLi
             due_date: TODAY,
             currency_id: 'ILS',
             exchange_rate: 1,
+            customer_discount_percent: 0,
         },
     },
 

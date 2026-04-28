@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FixedAsset = void 0;
 class FixedAsset {
-    constructor(id, companyId, code, name, categoryId, assetAccountId, accumulatedDepAccountId, depExpenseAccountId, purchaseDate, purchaseCost, salvageValue, lifeYears, depreciationMethod = 'StraightLine', status = 'Active', bookValue = purchaseCost, accumulatedDepreciation = 0, createdAt = new Date().toISOString()) {
+    constructor(id, companyId, code, name, categoryId, assetAccountId, accumulatedDepAccountId, depExpenseAccountId, purchaseDate, purchaseCost, salvageValue, lifeYears, depreciationMethod = 'StraightLine', status = 'Active', bookValue = purchaseCost, accumulatedDepreciation = 0, supplierId = null, supplierAccountId = null, supplierInvoiceNo = null, supplierInvoiceAmount = purchaseCost, clearanceCost = 0, clearanceAccountId = null, purchaseJournalId = null, purchaseJournalNo = null, clearanceJournalId = null, clearanceJournalNo = null, createdAt = new Date().toISOString()) {
         this.id = id;
         this.companyId = companyId;
         this.code = code;
@@ -19,6 +19,16 @@ class FixedAsset {
         this.status = status;
         this.bookValue = bookValue;
         this.accumulatedDepreciation = accumulatedDepreciation;
+        this.supplierId = supplierId;
+        this.supplierAccountId = supplierAccountId;
+        this.supplierInvoiceNo = supplierInvoiceNo;
+        this.supplierInvoiceAmount = supplierInvoiceAmount;
+        this.clearanceCost = clearanceCost;
+        this.clearanceAccountId = clearanceAccountId;
+        this.purchaseJournalId = purchaseJournalId;
+        this.purchaseJournalNo = purchaseJournalNo;
+        this.clearanceJournalId = clearanceJournalId;
+        this.clearanceJournalNo = clearanceJournalNo;
         this.createdAt = createdAt;
     }
     /** Annual depreciation amount (Straight Line) */

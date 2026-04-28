@@ -10,9 +10,9 @@ class FixedAssetUseCases {
     async createAsset(companyId, data) {
         const id = this.repo.nextIdentity();
         const cost = Number(data.purchaseCost) || 0;
-        const asset = new FixedAsset_1.FixedAsset(id, companyId, data.code, data.name, data.categoryId || null, data.assetAccountId || null, data.accumulatedDepAccountId || null, data.depExpenseAccountId || null, data.purchaseDate, cost, Number(data.salvageValue) || 0, Number(data.lifeYears) || 1, data.depreciationMethod || 'StraightLine', 'Active', cost, // initial book value = purchase cost
-        0 // no accumulated depreciation yet
-        );
+        const asset = new FixedAsset_1.FixedAsset(id, companyId, data.code, data.name, data.categoryId || null, data.assetAccountId || null, data.accumulatedDepAccountId || null, data.depExpenseAccountId || null, data.purchaseDate, cost, Number(data.salvageValue) || 0, Math.max(0, Number(data.lifeYears) || 0), data.depreciationMethod || 'StraightLine', 'Active', cost, // initial book value = purchase cost
+        0, // no accumulated depreciation yet
+        data.supplierId || null, data.supplierAccountId || null, data.supplierInvoiceNo || null, Number(data.supplierInvoiceAmount ?? cost) || 0, Number(data.clearanceCost) || 0, data.clearanceAccountId || null, data.purchaseJournalId || null, data.purchaseJournalNo || null, data.clearanceJournalId || null, data.clearanceJournalNo || null);
         await this.repo.save(asset);
         return asset;
     }
@@ -42,10 +42,30 @@ class FixedAssetUseCases {
             asset.purchaseDate = data.purchaseDate;
         if (data.purchaseCost !== undefined)
             asset.purchaseCost = Number(data.purchaseCost);
+        if (data.supplierId !== undefined)
+            asset.supplierId = data.supplierId || null;
+        if (data.supplierAccountId !== undefined)
+            asset.supplierAccountId = data.supplierAccountId || null;
+        if (data.supplierInvoiceNo !== undefined)
+            asset.supplierInvoiceNo = data.supplierInvoiceNo || null;
+        if (data.supplierInvoiceAmount !== undefined)
+            asset.supplierInvoiceAmount = Number(data.supplierInvoiceAmount) || 0;
+        if (data.clearanceCost !== undefined)
+            asset.clearanceCost = Number(data.clearanceCost) || 0;
+        if (data.clearanceAccountId !== undefined)
+            asset.clearanceAccountId = data.clearanceAccountId || null;
+        if (data.purchaseJournalId !== undefined)
+            asset.purchaseJournalId = data.purchaseJournalId || null;
+        if (data.purchaseJournalNo !== undefined)
+            asset.purchaseJournalNo = data.purchaseJournalNo || null;
+        if (data.clearanceJournalId !== undefined)
+            asset.clearanceJournalId = data.clearanceJournalId || null;
+        if (data.clearanceJournalNo !== undefined)
+            asset.clearanceJournalNo = data.clearanceJournalNo || null;
         if (data.salvageValue !== undefined)
             asset.salvageValue = Number(data.salvageValue);
         if (data.lifeYears !== undefined)
-            asset.lifeYears = Number(data.lifeYears);
+            asset.lifeYears = Math.max(0, Number(data.lifeYears) || 0);
         if (data.depreciationMethod !== undefined)
             asset.depreciationMethod = data.depreciationMethod;
         if (data.status !== undefined)

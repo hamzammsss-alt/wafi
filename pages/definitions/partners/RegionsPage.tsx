@@ -15,6 +15,7 @@ import {
 import { Region } from '../../../types';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const RegionsPage = () => {
     const [regions, setRegions] = useState<Region[]>([]);
@@ -141,6 +142,95 @@ export const RegionsPage = () => {
         return parent ? parent.name_ar : '-';
     };
 
+    const handleDeleteRows = async (rows: Region[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذه المنطقة؟' : `هل أنت متأكد من حذف ${rows.length} مناطق؟`)) return;
+
+        try {
+            for (const row of rows) {
+                await window.electronAPI.partner.deleteRegion(row.id);
+            }
+            await loadRegions();
+        } catch (err) {
+            console.error(err);
+            alert('فشل في الحذف');
+        }
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<Region>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'اسم المنطقة',
+            width: 250,
+            defaultVisible: true,
+            getSearchValue: (region) => `${region.name_ar || ''} ${region.name_en || ''} ${region.code || ''}`,
+            renderCell: (region) => (
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{region.name_ar || '-'}</div>
+                    <div className="truncate text-xs text-slate-400">{region.name_en || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (region) => region.code || '-',
+            renderCell: (region) => region.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{region.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'parent_id',
+            label: 'المنطقة الأم',
+            width: 200,
+            defaultVisible: true,
+            getDisplayValue: (region) => getParentName(region.parent_id),
+            renderCell: (region) => region.parent_id ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                    <MapPin size={12} />
+                    {getParentName(region.parent_id)}
+                </span>
+            ) : '-',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 140,
+            defaultVisible: true,
+            getValue: (region) => (region.is_active ? 1 : 0),
+            renderCell: (region) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${region.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {region.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {region.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (region) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(region)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(region.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [regions]);
+
     return (
         <div className="app-page" dir="rtl">
             <WorkspaceHeader
@@ -194,6 +284,24 @@ export const RegionsPage = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.regions"
+                data={regions}
+                loading={loading}
+                columns={columns}
+                rowKey={(region) => String(region.id)}
+                searchPlaceholder="بحث عن منطقة..."
+                emptyMessage="لا توجد مناطق مطابقة للمعايير الحالية"
+                createLabel="إضافة منطقة جديدة"
+                onCreate={openCreate}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadRegions}
+                defaultSort={{ key: 'name_ar', direction: 'asc' }}
+            />
+
+            {false && (
+            <>
             {/* Search & Content */}
             <div className="card overflow-hidden">
                 {/* Toolbar */}
@@ -298,6 +406,8 @@ export const RegionsPage = () => {
                     </div>
                 )}
             </div>
+            </>
+            )}
 
             {/* Add/Edit Modal */}
             {isAdding && (

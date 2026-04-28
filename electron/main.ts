@@ -59,6 +59,7 @@ import { DispatchService } from './services/DispatchService';
 import { GRNService } from './services/GRNService';
 import { WorkflowService } from './services/WorkflowService';
 import { SalesInvoiceService } from './services/SalesInvoiceService';
+import { SalesWorkflowService } from './services/SalesWorkflowService';
 import { PurchaseInvoiceService } from './services/PurchaseInvoiceService';
 import { StockTransferService } from './services/StockTransferService';
 import { JournalVoucherService } from './services/JournalVoucherService';
@@ -841,6 +842,12 @@ const registerIPCHandlers = (db: any) => {
   safeHandle('dispatch:invoice-from-dispatch', (_, dispatchId) => DispatchService.invoiceFromDispatch(dispatchId));
   safeHandle('dispatch:getAll', () => DispatchService.getAll());
   safeHandle('dispatch:getById', (_, id) => DispatchService.getById(id));
+
+  // -- Sales workflow cycle --
+  safeHandle('salesWorkflow:postQuotationToPending', (_, id, userId) => SalesWorkflowService.postQuotationToPending(id, userId || 'admin'));
+  safeHandle('salesWorkflow:convertQuotationToOrder', (_, payload) => SalesWorkflowService.convertQuotationToOrder(payload || {}));
+  safeHandle('salesWorkflow:postOrderToPending', (_, id, userId) => SalesWorkflowService.postOrderToPending(id, userId || 'admin'));
+  safeHandle('salesWorkflow:convertOrderToDispatch', (_, payload) => SalesWorkflowService.convertOrderToDispatch(payload || {}));
 
   safeHandle('inventory-get-stock-document', (event, id) => InventoryService.getStockDocument(id));
   safeHandle('create-stock-document', (event, doc) => InventoryService.createStockDocument(doc));
@@ -1936,7 +1943,8 @@ const registerIPCHandlers = (db: any) => {
     foreignKey: 'quotation_id',
     headerPrefix: 'SQ',
     partnerField: 'customer_id',
-    hasTotals: true
+    hasTotals: true,
+    docNoField: 'quotation_no'
   });
   SalesQuotationService.register('salesQuotations');
 
@@ -1947,7 +1955,8 @@ const registerIPCHandlers = (db: any) => {
     foreignKey: 'order_id',
     headerPrefix: 'SO',
     partnerField: 'customer_id',
-    hasTotals: true
+    hasTotals: true,
+    docNoField: 'order_no'
   });
   SalesOrderService.register('salesOrders');
 

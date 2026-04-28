@@ -434,6 +434,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getById: (id: string) => invoke('dispatch:getById', id),
     },
 
+    salesWorkflow: {
+        postQuotationToPending: (id: string, userId?: string) => invoke('salesWorkflow:postQuotationToPending', id, userId),
+        convertQuotationToOrder: (payload: any) => invoke('salesWorkflow:convertQuotationToOrder', payload),
+        postOrderToPending: (id: string, userId?: string) => invoke('salesWorkflow:postOrderToPending', id, userId),
+        convertOrderToDispatch: (payload: any) => invoke('salesWorkflow:convertOrderToDispatch', payload),
+    },
+
     hr: {
         // Departments
         getDepartments: () => invoke('hr-get-departments'),
@@ -904,7 +911,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         void: (params: { id: string; userId?: string }) => invoke('salesInvoices:void', params),
         reopenRejected: (params: any) => invoke('salesInvoices:reopenRejected', params),
         searchCustomers: (search: string) => invoke('salesInvoices:searchCustomers', search),
-        searchItems: (search: string) => invoke('salesInvoices:searchItems', search),
+        searchItems: (search: string, pricingContext?: any) => invoke('salesInvoices:searchItems', search, pricingContext),
+        resolveItemPrice: (input: any) => invoke('salesInvoices:resolveItemPrice', input),
     },
 
     salesQuotation: {

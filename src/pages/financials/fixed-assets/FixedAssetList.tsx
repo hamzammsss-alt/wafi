@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Package, TrendingDown, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, CheckCircle, Edit, Trash2, Archive } from 'lucide-react';
+import { WorkspaceHeader } from '../../../components/workspace/WorkspaceHeader';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../components/definitions/DefinitionMasterList';
 
 interface FixedAssetRow {
     id: string;
@@ -16,9 +18,9 @@ interface FixedAssetRow {
 }
 
 const STATUS_CONFIG = {
-    Active: { label: 'Active', color: 'bg-emerald-100 text-emerald-700' },
-    Disposed: { label: 'Disposed', color: 'bg-red-100 text-red-700' },
-    FullyDepreciated: { label: 'Fully Depreciated', color: 'bg-gray-100 text-gray-600' },
+    Active: { label: 'فعال', color: 'bg-emerald-100 text-emerald-700' },
+    Disposed: { label: 'مستبعد', color: 'bg-red-100 text-red-700' },
+    FullyDepreciated: { label: 'مستهلك بالكامل', color: 'bg-gray-100 text-gray-600' },
 };
 
 const fmt = (n: number) =>
@@ -27,7 +29,6 @@ const fmt = (n: number) =>
 export function FixedAssetList() {
     const [assets, setAssets] = useState<FixedAssetRow[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchTerm, setSearchTerm] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => { loadAssets(); }, []);
@@ -44,151 +45,200 @@ export function FixedAssetList() {
         }
     };
 
-    const filtered = assets.filter(a =>
-        (a.code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (a.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = assets;
 
     const totalCost = assets.reduce((s, a) => s + (Number(a.purchaseCost) || 0), 0);
     const totalBook = assets.reduce((s, a) => s + (Number(a.bookValue) || 0), 0);
     const totalDep = assets.reduce((s, a) => s + (Number(a.accumulatedDepreciation) || 0), 0);
 
+    const handleDelete = async (asset: FixedAssetRow) => {
+        if (!confirm(`هل أنت متأكد من حذف الأصل ${asset.code || asset.name}؟`)) return;
+
+        try {
+            await window.electronAPI.fixedAssets.delete(asset.id);
+            await loadAssets();
+        } catch (err: any) {
+            alert(err?.message || 'تعذر حذف الأصل');
+        }
+    };
+
+    const handleDeleteRows = async (rows: FixedAssetRow[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذا الأصل؟' : `هل أنت متأكد من حذف ${rows.length} أصول؟`)) return;
+
+        try {
+            for (const row of rows) {
+                await window.electronAPI.fixedAssets.delete(row.id);
+            }
+            await loadAssets();
+        } catch (err: any) {
+            alert(err?.message || 'تعذر حذف الأصول المحددة');
+        }
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<FixedAssetRow>[]>(() => [
+        {
+            key: 'code',
+            label: 'رمز الأصل',
+            width: 140,
+            defaultVisible: true,
+            getSearchValue: (asset) => `${asset.code || ''} ${asset.name || ''}`,
+            renderCell: (asset) => (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-700">
+                    {asset.code || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'name',
+            label: 'اسم الأصل',
+            width: 260,
+            defaultVisible: true,
+            getDisplayValue: (asset) => asset.name || '-',
+            renderCell: (asset) => <span className="font-bold text-slate-800">{asset.name || '-'}</span>,
+        },
+        {
+            key: 'depreciationMethod',
+            label: 'طريقة الإهلاك',
+            type: 'enum',
+            filterType: 'enum',
+            width: 160,
+            defaultVisible: true,
+            options: [
+                { value: 'StraightLine', label: 'القسط الثابت' },
+                { value: 'DecliningBalance', label: 'القسط المتناقص' },
+            ],
+            getDisplayValue: (asset) => !asset.categoryId ? '-' : asset.depreciationMethod === 'StraightLine' ? 'القسط الثابت' : asset.depreciationMethod || '-',
+        },
+        {
+            key: 'purchaseDate',
+            label: 'تاريخ الشراء',
+            type: 'date',
+            filterType: 'date',
+            width: 140,
+            defaultVisible: true,
+            getDisplayValue: (asset) => asset.purchaseDate || '-',
+        },
+        {
+            key: 'purchaseCost',
+            label: 'تكلفة الشراء',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (asset) => Number(asset.purchaseCost || 0),
+            getDisplayValue: (asset) => fmt(asset.purchaseCost),
+            renderCell: (asset) => <span className="font-mono text-slate-700">{fmt(asset.purchaseCost)}</span>,
+        },
+        {
+            key: 'accumulatedDepreciation',
+            label: 'مجمع الإهلاك',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (asset) => Number(asset.accumulatedDepreciation || 0),
+            getDisplayValue: (asset) => fmt(asset.accumulatedDepreciation),
+            renderCell: (asset) => <span className="font-mono font-semibold text-red-500">{fmt(asset.accumulatedDepreciation)}</span>,
+        },
+        {
+            key: 'bookValue',
+            label: 'القيمة الدفترية',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (asset) => Number(asset.bookValue || 0),
+            getDisplayValue: (asset) => fmt(asset.bookValue),
+            renderCell: (asset) => <span className="font-mono font-bold text-emerald-700">{fmt(asset.bookValue)}</span>,
+        },
+        {
+            key: 'status',
+            label: 'الحالة',
+            type: 'enum',
+            filterType: 'enum',
+            width: 150,
+            defaultVisible: true,
+            options: [
+                { value: 'Active', label: 'فعال' },
+                { value: 'Disposed', label: 'مستبعد' },
+                { value: 'FullyDepreciated', label: 'مستهلك بالكامل' },
+            ],
+            getDisplayValue: (asset) => STATUS_CONFIG[asset.status]?.label || asset.status,
+            renderCell: (asset) => {
+                const status = STATUS_CONFIG[asset.status] || STATUS_CONFIG.Active;
+                return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${status.color}`}>{status.label}</span>;
+            },
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 130,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (asset) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => navigate(`/assets/register/${asset.id}`)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="فتح">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(asset)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [assets, navigate]);
+
     return (
-        <div className="p-6 h-full flex flex-col bg-gray-50 dark:bg-gray-950">
-            {/* Header */}
-            <div className="flex justify-between items-start mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Fixed Assets Register</h1>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-                        Manage assets, depreciation schedules, and book values
-                    </p>
-                </div>
-                <button
-                    id="btn-new-asset"
-                    onClick={() => navigate('/assets/register/new')}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition"
-                >
-                    <Plus size={18} />
-                    New Asset
-                </button>
-            </div>
+        <div className="app-page" dir="rtl">
+            <WorkspaceHeader
+                icon={<Archive size={24} />}
+                title="سجل الأصول الثابتة"
+                subtitle="إدارة الأصول والإهلاك والقيم الدفترية من خلال جدول موحد قابل للتصفية."
+                badges={[
+                    { label: `الأصول ${assets.length}`, tone: 'warning' },
+                    { label: `تكلفة الشراء ${fmt(totalCost)}`, tone: 'info' },
+                    { label: `مجمع الإهلاك ${fmt(totalDep)}`, tone: 'neutral' },
+                    { label: `القيمة الدفترية ${fmt(totalBook)}`, tone: 'success' },
+                ]}
+                actions={(
+                    <button
+                        id="btn-new-asset"
+                        onClick={() => navigate('/assets/register/new')}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-blue-700"
+                    >
+                        <Plus size={18} />
+                        أصل جديد
+                    </button>
+                )}
+                className="mb-6"
+            />
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                            <Package size={20} className="text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Total Purchase Cost</p>
-                            <p className="text-lg font-bold text-gray-800 dark:text-gray-100">{fmt(totalCost)}</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-red-50 dark:bg-red-900/30 rounded-lg">
-                            <TrendingDown size={20} className="text-red-500 dark:text-red-400" />
-                        </div>
-                        <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Accumulated Depreciation</p>
-                            <p className="text-lg font-bold text-gray-800 dark:text-gray-100">{fmt(totalDep)}</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
-                            <CheckCircle size={20} className="text-emerald-600 dark:text-emerald-400" />
-                        </div>
-                        <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Net Book Value</p>
-                            <p className="text-lg font-bold text-gray-800 dark:text-gray-100">{fmt(totalBook)}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Table */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex-1 flex flex-col overflow-hidden">
-                <div className="p-4 border-b dark:border-gray-700 flex items-center gap-3">
-                    <div className="relative w-72">
-                        <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                        <input
-                            id="search-assets"
-                            type="text"
-                            placeholder="Search by code or name…"
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <span className="text-sm text-gray-400">{filtered.length} asset(s)</span>
-                </div>
-
-                <div className="flex-1 overflow-auto">
-                    {loading ? (
-                        <div className="flex justify-center items-center h-40">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-                        </div>
-                    ) : (
-                        <table className="dense-table w-full">
-                            <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0 z-10">
-                                <tr>
-                                    {['Code', 'Name', 'Method', 'Purchase Date', 'Cost', 'Acc. Depreciation', 'Book Value', 'Status', ''].map(h => (
-                                        <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400 border-b dark:border-gray-700">
-                                            {h}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {filtered.map(asset => {
-                                    const sc = STATUS_CONFIG[asset.status] || STATUS_CONFIG.Active;
-                                    return (
-                                        <tr
-                                            key={asset.id}
-                                            className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
-                                            onClick={() => navigate(`/assets/register/${asset.id}`)}
-                                        >
-                                            <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">{asset.code}</td>
-                                            <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{asset.name}</td>
-                                            <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{asset.depreciationMethod}</td>
-                                            <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{asset.purchaseDate}</td>
-                                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{fmt(asset.purchaseCost)}</td>
-                                            <td className="px-4 py-3 text-right text-red-500">{fmt(asset.accumulatedDepreciation)}</td>
-                                            <td className="px-4 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">{fmt(asset.bookValue)}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${sc.color}`}>{sc.label}</span>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <button
-                                                    id={`btn-open-${asset.id}`}
-                                                    onClick={e => { e.stopPropagation(); navigate(`/assets/register/${asset.id}`); }}
-                                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 text-xs font-medium"
-                                                >
-                                                    Open →
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {filtered.length === 0 && (
-                                    <tr>
-                                        <td colSpan={9} className="px-4 py-12 text-center">
-                                            <AlertCircle className="mx-auto text-gray-300 dark:text-gray-600 mb-2" size={32} />
-                                            <p className="text-gray-400 dark:text-gray-500">
-                                                {searchTerm ? 'No assets match your search.' : 'No assets yet. Click "New Asset" to get started.'}
-                                            </p>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-            </div>
+            <DefinitionMasterList
+                screenKey="definitions.fixed-assets"
+                data={filtered}
+                loading={loading}
+                columns={columns}
+                rowKey={(asset) => String(asset.id)}
+                searchPlaceholder="بحث في سجل الأصول..."
+                emptyMessage="لا توجد أصول ثابتة مطابقة للمعايير الحالية"
+                createLabel="أصل جديد"
+                onCreate={() => navigate('/assets/register/new')}
+                onEdit={(asset) => navigate(`/assets/register/${asset.id}`)}
+                onDelete={handleDeleteRows}
+                onRefresh={loadAssets}
+                onRowDoubleClick={(asset) => navigate(`/assets/register/${asset.id}`)}
+                defaultSort={{ key: 'code', direction: 'asc' }}
+                summaryBadges={(
+                    <span className="inline-flex h-12 items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 text-sm font-bold text-emerald-700">
+                        <CheckCircle size={16} />
+                        {filtered.length} معروض
+                    </span>
+                )}
+            />
         </div>
     );
 }

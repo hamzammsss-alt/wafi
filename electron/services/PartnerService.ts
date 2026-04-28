@@ -112,6 +112,12 @@ export interface BusinessPartner {
 }
 
 export class PartnerService {
+    private static readonly DEFAULT_PRICE_LISTS = [
+        { id: 'PL_PURCHASE', name_ar: 'سعر الشراء', name_en: 'Purchase Price', currency_id: 'ILS' },
+        { id: 'PL_WHOLESALE', name_ar: 'سعر البيع جملة', name_en: 'Wholesale Sale Price', currency_id: 'ILS' },
+        { id: 'PL_RETAIL', name_ar: 'سعر البيع مفرق', name_en: 'Retail Sale Price', currency_id: 'ILS' },
+    ];
+
     private static toInt(value: any, defaultValue = 0): number {
         if (value === null || value === undefined || value === '') return defaultValue;
         const num = Number(value);
@@ -148,6 +154,71 @@ export class PartnerService {
         } catch {
             return null;
         }
+    }
+
+    private static ensurePriceListSchema() {
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS price_lists (
+                id TEXT PRIMARY KEY,
+                name_ar TEXT NOT NULL,
+                name_en TEXT,
+                currency_id TEXT,
+                is_active INTEGER DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS price_list_items (
+                id TEXT PRIMARY KEY,
+                price_list_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                unit_id TEXT NOT NULL,
+                price REAL NOT NULL DEFAULT 0,
+                min_quantity REAL DEFAULT 1,
+                FOREIGN KEY (price_list_id) REFERENCES price_lists(id) ON DELETE CASCADE,
+                FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS item_prices (
+                id TEXT PRIMARY KEY,
+                price_list_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                unit_id TEXT NOT NULL,
+                price REAL DEFAULT 0,
+                FOREIGN KEY (price_list_id) REFERENCES price_lists(id),
+                FOREIGN KEY (item_id) REFERENCES items(id)
+            );
+        `);
+
+        const insertList = db.prepare(`
+            INSERT OR IGNORE INTO price_lists (id, name_ar, name_en, currency_id, is_active)
+            VALUES (@id, @name_ar, @name_en, @currency_id, 1)
+        `);
+
+        for (const list of PartnerService.DEFAULT_PRICE_LISTS) {
+            insertList.run(list);
+        }
+    }
+
+    private static removeMirroredItemPrice(row: any) {
+        if (!row?.price_list_id || !row?.item_id || !row?.unit_id) return;
+        db.prepare(`
+            DELETE FROM item_prices
+            WHERE price_list_id = ? AND item_id = ? AND unit_id = ?
+        `).run(row.price_list_id, row.item_id, row.unit_id);
+    }
+
+    private static saveMirroredItemPrice(row: any) {
+        if (!row?.price_list_id || !row?.item_id || !row?.unit_id) return;
+        PartnerService.removeMirroredItemPrice(row);
+        db.prepare(`
+            INSERT INTO item_prices (id, price_list_id, item_id, unit_id, price)
+            VALUES (@id, @price_list_id, @item_id, @unit_id, @price)
+        `).run({
+            id: uuidv4(),
+            price_list_id: row.price_list_id,
+            item_id: row.item_id,
+            unit_id: row.unit_id,
+            price: PartnerService.toNumber(row.price, 0),
+        });
     }
 
     private static sanitizeBusinessPartnerPayload(data: any) {
@@ -1140,8 +1211,27 @@ export class PartnerService {
     static deleteSalesRep(id: string) { db.prepare('DELETE FROM sales_reps WHERE id = ?').run(id); return { success: true }; }
 
     // --- Price Lists (Existing logic) ---
-    static getPriceLists() { return db.prepare('SELECT * FROM price_lists ORDER BY name_ar').all(); }
+    static getPriceLists() {
+        PartnerService.ensurePriceListSchema();
+        return db.prepare(`
+            SELECT
+                pl.*,
+                COALESCE(c.items_count, 0) AS items_count
+            FROM price_lists pl
+            LEFT JOIN (
+                SELECT price_list_id, COUNT(DISTINCT item_id) AS items_count
+                FROM (
+                    SELECT price_list_id, item_id FROM price_list_items
+                    UNION ALL
+                    SELECT price_list_id, item_id FROM item_prices
+                )
+                GROUP BY price_list_id
+            ) c ON c.price_list_id = pl.id
+            ORDER BY pl.name_ar
+        `).all();
+    }
     static savePriceList(data: any) {
+        PartnerService.ensurePriceListSchema();
         if (data.id) {
             db.prepare('UPDATE price_lists SET name_ar=@name_ar, name_en=@name_en, currency_id=@currency_id, is_active=@is_active WHERE id=@id').run({ ...data, is_active: data.is_active ? 1 : 0 });
         } else {
@@ -1149,26 +1239,86 @@ export class PartnerService {
         }
         return { success: true };
     }
-    static deletePriceList(id: string) { db.prepare('DELETE FROM price_lists WHERE id = ?').run(id); return { success: true }; }
-
-    static getPriceListItems(priceListId: string) {
-        return db.prepare(`
-            SELECT pli.*, i.name_ar as item_name, u.name_ar as unit_name, i.code as item_code
-            FROM price_list_items pli
-            JOIN items i ON pli.item_id = i.id
-            JOIN units u ON pli.unit_id = u.id
-            WHERE pli.price_list_id = ?
-        `).all(priceListId);
-    }
-
-    static savePriceListItem(data: any) {
-        if (data.id) {
-            db.prepare('UPDATE price_list_items SET item_id=@item_id, unit_id=@unit_id, price=@price, min_quantity=@min_quantity WHERE id=@id').run(data);
-        } else {
-            db.prepare('INSERT INTO price_list_items (id, price_list_id, item_id, unit_id, price, min_quantity) VALUES (@id, @price_list_id, @item_id, @unit_id, @price, @min_quantity)').run({ id: uuidv4(), ...data });
-        }
+    static deletePriceList(id: string) {
+        PartnerService.ensurePriceListSchema();
+        db.transaction(() => {
+            db.prepare('DELETE FROM price_list_items WHERE price_list_id = ?').run(id);
+            db.prepare('DELETE FROM item_prices WHERE price_list_id = ?').run(id);
+            db.prepare('DELETE FROM price_lists WHERE id = ?').run(id);
+        })();
         return { success: true };
     }
 
-    static deletePriceListItem(id: string) { db.prepare('DELETE FROM price_list_items WHERE id = ?').run(id); return { success: true }; }
+    static getPriceListItems(priceListId: string) {
+        PartnerService.ensurePriceListSchema();
+        return db.prepare(`
+            SELECT rows.*, i.name_ar as item_name, u.name_ar as unit_name, i.code as item_code
+            FROM (
+                SELECT pli.id, pli.price_list_id, pli.item_id, pli.unit_id, pli.price, COALESCE(pli.min_quantity, 1) AS min_quantity
+                FROM price_list_items pli
+                WHERE pli.price_list_id = ?
+
+                UNION ALL
+
+                SELECT ip.id, ip.price_list_id, ip.item_id, ip.unit_id, ip.price, 1 AS min_quantity
+                FROM item_prices ip
+                WHERE ip.price_list_id = ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM price_list_items pli
+                      WHERE pli.price_list_id = ip.price_list_id
+                        AND pli.item_id = ip.item_id
+                        AND pli.unit_id = ip.unit_id
+                  )
+            ) rows
+            JOIN items i ON rows.item_id = i.id
+            JOIN units u ON rows.unit_id = u.id
+            ORDER BY i.code, rows.min_quantity
+        `).all(priceListId, priceListId);
+    }
+
+    static savePriceListItem(data: any) {
+        PartnerService.ensurePriceListSchema();
+        db.transaction(() => {
+            const oldRow = data.id
+                ? db.prepare('SELECT * FROM price_list_items WHERE id = ?').get(data.id)
+                : null;
+
+            if (oldRow) PartnerService.removeMirroredItemPrice(oldRow);
+
+            const payload = {
+                ...data,
+                id: data.id || uuidv4(),
+                min_quantity: PartnerService.toNumber(data.min_quantity, 1) || 1,
+                price: PartnerService.toNumber(data.price, 0),
+            };
+
+            if (data.id && oldRow) {
+                db.prepare(`
+                    UPDATE price_list_items
+                    SET item_id=@item_id, unit_id=@unit_id, price=@price, min_quantity=@min_quantity
+                    WHERE id=@id
+                `).run(payload);
+            } else {
+                db.prepare(`
+                    INSERT INTO price_list_items (id, price_list_id, item_id, unit_id, price, min_quantity)
+                    VALUES (@id, @price_list_id, @item_id, @unit_id, @price, @min_quantity)
+                `).run(payload);
+            }
+
+            PartnerService.saveMirroredItemPrice(payload);
+        })();
+        return { success: true };
+    }
+
+    static deletePriceListItem(id: string) {
+        PartnerService.ensurePriceListSchema();
+        db.transaction(() => {
+            const row: any = db.prepare('SELECT * FROM price_list_items WHERE id = ?').get(id);
+            if (row) PartnerService.removeMirroredItemPrice(row);
+            db.prepare('DELETE FROM price_list_items WHERE id = ?').run(id);
+            db.prepare('DELETE FROM item_prices WHERE id = ?').run(id);
+        })();
+        return { success: true };
+    }
 }

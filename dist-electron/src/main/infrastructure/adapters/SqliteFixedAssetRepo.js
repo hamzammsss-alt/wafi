@@ -37,8 +37,18 @@ class SqliteFixedAssetRepo {
                 dep_expense_account_id      TEXT,
                 purchase_date               TEXT NOT NULL,
                 purchase_cost               REAL NOT NULL DEFAULT 0,
+                supplier_id                 TEXT,
+                supplier_account_id         TEXT,
+                supplier_invoice_no         TEXT,
+                supplier_invoice_amount     REAL NOT NULL DEFAULT 0,
+                clearance_cost              REAL NOT NULL DEFAULT 0,
+                clearance_account_id        TEXT,
+                purchase_journal_id         TEXT,
+                purchase_journal_no         TEXT,
+                clearance_journal_id        TEXT,
+                clearance_journal_no        TEXT,
                 salvage_value               REAL NOT NULL DEFAULT 0,
-                life_years                  REAL NOT NULL DEFAULT 1,
+                life_years                  REAL NOT NULL DEFAULT 0,
                 depreciation_method         TEXT NOT NULL DEFAULT 'StraightLine',
                 status                      TEXT NOT NULL DEFAULT 'Active',
                 book_value                  REAL NOT NULL DEFAULT 0,
@@ -71,8 +81,18 @@ class SqliteFixedAssetRepo {
             this.addColumnIfMissing('fixed_assets', 'dep_expense_account_id', 'TEXT');
             this.addColumnIfMissing('fixed_assets', 'purchase_date', 'TEXT');
             this.addColumnIfMissing('fixed_assets', 'purchase_cost', 'REAL NOT NULL DEFAULT 0');
+            this.addColumnIfMissing('fixed_assets', 'supplier_id', 'TEXT');
+            this.addColumnIfMissing('fixed_assets', 'supplier_account_id', 'TEXT');
+            this.addColumnIfMissing('fixed_assets', 'supplier_invoice_no', 'TEXT');
+            this.addColumnIfMissing('fixed_assets', 'supplier_invoice_amount', 'REAL NOT NULL DEFAULT 0');
+            this.addColumnIfMissing('fixed_assets', 'clearance_cost', 'REAL NOT NULL DEFAULT 0');
+            this.addColumnIfMissing('fixed_assets', 'clearance_account_id', 'TEXT');
+            this.addColumnIfMissing('fixed_assets', 'purchase_journal_id', 'TEXT');
+            this.addColumnIfMissing('fixed_assets', 'purchase_journal_no', 'TEXT');
+            this.addColumnIfMissing('fixed_assets', 'clearance_journal_id', 'TEXT');
+            this.addColumnIfMissing('fixed_assets', 'clearance_journal_no', 'TEXT');
             this.addColumnIfMissing('fixed_assets', 'salvage_value', 'REAL NOT NULL DEFAULT 0');
-            this.addColumnIfMissing('fixed_assets', 'life_years', 'REAL NOT NULL DEFAULT 1');
+            this.addColumnIfMissing('fixed_assets', 'life_years', 'REAL NOT NULL DEFAULT 0');
             this.addColumnIfMissing('fixed_assets', 'depreciation_method', "TEXT NOT NULL DEFAULT 'StraightLine'");
             this.addColumnIfMissing('fixed_assets', 'status', "TEXT NOT NULL DEFAULT 'Active'");
             this.addColumnIfMissing('fixed_assets', 'book_value', 'REAL NOT NULL DEFAULT 0');
@@ -97,8 +117,14 @@ class SqliteFixedAssetRepo {
 
                 UPDATE fixed_assets
                 SET purchase_cost = COALESCE(purchase_cost, 0),
+                    supplier_invoice_amount = CASE
+                        WHEN COALESCE(supplier_invoice_amount, 0) <= 0
+                        THEN COALESCE(purchase_cost, 0) - COALESCE(clearance_cost, 0)
+                        ELSE supplier_invoice_amount
+                    END,
+                    clearance_cost = COALESCE(clearance_cost, 0),
                     salvage_value = COALESCE(salvage_value, 0),
-                    life_years = CASE WHEN COALESCE(life_years, 0) <= 0 THEN 1 ELSE life_years END,
+                    life_years = COALESCE(life_years, 0),
                     accumulated_depreciation = COALESCE(accumulated_depreciation, 0),
                     book_value = COALESCE(book_value, purchase_cost, 0),
                     depreciation_method = COALESCE(NULLIF(depreciation_method, ''), 'StraightLine'),
@@ -114,12 +140,20 @@ class SqliteFixedAssetRepo {
             INSERT INTO fixed_assets (
                 id, company_id, code, name, category_id,
                 asset_account_id, accumulated_dep_account_id, dep_expense_account_id,
-                purchase_date, purchase_cost, salvage_value, life_years,
+                purchase_date, purchase_cost, supplier_id, supplier_account_id,
+                supplier_invoice_no, supplier_invoice_amount, clearance_cost,
+                clearance_account_id, purchase_journal_id, purchase_journal_no,
+                clearance_journal_id, clearance_journal_no,
+                salvage_value, life_years,
                 depreciation_method, status, book_value, accumulated_depreciation, created_at
             ) VALUES (
                 @id, @company_id, @code, @name, @category_id,
                 @asset_account_id, @accumulated_dep_account_id, @dep_expense_account_id,
-                @purchase_date, @purchase_cost, @salvage_value, @life_years,
+                @purchase_date, @purchase_cost, @supplier_id, @supplier_account_id,
+                @supplier_invoice_no, @supplier_invoice_amount, @clearance_cost,
+                @clearance_account_id, @purchase_journal_id, @purchase_journal_no,
+                @clearance_journal_id, @clearance_journal_no,
+                @salvage_value, @life_years,
                 @depreciation_method, @status, @book_value, @accumulated_depreciation, @created_at
             )
             ON CONFLICT(id) DO UPDATE SET
@@ -131,6 +165,16 @@ class SqliteFixedAssetRepo {
                 dep_expense_account_id      = excluded.dep_expense_account_id,
                 purchase_date               = excluded.purchase_date,
                 purchase_cost               = excluded.purchase_cost,
+                supplier_id                 = excluded.supplier_id,
+                supplier_account_id         = excluded.supplier_account_id,
+                supplier_invoice_no         = excluded.supplier_invoice_no,
+                supplier_invoice_amount     = excluded.supplier_invoice_amount,
+                clearance_cost              = excluded.clearance_cost,
+                clearance_account_id        = excluded.clearance_account_id,
+                purchase_journal_id         = excluded.purchase_journal_id,
+                purchase_journal_no         = excluded.purchase_journal_no,
+                clearance_journal_id        = excluded.clearance_journal_id,
+                clearance_journal_no        = excluded.clearance_journal_no,
                 salvage_value               = excluded.salvage_value,
                 life_years                  = excluded.life_years,
                 depreciation_method         = excluded.depreciation_method,
@@ -149,6 +193,16 @@ class SqliteFixedAssetRepo {
             dep_expense_account_id: asset.depExpenseAccountId,
             purchase_date: asset.purchaseDate,
             purchase_cost: asset.purchaseCost,
+            supplier_id: asset.supplierId,
+            supplier_account_id: asset.supplierAccountId,
+            supplier_invoice_no: asset.supplierInvoiceNo,
+            supplier_invoice_amount: asset.supplierInvoiceAmount,
+            clearance_cost: asset.clearanceCost,
+            clearance_account_id: asset.clearanceAccountId,
+            purchase_journal_id: asset.purchaseJournalId,
+            purchase_journal_no: asset.purchaseJournalNo,
+            clearance_journal_id: asset.clearanceJournalId,
+            clearance_journal_no: asset.clearanceJournalNo,
             salvage_value: asset.salvageValue,
             life_years: asset.lifeYears,
             depreciation_method: asset.depreciationMethod,
@@ -185,7 +239,7 @@ class SqliteFixedAssetRepo {
         return (rows || []).map((r) => new DepreciationSchedule_1.DepreciationSchedule(r.id, r.asset_id, r.period_date, Number(r.amount), r.journal_entry_id, r.created_at));
     }
     rowToEntity(row) {
-        return new FixedAsset_1.FixedAsset(row.id, row.company_id, row.code, row.name, row.category_id, row.asset_account_id, row.accumulated_dep_account_id, row.dep_expense_account_id, row.purchase_date, Number(row.purchase_cost), Number(row.salvage_value), Number(row.life_years), row.depreciation_method || 'StraightLine', row.status || 'Active', Number(row.book_value), Number(row.accumulated_depreciation), row.created_at);
+        return new FixedAsset_1.FixedAsset(row.id, row.company_id, row.code, row.name, row.category_id, row.asset_account_id, row.accumulated_dep_account_id, row.dep_expense_account_id, row.purchase_date, Number(row.purchase_cost), Number(row.salvage_value), Number(row.life_years), row.depreciation_method || 'StraightLine', row.status || 'Active', Number(row.book_value), Number(row.accumulated_depreciation), row.supplier_id, row.supplier_account_id, row.supplier_invoice_no, Number(row.supplier_invoice_amount ?? row.purchase_cost), Number(row.clearance_cost || 0), row.clearance_account_id, row.purchase_journal_id, row.purchase_journal_no, row.clearance_journal_id, row.clearance_journal_no, row.created_at);
     }
 }
 exports.SqliteFixedAssetRepo = SqliteFixedAssetRepo;

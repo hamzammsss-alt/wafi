@@ -59,6 +59,7 @@ const DispatchService_1 = require("./services/DispatchService");
 const GRNService_1 = require("./services/GRNService");
 const WorkflowService_1 = require("./services/WorkflowService");
 const SalesInvoiceService_1 = require("./services/SalesInvoiceService");
+const SalesWorkflowService_1 = require("./services/SalesWorkflowService");
 const PurchaseInvoiceService_1 = require("./services/PurchaseInvoiceService");
 const StockTransferService_1 = require("./services/StockTransferService");
 const JournalVoucherService_1 = require("./services/JournalVoucherService");
@@ -732,6 +733,11 @@ const registerIPCHandlers = (db) => {
     safeHandle('dispatch:invoice-from-dispatch', (_, dispatchId) => DispatchService_1.DispatchService.invoiceFromDispatch(dispatchId));
     safeHandle('dispatch:getAll', () => DispatchService_1.DispatchService.getAll());
     safeHandle('dispatch:getById', (_, id) => DispatchService_1.DispatchService.getById(id));
+    // -- Sales workflow cycle --
+    safeHandle('salesWorkflow:postQuotationToPending', (_, id, userId) => SalesWorkflowService_1.SalesWorkflowService.postQuotationToPending(id, userId || 'admin'));
+    safeHandle('salesWorkflow:convertQuotationToOrder', (_, payload) => SalesWorkflowService_1.SalesWorkflowService.convertQuotationToOrder(payload || {}));
+    safeHandle('salesWorkflow:postOrderToPending', (_, id, userId) => SalesWorkflowService_1.SalesWorkflowService.postOrderToPending(id, userId || 'admin'));
+    safeHandle('salesWorkflow:convertOrderToDispatch', (_, payload) => SalesWorkflowService_1.SalesWorkflowService.convertOrderToDispatch(payload || {}));
     safeHandle('inventory-get-stock-document', (event, id) => InventoryService_1.InventoryService.getStockDocument(id));
     safeHandle('create-stock-document', (event, doc) => InventoryService_1.InventoryService.createStockDocument(doc));
     safeHandle('update-stock-document', (event, doc) => InventoryService_1.InventoryService.updateStockDocument(doc));
@@ -1670,7 +1676,8 @@ const registerIPCHandlers = (db) => {
         foreignKey: 'quotation_id',
         headerPrefix: 'SQ',
         partnerField: 'customer_id',
-        hasTotals: true
+        hasTotals: true,
+        docNoField: 'quotation_no'
     });
     SalesQuotationService.register('salesQuotations');
     const SalesOrderService = DocumentServiceFactory_1.DocumentServiceFactory.createService({
@@ -1680,7 +1687,8 @@ const registerIPCHandlers = (db) => {
         foreignKey: 'order_id',
         headerPrefix: 'SO',
         partnerField: 'customer_id',
-        hasTotals: true
+        hasTotals: true,
+        docNoField: 'order_no'
     });
     SalesOrderService.register('salesOrders');
 }; // End of registerIPCHandlers

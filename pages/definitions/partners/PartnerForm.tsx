@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { BusinessPartner, Account } from '../../../types';
 import { AccountPicker } from '../../../components/AccountPicker';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const PartnerForm: React.FC = () => {
     // --- State ---
@@ -64,6 +65,7 @@ export const PartnerForm: React.FC = () => {
         payment_term_days: 0,
         tax_number: '',
         price_list_id: '',
+        customer_discount_percent: 0,
         // HR Specific
         job_title_id: '',
         department_id: '',
@@ -320,6 +322,159 @@ export const PartnerForm: React.FC = () => {
         </button>
     );
 
+    const handleDeleteRows = async (rows: BusinessPartner[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذه البطاقة؟ لا يمكن التراجع عن هذا الإجراء.' : `هل أنت متأكد من حذف ${rows.length} بطاقات؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+
+        try {
+            for (const row of rows) {
+                await (window as any).electronAPI.partner.deletePartner(row.id);
+            }
+            setFeedback({ type: 'success', message: 'تم الحذف بنجاح' });
+            await loadData();
+            setTimeout(() => setFeedback(null), 3000);
+        } catch (e: any) {
+            alert('لا يمكن الحذف: ' + e.message);
+        }
+    };
+
+    const partnerColumns = useMemo<DefinitionListColumn<BusinessPartner>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'الاسم',
+            width: 280,
+            defaultVisible: true,
+            getSearchValue: (partner) => `${partner.name_ar || ''} ${partner.name_en || ''} ${partner.code || ''} ${partner.phone || ''} ${partner.mobile || ''} ${partner.email || ''}`,
+            renderCell: (partner) => (
+                <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 font-bold text-slate-700">
+                        {partner.name_ar?.charAt(0) || '#'}
+                    </div>
+                    <div className="min-w-0">
+                        <div className="truncate text-sm font-bold text-slate-800" title={partner.name_ar}>{partner.name_ar || '-'}</div>
+                        <div className="truncate text-xs text-slate-400" title={partner.name_en || ''}>{partner.name_en || '-'}</div>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 130,
+            defaultVisible: true,
+            getDisplayValue: (partner) => partner.code || '-',
+            renderCell: (partner) => partner.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{partner.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'type',
+            label: 'النوع',
+            type: 'enum',
+            filterType: 'enum',
+            width: 150,
+            defaultVisible: true,
+            options: [
+                { value: 'CUSTOMER', label: 'زبون' },
+                { value: 'SUPPLIER', label: 'مورد' },
+                { value: 'EMPLOYEE', label: 'موظف' },
+                { value: 'BOTH', label: 'زبون ومورد' },
+            ],
+            getDisplayValue: (partner) => partner.type || '-',
+            renderCell: (partner) => <TypeBadge type={partner.type} />,
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 130,
+            defaultVisible: true,
+            getValue: (partner) => (partner.is_active ? 1 : 0),
+            renderCell: (partner) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${partner.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {partner.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {partner.is_active ? 'نشط' : 'موقف'}
+                </span>
+            ),
+        },
+        {
+            key: 'phone',
+            label: 'الهاتف',
+            width: 160,
+            defaultVisible: true,
+            getDisplayValue: (partner) => partner.phone || partner.mobile || '-',
+        },
+        {
+            key: 'city',
+            label: 'المدينة',
+            width: 150,
+            defaultVisible: true,
+            getDisplayValue: (partner) => partner.city || '-',
+        },
+        {
+            key: 'email',
+            label: 'البريد',
+            width: 220,
+            defaultVisible: true,
+            getDisplayValue: (partner) => partner.email || '-',
+        },
+        {
+            key: 'region_id',
+            label: 'المنطقة',
+            width: 160,
+            defaultVisible: false,
+            getValue: (partner) => partner.region_id || '',
+            getDisplayValue: (partner) => regions.find((region) => region.id === partner.region_id)?.name_ar || '-',
+        },
+        {
+            key: 'group_id',
+            label: 'المجموعة',
+            width: 160,
+            defaultVisible: false,
+            getValue: (partner) => partner.group_id || '',
+            getDisplayValue: (partner) => groups.find((group) => group.id === partner.group_id)?.name_ar || '-',
+        },
+        {
+            key: 'sales_rep_id',
+            label: 'المندوب',
+            width: 160,
+            defaultVisible: false,
+            getValue: (partner) => partner.sales_rep_id || '',
+            getDisplayValue: (partner) => reps.find((rep) => rep.id === partner.sales_rep_id)?.name_ar || '-',
+        },
+        {
+            key: 'credit_limit',
+            label: 'حد الائتمان',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: false,
+            getValue: (partner) => Number(partner.credit_limit || 0),
+            getDisplayValue: (partner) => Number(partner.credit_limit || 0).toLocaleString('en-US'),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (partner) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(partner)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(partner.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [accounts, groups, regions, reps]);
+
     return (
         <div className="h-full bg-gray-50 p-6 flex flex-col gap-6" dir="rtl">
 
@@ -411,6 +566,25 @@ export const PartnerForm: React.FC = () => {
                 </div>
             </div>
 
+            <DefinitionMasterList
+                screenKey="definitions.partners"
+                data={filteredPartners}
+                loading={isLoading}
+                columns={partnerColumns}
+                rowKey={(partner) => String(partner.id)}
+                searchPlaceholder="بحث في دليل العلاقات..."
+                emptyMessage="لا توجد سجلات مطابقة للمعايير الحالية"
+                createLabel="إضافة جديد"
+                onCreate={() => { resetForm(); setIsModalOpen(true); }}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadData}
+                onRowDoubleClick={handleEdit}
+                defaultSort={{ key: 'name_ar', direction: 'asc' }}
+            />
+
+            {false && (
+            <>
             {/* Table Section */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
@@ -501,6 +675,8 @@ export const PartnerForm: React.FC = () => {
                     </table>
                 </div>
             </div>
+            </>
+            )}
 
             {/* Modal */}
             {isModalOpen && (
@@ -723,6 +899,34 @@ export const PartnerForm: React.FC = () => {
                                             onChange={(e) => setFormData({ ...formData, credit_limit: Number(e.target.value) })}
                                         />
                                     </div>
+
+                                    {(formData.type === 'CUSTOMER' || formData.type === 'BOTH') && (
+                                        <>
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">قائمة أسعار البيع</label>
+                                                <select
+                                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 outline-none bg-white"
+                                                    value={formData.price_list_id || ''}
+                                                    onChange={(e) => setFormData({ ...formData, price_list_id: e.target.value })}
+                                                >
+                                                    <option value="">-- الافتراضي --</option>
+                                                    {priceLists.map(pl => <option key={pl.id} value={pl.id}>{pl.name_ar || pl.name_en}</option>)}
+                                                </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">نسبة الخصم على السعر</label>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={100}
+                                                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 outline-none"
+                                                    value={formData.customer_discount_percent || 0}
+                                                    onChange={(e) => setFormData({ ...formData, customer_discount_percent: Number(e.target.value) })}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
                                     {/* Other financial fields (Terms, Tax, etc.) */}
                                 </div>
                             )}

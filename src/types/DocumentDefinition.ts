@@ -126,6 +126,16 @@ export interface DocumentPostingPolicy {
     conflictErrorCode?: string;
 }
 
+export interface DocumentAddonContext<H = any, L = any> {
+    docId?: string;
+    header: H;
+    setHeader: React.Dispatch<React.SetStateAction<H>>;
+    rows: L[];
+    setRows: React.Dispatch<React.SetStateAction<L[]>>;
+    isReadOnly: boolean;
+    markDirty: () => void;
+}
+
 /* ─── Client API shape ─── */
 export interface DocumentClient<H = any, L = any> {
     list: (params: any) => Promise<Result<{ rows: any[]; next_cursor: any }>>;
@@ -136,7 +146,8 @@ export interface DocumentClient<H = any, L = any> {
     postOrSubmit: (params: { id: string; userId?: string; hasPostPermission?: boolean }) => Promise<Result<{ status: string; action: string }>>;
     reopenRejected: (params: { id: string; userId?: string }) => Promise<Result<{ status: string }>>;
     void?: (params: { id: string; userId?: string }) => Promise<Result<{ status: string }>>;
-    searchItems?: (search: string) => Promise<Result<any[]>>;
+    searchItems?: (search: string, context?: any) => Promise<Result<any[]>>;
+    resolveItemPrice?: (input: any) => Promise<Result<any>>;
     searchCustomers?: (search: string) => Promise<Result<any[]>>;
     searchSuppliers?: (search: string) => Promise<Result<any[]>>;
     searchAccounts?: (search: string) => Promise<Result<any[]>>;
@@ -213,6 +224,7 @@ export interface DocumentDefinition<H = any, L = any> {
     policy?: DocumentPolicyConfig;
     lineLookup?: DocumentLineLookupConfig;
     loadSelectOptions?: () => Promise<Record<string, DocumentSelectOption[]>>;
+    renderBeforeLines?: (context: DocumentAddonContext<H, L>) => React.ReactNode;
     skipPermissionChecks?: boolean;
     saveOnHeaderCommit?: boolean;
     createDraftOnOpen?: boolean;

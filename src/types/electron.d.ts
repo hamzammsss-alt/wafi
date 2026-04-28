@@ -1627,6 +1627,15 @@ export interface ElectronAPI {
         update: (id: string | null, payload: any) => Promise<any>;
         postToPending: (id: string) => Promise<any>;
         invoiceFromDispatch: (id: string) => Promise<any>;
+        getAll: () => Promise<any>;
+        getById: (id: string) => Promise<any>;
+    };
+
+    salesWorkflow: {
+        postQuotationToPending: (id: string, userId?: string) => Promise<any>;
+        convertQuotationToOrder: (payload: any) => Promise<any>;
+        postOrderToPending: (id: string, userId?: string) => Promise<any>;
+        convertOrderToDispatch: (payload: any) => Promise<any>;
     };
 
     purchasing: {

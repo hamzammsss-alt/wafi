@@ -14,10 +14,56 @@ function calcDispatchStatus(header, lines) {
     return "محفوظ";
 }
 class DispatchService {
+    static ensureSchema() {
+        if (this.initialized)
+            return;
+        this.addColumn('dispatch_header', 'source_type', 'TEXT');
+        this.addColumn('dispatch_header', 'source_id', 'TEXT');
+        this.addColumn('dispatch_header', 'invoice_id', 'TEXT');
+        this.addColumn('dispatch_header', 'posted_at', 'TEXT');
+        this.addColumn('dispatch_header', 'invoiced_at', 'TEXT');
+        this.addColumn('dispatch_header', 'region_id', 'TEXT');
+        this.addColumn('dispatch_header', 'loading_area', 'TEXT');
+        this.addColumn('dispatch_header', 'loading_sheet_no', 'TEXT');
+        this.addColumn('dispatch_header', 'order_loading_list_no', 'TEXT');
+        this.addColumn('dispatch_lines', 'source_line_id', 'TEXT');
+        this.addColumn('sales_invoice_lines', 'line_no', 'INTEGER DEFAULT 0');
+        this.addColumn('sales_invoice_lines', 'discount', 'REAL DEFAULT 0');
+        this.addColumn('sales_invoice_lines', 'tax_rate', 'REAL DEFAULT 0');
+        this.addColumn('sales_invoice_lines', 'dispatch_line_id', 'TEXT');
+        this.addColumn('sales_invoices', 'dispatch_id', 'TEXT');
+        this.addColumn('sales_invoices', 'order_id', 'TEXT');
+        this.addColumn('sales_order_lines', 'dispatched_qty', 'REAL DEFAULT 0');
+        this.addColumn('sales_order_lines', 'invoiced_qty', 'REAL DEFAULT 0');
+        this.addColumn('sales_orders', 'delivery_status', "TEXT DEFAULT 'PENDING'");
+        this.initialized = true;
+    }
+    static getColumns(table) {
+        try {
+            const rows = database_1.db.prepare(`PRAGMA table_info(${table})`).all();
+            return new Set(rows.map((row) => String(row.name || '').trim()).filter(Boolean));
+        }
+        catch {
+            return new Set();
+        }
+    }
+    static addColumn(table, column, ddl) {
+        try {
+            if (!this.getColumns(table).has(column)) {
+                database_1.db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`).run();
+            }
+        }
+        catch (error) {
+            if (!String(error?.message || '').includes('duplicate column name')) {
+                console.warn(`[DispatchService] Could not add ${table}.${column}: ${error?.message || error}`);
+            }
+        }
+    }
     // =========================
     // GET: Fetch all dispatch records for the list view
     // =========================
     static async getAll() {
+        this.ensureSchema();
         return database_1.db.prepare(`
             SELECT 
                 d.*, 
@@ -37,6 +83,7 @@ class DispatchService {
     // GET: Fetch single dispatch record by ID
     // =========================
     static async getById(id) {
+        this.ensureSchema();
         const header = database_1.db.prepare(`
             SELECT 
                 d.*, 
@@ -72,6 +119,7 @@ class DispatchService {
     // UPDATE OR CREATE: مسموح فقط لمحفوظ
     // =========================
     static async update(id, payload) {
+        this.ensureSchema();
         return database_1.db.transaction(() => {
             const { v4: uuidv4 } = require('uuid');
             let currentId = id;
@@ -92,6 +140,8 @@ class DispatchService {
                     SET dispatch_date=@dispatch_date, dispatch_time=@dispatch_time,
                         from_warehouse_id=@from_warehouse_id, to_type=@to_type, to_id=@to_id,
                         ledger_id=@ledger_id, sales_rep_id=@sales_rep_id, truck_id=@truck_id,
+                        region_id=@region_id, loading_area=@loading_area,
+                        loading_sheet_no=@loading_sheet_no, order_loading_list_no=@order_loading_list_no,
                         carrier_id=@carrier_id, tracking_no=@tracking_no, 
                         is_sent=@is_sent, is_maintenance=@is_maintenance, 
                         customer_ref=@customer_ref, send_to=@send_to, shipment_no=@shipment_no, 
@@ -105,7 +155,11 @@ class DispatchService {
                     status: status,
                     id: currentId,
                     is_sent: header.is_sent ? 1 : 0,
-                    is_maintenance: header.is_maintenance ? 1 : 0
+                    is_maintenance: header.is_maintenance ? 1 : 0,
+                    region_id: header.region_id || null,
+                    loading_area: header.loading_area || null,
+                    loading_sheet_no: header.loading_sheet_no || null,
+                    order_loading_list_no: header.order_loading_list_no || header.loading_sheet_no || null
                 });
                 // replace lines...
                 database_1.db.prepare(`DELETE FROM dispatch_lines WHERE header_id=?`).run(currentId);
@@ -122,12 +176,14 @@ class DispatchService {
                     INSERT INTO dispatch_header (
                         id, serial_no, status, dispatch_type, dispatch_date, dispatch_time,
                         from_warehouse_id, to_type, to_id, ledger_id, sales_rep_id, truck_id,
+                        region_id, loading_area, loading_sheet_no, order_loading_list_no,
                         carrier_id, tracking_no, is_sent, is_maintenance, customer_ref, send_to,
                         shipment_no, receiver_name, receiver_phone, delivery_date, delivery_address,
                         delivery_instructions, source_type, source_id, notes
                     ) VALUES (
                         @id, @serial_no, @status, @dispatch_type, @dispatch_date, @dispatch_time,
                         @from_warehouse_id, @to_type, @to_id, @ledger_id, @sales_rep_id, @truck_id,
+                        @region_id, @loading_area, @loading_sheet_no, @order_loading_list_no,
                         @carrier_id, @tracking_no, @is_sent, @is_maintenance, @customer_ref, @send_to,
                         @shipment_no, @receiver_name, @receiver_phone, @delivery_date, @delivery_address,
                         @delivery_instructions, @source_type, @source_id, @notes
@@ -143,6 +199,10 @@ class DispatchService {
                     ledger_id: header.ledger_id || null,
                     sales_rep_id: header.sales_rep_id || null,
                     truck_id: header.truck_id || null,
+                    region_id: header.region_id || null,
+                    loading_area: header.loading_area || null,
+                    loading_sheet_no: header.loading_sheet_no || null,
+                    order_loading_list_no: header.order_loading_list_no || header.loading_sheet_no || null,
                     carrier_id: header.carrier_id || null,
                     is_sent: header.is_sent ? 1 : 0,
                     is_maintenance: header.is_maintenance ? 1 : 0,
@@ -179,6 +239,7 @@ class DispatchService {
     // POST: ترحيل أولي => يحول من محفوظ إلى عالق (Waiting Invoice)
     // ==========================================================
     static async postToPending(id) {
+        this.ensureSchema();
         return database_1.db.transaction(() => {
             const header = database_1.db.prepare(`SELECT * FROM dispatch_header WHERE id=?`).get(id);
             if (!header)
@@ -276,6 +337,7 @@ class DispatchService {
     // INVOICE: ترحيل الإرسال إلى فاتورة => ينقل من عالق إلى مرحل + ينفذ مخزون/قيود
     // ============================================================================
     static async invoiceFromDispatch(dispatchId) {
+        this.ensureSchema();
         return database_1.db.transaction(() => {
             const header = database_1.db.prepare(`SELECT * FROM dispatch_header WHERE id=?`).get(dispatchId);
             if (!header)
@@ -315,26 +377,79 @@ class DispatchService {
             // 2) إضافة خطوط الفاتورة
             const insertInvLine = database_1.db.prepare(`
                 INSERT INTO sales_invoice_lines (
-                    id, invoice_id, item_id, description, quantity, unit_id,
-                    unit_price, total_price, tax_amount, net_total, dispatch_line_id
+                    id, invoice_id, line_no, item_id, description, quantity, unit_id,
+                    unit_price, discount, tax_rate, total_price, discount_amount, tax_amount, net_total, dispatch_line_id
                 )
                 VALUES (
-                    @id, @invoice_id, @item_id, @description, @qty, @unit_id,
-                    0, 0, 0, 0, @dispatch_line_id
+                    @id, @invoice_id, @line_no, @item_id, @description, @qty, @unit_id,
+                    @unit_price, @discount, @tax_rate, @total_price, @discount_amount, @tax_amount, @net_total, @dispatch_line_id
                 )
             `);
-            for (const l of lines) {
+            let subtotal = 0;
+            let taxTotal = 0;
+            let grandTotal = 0;
+            const updateOrderLineInvoiceQty = database_1.db.prepare(`
+                UPDATE sales_order_lines
+                SET invoiced_qty = COALESCE(invoiced_qty, 0) + ?
+                WHERE id = ?
+            `);
+            for (const [index, l] of lines.entries()) {
                 // Get unit
                 const item = database_1.db.prepare("SELECT name_ar, base_unit_id FROM items WHERE id = ?").get(l.item_id);
+                const sourceLine = l.source_line_id
+                    ? database_1.db.prepare("SELECT * FROM sales_order_lines WHERE id = ?").get(l.source_line_id)
+                    : null;
+                const qty = Number(l.qty || 0);
+                const sourceQty = Number(sourceLine?.quantity ?? sourceLine?.qty ?? qty) || qty || 1;
+                const unitPrice = Number(sourceLine?.unit_price ?? sourceLine?.price ?? 0);
+                const sourceDiscountAmount = Number(sourceLine?.discount_amount || 0);
+                const discount = Number(sourceLine?.discount ?? (sourceQty * unitPrice > 0 ? (sourceDiscountAmount / (sourceQty * unitPrice)) * 100 : 0));
+                const taxRate = Number(sourceLine?.tax_rate || 0);
+                const lineNet = qty * unitPrice * (1 - discount / 100);
+                const discountAmount = qty * unitPrice * (discount / 100);
+                const taxAmount = lineNet * taxRate / 100;
+                const netTotal = lineNet + taxAmount;
+                subtotal += lineNet;
+                taxTotal += taxAmount;
+                grandTotal += netTotal;
                 insertInvLine.run({
                     id: uuidv4(),
                     invoice_id: invoiceId,
+                    line_no: index + 1,
                     item_id: l.item_id,
-                    description: item ? item.name_ar : '',
+                    description: sourceLine?.description || (item ? item.name_ar : ''),
                     unit_id: item?.base_unit_id || 'UNKNOWN',
-                    qty: Number(l.qty),
+                    qty,
+                    unit_price: unitPrice,
+                    discount,
+                    tax_rate: taxRate,
+                    total_price: lineNet,
+                    discount_amount: discountAmount,
+                    tax_amount: taxAmount,
+                    net_total: netTotal,
                     dispatch_line_id: l.id
                 });
+                if (l.source_line_id) {
+                    updateOrderLineInvoiceQty.run(qty, l.source_line_id);
+                }
+            }
+            database_1.db.prepare(`
+                UPDATE sales_invoices
+                SET subtotal = ?, tax_total = ?, grand_total = ?
+                WHERE id = ?
+            `).run(subtotal, taxTotal, grandTotal, invoiceId);
+            if (header.source_type === 'SALES_ORDER' && header.source_id) {
+                const orderLines = database_1.db.prepare(`
+                    SELECT quantity, invoiced_qty
+                    FROM sales_order_lines
+                    WHERE order_id = ?
+                `).all(header.source_id);
+                const allInvoiced = orderLines.length > 0 && orderLines.every((line) => Number(line.invoiced_qty || 0) >= Number(line.quantity || 0));
+                database_1.db.prepare(`
+                    UPDATE sales_orders
+                    SET status = ?
+                    WHERE id = ?
+                `).run(allInvoiced ? 'COMPLETED' : 'PARTIAL', header.source_id);
             }
             // 3) لا تقوم بخصم المخزون هنا، لأنه تم خصمه مسبقاً في postToPending !
             // 4) تحديث سند الإرسال إلى مرحل وربطه بالفاتورة
@@ -348,3 +463,4 @@ class DispatchService {
     }
 }
 exports.DispatchService = DispatchService;
+DispatchService.initialized = false;

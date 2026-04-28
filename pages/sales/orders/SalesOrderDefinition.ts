@@ -1,4 +1,68 @@
+import React, { useState } from 'react';
 import { DocumentDefinition } from '../../../src/types/DocumentDefinition';
+
+const PENDING_STATUS = 'PENDING_APPROVAL_L1';
+
+async function workflowResult<T>(call: () => Promise<T>) {
+    try {
+        return { ok: true, data: await call() };
+    } catch (error: any) {
+        return { ok: false, error: { message: String(error?.message || error || 'Workflow failed') } };
+    }
+}
+
+function SalesOrderWorkflowPanel(context: any) {
+    const { docId, header } = context;
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState('');
+    const status = String(header?.status || 'DRAFT').toUpperCase();
+    const canDispatch = ['CONFIRMED', 'PARTIAL', PENDING_STATUS].includes(status);
+
+    if (!docId || !canDispatch) return null;
+
+    const convert = async () => {
+        if (!docId || busy) return;
+        setBusy(true);
+        setMessage('');
+        try {
+            const result = await (window as any).electronAPI?.salesWorkflow?.convertOrderToDispatch?.({
+                orderId: docId,
+                warehouseId: header?.warehouse_id || header?.from_warehouse_id || null,
+                userId: 'admin',
+            });
+            const targetId = String(result?.targetDocumentId || '');
+            setMessage('تم إنشاء سند إرسال للطلبية');
+            if (targetId) {
+                window.location.hash = `/inventory/dispatch/${targetId}`;
+            }
+        } catch (error: any) {
+            setMessage(String(error?.message || 'تعذر إنشاء سند الإرسال'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return React.createElement(
+        'div',
+        { className: 'mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3' },
+        React.createElement('div', { className: 'text-sm font-semibold text-emerald-800' }, 'الطلبية عالقة للتجهيز'),
+        React.createElement(
+            'div',
+            { className: 'flex flex-wrap items-center gap-2' },
+            message ? React.createElement('span', { className: 'text-xs font-medium text-slate-600' }, message) : null,
+            React.createElement(
+                'button',
+                {
+                    type: 'button',
+                    disabled: busy,
+                    onClick: convert,
+                    className: 'rounded-lg bg-emerald-700 px-3 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60',
+                },
+                busy ? 'جاري الإنشاء...' : 'إنشاء سند إرسال',
+            ),
+        ),
+    );
+}
 
 const frameworkClient = {
     list: (params: any) => (window as any).electronAPI?.framework.list('salesOrders', params),
@@ -6,7 +70,9 @@ const frameworkClient = {
     createDraft: (userId?: string) => (window as any).electronAPI?.framework.createDraft('salesOrders', userId),
     save: (params: any) => (window as any).electronAPI?.framework.save('salesOrders', params),
     validate: (id: string) => (window as any).electronAPI?.framework.validate('salesOrders', id),
-    postOrSubmit: (params: any) => (window as any).electronAPI?.framework.postOrSubmit('salesOrders', params),
+    postOrSubmit: (params: any) => workflowResult(() =>
+        (window as any).electronAPI?.salesWorkflow?.postOrderToPending?.(params.id, params.userId || 'admin')
+    ),
     reopenRejected: (params: any) => (window as any).electronAPI?.framework.reopenRejected('salesOrders', params)
 };
 
@@ -24,6 +90,19 @@ export const SalesOrderDefinition: DocumentDefinition<any, any> = {
 
     client: frameworkClient,
 
+    statusRules: {
+        editable: ['DRAFT', 'REJECTED'],
+        postable: ['DRAFT', 'REJECTED'],
+        voidable: [],
+        transitions: {
+            DRAFT: ['CONFIRMED'],
+            REJECTED: ['CONFIRMED'],
+            CONFIRMED: ['PARTIAL', 'COMPLETED'],
+            PARTIAL: ['COMPLETED'],
+            COMPLETED: [],
+        },
+    },
+
     listColumns: [
         { key: 'invoice_no', label: 'رقم الطلبية', width: 120, align: 'right' },
         { key: 'doc_date', label: 'التاريخ', width: 120, align: 'right' },
@@ -35,6 +114,8 @@ export const SalesOrderDefinition: DocumentDefinition<any, any> = {
         { key: 'invoice_no', label: 'رقم الطلبية', type: 'readonly', span: 1 },
         { key: 'doc_date', label: 'التاريخ', type: 'date', span: 1 },
         { key: 'customer_id', label: 'العميل', type: 'text', lookupKey: 'salesInvoices:searchCustomers', span: 1 },
+        { key: 'warehouse_id', label: 'المستودع', type: 'select', span: 1 },
+        { key: 'delivery_date', label: 'تاريخ التسليم', type: 'date', span: 1 },
         { key: 'notes', label: 'شروط التسليم / ملاحظات', type: 'textarea', span: 2 },
     ],
 
@@ -116,5 +197,7 @@ export const SalesOrderDefinition: DocumentDefinition<any, any> = {
             tax_total,
             grand_total: subtotal + tax_total
         };
-    }
+    },
+
+    renderBeforeLines: (context) => React.createElement(SalesOrderWorkflowPanel, context),
 };

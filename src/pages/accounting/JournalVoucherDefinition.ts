@@ -1,5 +1,7 @@
+import React from 'react';
 import { journalVoucherClient } from '../../lib/journalVoucherClient';
 import { DocumentDefinition } from '../../types/DocumentDefinition';
+import { FixedAssetPurchasePanel } from './components/FixedAssetPurchasePanel';
 
 function toNumber(value: unknown, fallback = 0): number {
     const parsed = Number(value);
@@ -218,4 +220,6 @@ export const JournalVoucherDefinition: DocumentDefinition<any, any> = {
         fieldKey: 'account_code_lookup',
         type: 'account',
     },
+
+    renderBeforeLines: (context) => React.createElement(FixedAssetPurchasePanel, context),
 };

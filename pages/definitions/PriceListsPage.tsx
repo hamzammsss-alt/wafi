@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Tag, Plus, Search, Edit, Trash2, X, Save, ArrowLeft, Package, DollarSign } from 'lucide-react';
+import { Tag, Plus, Search, Edit, Trash2, X, Save, ArrowLeft, Package, DollarSign, CheckCircle2 } from 'lucide-react';
 import { WorkspaceHeader } from '../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../src/components/definitions/DefinitionMasterList';
 
 export const PriceListsPage: React.FC = () => {
     const [priceLists, setPriceLists] = useState<any[]>([]);
@@ -72,7 +73,7 @@ export const PriceListsPage: React.FC = () => {
     };
 
     const handleDeleteList = async (id: string) => {
-        if (!confirm('Are you sure?')) return;
+        if (!confirm('هل أنت متأكد من حذف قائمة الأسعار؟')) return;
         await (window as any).electronAPI.partner.deletePriceList(id);
         loadData();
         if (selectedListId === id) setSelectedListId(null);
@@ -91,7 +92,7 @@ export const PriceListsPage: React.FC = () => {
     };
 
     const handleDeleteItem = async (id: string) => {
-        if (!confirm('Remove this item?')) return;
+        if (!confirm('هل تريد حذف هذا الصنف من القائمة؟')) return;
         await (window as any).electronAPI.partner.deletePriceListItem(id);
         loadListItems(selectedListId!);
     };
@@ -104,6 +105,194 @@ export const PriceListsPage: React.FC = () => {
     useCreateIntent(openCreate);
 
     const filteredLists = priceLists.filter(p => p.name_ar.includes(searchTerm));
+
+    const openListEdit = (list: any) => {
+        setCurrentList(list);
+        setIsModalOpen(true);
+    };
+
+    const openItemEdit = (item: any) => {
+        setCurrentItem(item);
+        setShowItemModal(true);
+    };
+
+    const handleDeleteListRows = async (rows: any[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف قائمة الأسعار؟' : `هل أنت متأكد من حذف ${rows.length} قوائم أسعار؟`)) return;
+
+        for (const row of rows) {
+            await (window as any).electronAPI.partner.deletePriceList(row.id);
+        }
+        await loadData();
+        if (rows.some((row) => row.id === selectedListId)) setSelectedListId(null);
+    };
+
+    const handleDeleteItemRows = async (rows: any[]) => {
+        if (!selectedListId || rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل تريد حذف هذا الصنف من القائمة؟' : `هل تريد حذف ${rows.length} أصناف من القائمة؟`)) return;
+
+        for (const row of rows) {
+            await (window as any).electronAPI.partner.deletePriceListItem(row.id);
+        }
+        await loadListItems(selectedListId);
+    };
+
+    const priceListColumns = React.useMemo<DefinitionListColumn<any>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'اسم القائمة',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (list) => `${list.name_ar || ''} ${list.name_en || ''} ${list.currency_id || ''}`,
+            renderCell: (list) => (
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{list.name_ar || '-'}</div>
+                    <div className="truncate text-xs text-slate-400">{list.name_en || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'currency_id',
+            label: 'العملة',
+            type: 'enum',
+            filterType: 'enum',
+            width: 130,
+            defaultVisible: true,
+            options: [
+                { value: 'ILS', label: 'شيكل' },
+                { value: 'USD', label: 'دولار' },
+                { value: 'JOD', label: 'دينار' },
+            ],
+            getDisplayValue: (list) => list.currency_id || '-',
+            renderCell: (list) => (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                    <DollarSign size={12} />
+                    {list.currency_id || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'items_count',
+            label: 'عدد الأصناف',
+            type: 'number',
+            filterType: 'number',
+            width: 130,
+            defaultVisible: false,
+            getValue: (list) => Number(list.items_count || list.itemsCount || 0),
+            getDisplayValue: (list) => Number(list.items_count || list.itemsCount || 0).toLocaleString('en-US'),
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 130,
+            defaultVisible: true,
+            getValue: (list) => (list.is_active ? 1 : 0),
+            renderCell: (list) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${list.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {list.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {list.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 150,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (list) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => setSelectedListId(list.id)} className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50" title="فتح الأصناف">
+                        <Package size={18} />
+                    </button>
+                    <button onClick={() => openListEdit(list)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDeleteList(list.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [priceLists, selectedListId]);
+
+    const priceListItemColumns = React.useMemo<DefinitionListColumn<any>[]>(() => [
+        {
+            key: 'item_code',
+            label: 'رقم الصنف',
+            width: 150,
+            defaultVisible: true,
+            getDisplayValue: (item) => item.item_code || '-',
+            renderCell: (item) => item.item_code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{item.item_code}</span>
+            ) : '-',
+        },
+        {
+            key: 'item_name',
+            label: 'اسم الصنف',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (item) => `${item.item_code || ''} ${item.item_name || ''} ${item.unit_name || ''}`,
+            renderCell: (item) => <span className="font-bold text-slate-800">{item.item_name || '-'}</span>,
+        },
+        {
+            key: 'unit_name',
+            label: 'الوحدة',
+            width: 140,
+            defaultVisible: true,
+            getDisplayValue: (item) => item.unit_name || '-',
+        },
+        {
+            key: 'price',
+            label: 'السعر',
+            type: 'number',
+            filterType: 'number',
+            width: 140,
+            defaultVisible: true,
+            getValue: (item) => Number(item.price || 0),
+            getDisplayValue: (item) => Number(item.price || 0).toLocaleString('en-US'),
+            renderCell: (item) => (
+                <span className="font-mono font-bold text-emerald-700">
+                    {Number(item.price || 0).toLocaleString('en-US')}
+                </span>
+            ),
+        },
+        {
+            key: 'min_quantity',
+            label: 'أقل كمية',
+            type: 'number',
+            filterType: 'number',
+            width: 130,
+            defaultVisible: true,
+            getValue: (item) => Number(item.min_quantity || 0),
+            getDisplayValue: (item) => Number(item.min_quantity || 0).toLocaleString('en-US'),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (item) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => openItemEdit(item)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDeleteItem(item.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [listItems, selectedListId]);
 
     if (selectedListId) {
         // Items View
@@ -146,6 +335,23 @@ export const PriceListsPage: React.FC = () => {
                         </div>
                     </div>
 
+                    <DefinitionMasterList
+                        screenKey={`definitions.price-list-items.${selectedListId}`}
+                        data={listItems}
+                        loading={isLoading}
+                        columns={priceListItemColumns}
+                        rowKey={(item) => String(item.id)}
+                        searchPlaceholder="بحث في أصناف القائمة..."
+                        emptyMessage="لا توجد أصناف مضافة في هذه القائمة"
+                        createLabel="إضافة صنف"
+                        onCreate={() => { setCurrentItem({ price: 0, min_quantity: 1 }); setShowItemModal(true); }}
+                        onEdit={openItemEdit}
+                        onDelete={handleDeleteItemRows}
+                        onRefresh={() => loadListItems(selectedListId)}
+                        defaultSort={{ key: 'item_code', direction: 'asc' }}
+                    />
+
+                    {false && (
                     <div className="card overflow-hidden">
                         <table className="dense-table w-full text-right">
                             <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-200">
@@ -178,6 +384,7 @@ export const PriceListsPage: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
+                    )}
                 </div>
 
                 {/* Item Modal */}
@@ -285,6 +492,24 @@ export const PriceListsPage: React.FC = () => {
                     </button>
                 </div>
 
+                <DefinitionMasterList
+                    screenKey="definitions.price-lists"
+                    data={filteredLists}
+                    loading={isLoading}
+                    columns={priceListColumns}
+                    rowKey={(list) => String(list.id)}
+                    searchPlaceholder="بحث عن قائمة أسعار..."
+                    emptyMessage="لا توجد قوائم أسعار مطابقة للمعايير الحالية"
+                    createLabel="قائمة جديدة"
+                    onCreate={openCreate}
+                    onEdit={openListEdit}
+                    onDelete={handleDeleteListRows}
+                    onRefresh={loadData}
+                    onRowDoubleClick={(list) => setSelectedListId(list.id)}
+                    defaultSort={{ key: 'name_ar', direction: 'asc' }}
+                />
+
+                {false && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredLists.map(list => (
                         <div key={list.id} className="card p-6 hover:shadow-md transition cursor-pointer" onClick={() => setSelectedListId(list.id)}>
@@ -309,6 +534,7 @@ export const PriceListsPage: React.FC = () => {
                         </div>
                     ))}
                 </div>
+                )}
             </div>
 
             {/* List Modal */}

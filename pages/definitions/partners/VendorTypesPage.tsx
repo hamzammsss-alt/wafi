@@ -14,6 +14,7 @@ import {
 import { VendorType } from '../../../types';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 export const VendorTypesPage = () => {
     const [types, setTypes] = useState<VendorType[]>([]);
@@ -133,6 +134,89 @@ export const VendorTypesPage = () => {
         t.code?.toLowerCase().includes(search.toLowerCase())
     );
 
+    const handleDeleteRows = async (rows: VendorType[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذا التصنيف؟' : `هل أنت متأكد من حذف ${rows.length} تصنيفات؟`)) return;
+
+        try {
+            for (const row of rows) {
+                await window.electronAPI.partner.deleteVendorType(row.id);
+            }
+            await loadTypes();
+        } catch (err) {
+            console.error(err);
+            alert('فشل في الحذف');
+        }
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<VendorType>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'اسم التصنيف',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (type) => `${type.name_ar || ''} ${type.name_en || ''} ${type.code || ''}`,
+            renderCell: (type) => (
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{type.name_ar || '-'}</div>
+                    <div className="truncate text-xs text-slate-400">{type.name_en || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (type) => type.code || '-',
+            renderCell: (type) => type.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{type.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'description',
+            label: 'ملاحظات',
+            width: 300,
+            defaultVisible: true,
+            getDisplayValue: (type) => type.description || '-',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 140,
+            defaultVisible: true,
+            getValue: (type) => (type.is_active ? 1 : 0),
+            renderCell: (type) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${type.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {type.is_active ? <CheckCircle2 size={12} /> : <X size={12} />}
+                    {type.is_active ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (type) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(type)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(type.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [types]);
+
     return (
         <div className="app-page" dir="rtl">
             <WorkspaceHeader
@@ -186,6 +270,24 @@ export const VendorTypesPage = () => {
                 </div>
             )}
 
+            <DefinitionMasterList
+                screenKey="definitions.vendor-types"
+                data={types}
+                loading={loading}
+                columns={columns}
+                rowKey={(type) => String(type.id)}
+                searchPlaceholder="بحث عن تصنيف مورد..."
+                emptyMessage="لا توجد تصنيفات موردين مطابقة للمعايير الحالية"
+                createLabel="إضافة تصنيف جديد"
+                onCreate={openCreate}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadTypes}
+                defaultSort={{ key: 'name_ar', direction: 'asc' }}
+            />
+
+            {false && (
+            <>
             {/* Search & Content */}
             <div className="card overflow-hidden">
                 {/* Toolbar */}
@@ -281,6 +383,8 @@ export const VendorTypesPage = () => {
                     </div>
                 )}
             </div>
+            </>
+            )}
 
             {/* Add/Edit Modal */}
             {isAdding && (

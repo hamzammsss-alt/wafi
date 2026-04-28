@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Layers, Plus, Search, Edit2, Trash2, X } from 'lucide-react';
 import { Account } from '../../../types';
+import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 interface AssetCategory {
     id: string;
@@ -17,6 +19,7 @@ interface AssetCategory {
 export const AssetCategories = () => {
     const [categories, setCategories] = useState<AssetCategory[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
+    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [editingItem, setEditingItem] = useState<AssetCategory | null>(null);
@@ -34,12 +37,17 @@ export const AssetCategories = () => {
         // @ts-ignore
         if (window.electronAPI && window.electronAPI.getAssetCategories) {
             try {
+                setLoading(true);
                 // @ts-ignore
                 const data = await window.electronAPI.getAssetCategories();
-                setCategories(data);
+                setCategories(Array.isArray(data) ? data : []);
             } catch (error) {
                 console.error("Failed to load categories", error);
+            } finally {
+                setLoading(false);
             }
+        } else {
+            setLoading(false);
         }
     };
 
@@ -93,6 +101,13 @@ export const AssetCategories = () => {
 
     const filtered = categories.filter(c => c.name_ar.includes(searchTerm) || c.code.includes(searchTerm));
 
+    const accountName = (id?: string) => {
+        if (!id) return '-';
+        const account = accounts.find((item) => item.id === id);
+        if (!account) return '-';
+        return `${account.code || account.account_code || ''} - ${account.name_ar || account.name || ''}`.trim();
+    };
+
     // Helper to filter accounts for dropdowns
     // Use lower case check for safety
     // Helper to filter accounts for dropdowns
@@ -126,8 +141,145 @@ export const AssetCategories = () => {
         setShowModal(true);
     };
 
+    const handleDeleteRows = async (rows: AssetCategory[]) => {
+        if (rows.length === 0) return;
+        if (!confirm(rows.length === 1 ? 'هل أنت متأكد من حذف هذه المجموعة؟' : `هل أنت متأكد من حذف ${rows.length} مجموعات؟`)) return;
+        setCategories((prev) => prev.filter((category) => !rows.some((row) => row.id === category.id)));
+    };
+
+    const columns = React.useMemo<DefinitionListColumn<AssetCategory>[]>(() => [
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (item) => item.code || '-',
+            renderCell: (item) => item.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{item.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'name_ar',
+            label: 'المجموعة',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (item) => `${item.name_ar || ''} ${item.name_en || ''} ${item.code || ''}`,
+            renderCell: (item) => (
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{item.name_ar || '-'}</div>
+                    <div className="truncate text-xs text-slate-400">{item.name_en || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'depreciation_method',
+            label: 'طريقة الإهلاك',
+            type: 'enum',
+            filterType: 'enum',
+            width: 170,
+            defaultVisible: true,
+            options: [
+                { value: 'Straight Line', label: 'القسط الثابت' },
+                { value: 'Declining Balance', label: 'القسط المتناقص' },
+            ],
+            getDisplayValue: (item) => item.depreciation_method === 'Straight Line' ? 'القسط الثابت' : item.depreciation_method || '-',
+        },
+        {
+            key: 'depreciation_rate',
+            label: 'نسبة الإهلاك',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (item) => Number(item.depreciation_rate || 0),
+            getDisplayValue: (item) => `${Number(item.depreciation_rate || 0)}%`,
+            renderCell: (item) => <span className="font-mono font-bold text-slate-800">{Number(item.depreciation_rate || 0)}%</span>,
+        },
+        {
+            key: 'asset_account_id',
+            label: 'حساب الأصل',
+            width: 240,
+            defaultVisible: false,
+            getValue: (item) => item.asset_account_id || '',
+            getDisplayValue: (item) => accountName(item.asset_account_id),
+        },
+        {
+            key: 'accumulated_depreciation_account_id',
+            label: 'حساب مجمع الإهلاك',
+            width: 240,
+            defaultVisible: false,
+            getValue: (item) => item.accumulated_depreciation_account_id || '',
+            getDisplayValue: (item) => accountName(item.accumulated_depreciation_account_id),
+        },
+        {
+            key: 'depreciation_expense_account_id',
+            label: 'حساب مصروف الإهلاك',
+            width: 240,
+            defaultVisible: false,
+            getValue: (item) => item.depreciation_expense_account_id || '',
+            getDisplayValue: (item) => accountName(item.depreciation_expense_account_id),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (item) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => handleEdit(item)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit2 size={18} />
+                    </button>
+                    <button onClick={() => handleDelete(item.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [accounts, categories]);
+
     return (
-        <div className="p-8 bg-gray-50 min-h-screen" dir="rtl">
+        <div className="app-page" dir="rtl">
+            <WorkspaceHeader
+                icon={<Layers size={24} />}
+                title="مجموعات الأصول الثابتة"
+                subtitle="تعريف وتصنيف الأصول الثابتة ونسب الإهلاك بنفس تجربة الجداول الموحدة."
+                badges={[
+                    { label: `الإجمالي ${categories.length}`, tone: 'warning' },
+                    { label: `المعروض ${filtered.length}`, tone: 'info' },
+                ]}
+                actions={(
+                    <button
+                        onClick={handleNewGroup}
+                        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-indigo-700"
+                    >
+                        <Plus size={18} />
+                        مجموعة جديدة
+                    </button>
+                )}
+                className="mb-6"
+            />
+
+            <DefinitionMasterList
+                screenKey="definitions.asset-categories"
+                data={filtered}
+                loading={loading}
+                columns={columns}
+                rowKey={(item) => String(item.id)}
+                searchPlaceholder="بحث عن مجموعة أصول..."
+                emptyMessage="لا توجد مجموعات أصول مطابقة للمعايير الحالية"
+                createLabel="مجموعة جديدة"
+                onCreate={handleNewGroup}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadCategories}
+                defaultSort={{ key: 'code', direction: 'asc' }}
+            />
+
+            {false && (
             <div className="max-w-6xl mx-auto">
                 <div className="flex items-center justify-between mb-8">
                     <div>
@@ -204,6 +356,7 @@ export const AssetCategories = () => {
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Modal */}
             {showModal && (

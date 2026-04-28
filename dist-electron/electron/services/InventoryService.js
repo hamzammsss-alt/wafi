@@ -545,6 +545,8 @@ class InventoryService {
     }
     // --- Items (Complex 7-Tabs) ---
     static getItems() {
+        InventoryService.ensureItemCoreColumns();
+        InventoryService.ensureItemPricingSchema();
         let items = [];
         try {
             items = database_1.db.prepare(`
@@ -586,7 +588,10 @@ class InventoryService {
             ...i,
             cost_price: toNumber(i.cost_price),
             sale_price: toNumber(i.sale_price),
+            wholesale_price: toNumber(i.wholesale_price),
             min_price: toNumber(i.min_price),
+            floor_price: toNumber(i.floor_price),
+            standard_cost: toNumber(i.standard_cost),
             is_active: !!i.is_active,
             tax_included: !!i.tax_included,
             has_expiry: !!i.has_expiry,
@@ -594,6 +599,8 @@ class InventoryService {
         }));
     }
     static getItemDetails(id) {
+        InventoryService.ensureItemCoreColumns();
+        InventoryService.ensureItemPricingSchema();
         const item = database_1.db.prepare('SELECT * FROM items WHERE id = ?').get(id);
         if (!item)
             return null;
@@ -611,12 +618,29 @@ class InventoryService {
         }
         try {
             prices = database_1.db.prepare(`
-                SELECT ip.*, pl.name_ar as list_name, u.name_ar as unit_name
-                FROM item_prices ip
-                JOIN price_lists pl ON ip.price_list_id = pl.id
-                JOIN units u ON ip.unit_id = u.id
-                WHERE ip.item_id = ?
-            `).all(id);
+                SELECT rows.*, pl.name_ar as list_name, u.name_ar as unit_name
+                FROM (
+                    SELECT pli.id, pli.price_list_id, pli.item_id, pli.unit_id, pli.price, COALESCE(pli.min_quantity, 1) AS min_quantity
+                    FROM price_list_items pli
+                    WHERE pli.item_id = ?
+
+                    UNION ALL
+
+                    SELECT ip.id, ip.price_list_id, ip.item_id, ip.unit_id, ip.price, 1 AS min_quantity
+                    FROM item_prices ip
+                    WHERE ip.item_id = ?
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM price_list_items pli
+                          WHERE pli.price_list_id = ip.price_list_id
+                            AND pli.item_id = ip.item_id
+                            AND pli.unit_id = ip.unit_id
+                      )
+                ) rows
+                JOIN price_lists pl ON rows.price_list_id = pl.id
+                JOIN units u ON rows.unit_id = u.id
+                ORDER BY pl.name_ar, rows.min_quantity
+            `).all(id, id);
         }
         catch (e) {
             console.error('Error fetching prices for item ' + id, e);
@@ -676,6 +700,144 @@ class InventoryService {
         const cols = database_1.db.prepare(`PRAGMA table_info('${tableName}')`).all();
         return new Set((cols || []).map((c) => String(c.name)));
     }
+    static ensureItemCoreColumns() {
+        const itemColumns = InventoryService.getTableColumnSet('items');
+        const missingColumns = [
+            ['standard_cost', 'REAL DEFAULT 0'],
+            ['floor_price', 'REAL DEFAULT 0'],
+            ['wholesale_price', 'REAL DEFAULT 0'],
+        ];
+        for (const [column, definition] of missingColumns) {
+            if (itemColumns.has(column))
+                continue;
+            try {
+                database_1.db.prepare(`ALTER TABLE items ADD COLUMN ${column} ${definition}`).run();
+                itemColumns.add(column);
+            }
+            catch (error) {
+                console.warn(`[InventoryService] Unable to add items.${column}`, error);
+            }
+        }
+    }
+    static ensureItemPricingSchema() {
+        database_1.db.exec(`
+            CREATE TABLE IF NOT EXISTS price_lists (
+                id TEXT PRIMARY KEY,
+                name_ar TEXT NOT NULL,
+                name_en TEXT,
+                currency_id TEXT,
+                is_active INTEGER DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS item_prices (
+                id TEXT PRIMARY KEY,
+                price_list_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                unit_id TEXT NOT NULL,
+                price REAL DEFAULT 0,
+                FOREIGN KEY (price_list_id) REFERENCES price_lists(id),
+                FOREIGN KEY (item_id) REFERENCES items(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS price_list_items (
+                id TEXT PRIMARY KEY,
+                price_list_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                unit_id TEXT NOT NULL,
+                price REAL NOT NULL DEFAULT 0,
+                min_quantity REAL DEFAULT 1,
+                FOREIGN KEY (price_list_id) REFERENCES price_lists(id) ON DELETE CASCADE,
+                FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+            );
+        `);
+        const insertList = database_1.db.prepare(`
+            INSERT OR IGNORE INTO price_lists (id, name_ar, name_en, currency_id, is_active)
+            VALUES (@id, @name_ar, @name_en, @currency_id, 1)
+        `);
+        for (const list of InventoryService.DEFAULT_PRICE_LISTS) {
+            insertList.run(list);
+        }
+    }
+    static toFiniteNumber(value, fallback = 0) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    }
+    static buildItemPriceRows(item, itemId, baseUnitId) {
+        const rows = [];
+        const seen = new Set();
+        const addRow = (row) => {
+            const priceListId = String(row?.price_list_id || '').trim();
+            const unitId = String(row?.unit_id || baseUnitId || '').trim();
+            if (!priceListId || !unitId)
+                return;
+            const minQuantity = Math.max(InventoryService.toFiniteNumber(row?.min_quantity, 1), 1);
+            const key = `${priceListId}|${unitId}|${minQuantity}`;
+            if (seen.has(key))
+                return;
+            seen.add(key);
+            rows.push({
+                price_list_id: priceListId,
+                item_id: itemId,
+                unit_id: unitId,
+                price: InventoryService.toFiniteNumber(row?.price, 0),
+                min_quantity: minQuantity,
+            });
+        };
+        if (Array.isArray(item?.prices)) {
+            for (const row of item.prices)
+                addRow(row);
+        }
+        if (baseUnitId) {
+            addRow({
+                price_list_id: 'PL_PURCHASE',
+                unit_id: baseUnitId,
+                price: item?.cost_price,
+                min_quantity: 1,
+            });
+            addRow({
+                price_list_id: 'PL_WHOLESALE',
+                unit_id: baseUnitId,
+                price: InventoryService.toFiniteNumber(item?.wholesale_price, 0) || InventoryService.toFiniteNumber(item?.sale_price, 0),
+                min_quantity: 1,
+            });
+            addRow({
+                price_list_id: 'PL_RETAIL',
+                unit_id: baseUnitId,
+                price: item?.sale_price,
+                min_quantity: 1,
+            });
+        }
+        return rows;
+    }
+    static saveItemPriceRows(itemId, item, baseUnitId) {
+        InventoryService.ensureItemPricingSchema();
+        const rows = InventoryService.buildItemPriceRows(item, itemId, baseUnitId);
+        if (!rows.length)
+            return;
+        const insertItemPrice = database_1.db.prepare(`
+            INSERT INTO item_prices (id, price_list_id, item_id, unit_id, price)
+            VALUES (@id, @price_list_id, @item_id, @unit_id, @price)
+        `);
+        const insertPriceListItem = database_1.db.prepare(`
+            INSERT INTO price_list_items (id, price_list_id, item_id, unit_id, price, min_quantity)
+            VALUES (@id, @price_list_id, @item_id, @unit_id, @price, @min_quantity)
+        `);
+        const mirrored = new Set();
+        for (const row of rows) {
+            insertPriceListItem.run({
+                id: (0, uuid_1.v4)(),
+                ...row,
+            });
+            const mirrorKey = `${row.price_list_id}|${row.item_id}|${row.unit_id}`;
+            if (mirrored.has(mirrorKey))
+                continue;
+            mirrored.add(mirrorKey);
+            insertItemPrice.run({
+                id: (0, uuid_1.v4)(),
+                ...row,
+            });
+        }
+    }
     static resolveBaseUnitId(baseUnitId) {
         if (baseUnitId)
             return baseUnitId;
@@ -692,6 +854,8 @@ class InventoryService {
         return seededUnit?.id || null;
     }
     static createItem(item) {
+        InventoryService.ensureItemCoreColumns();
+        InventoryService.ensureItemPricingSchema();
         const resolvedBaseUnitId = InventoryService.resolveBaseUnitId(item.base_unit_id);
         if (!resolvedBaseUnitId) {
             throw new Error('تعذر تحديد الوحدة الأساسية. الرجاء إضافة وحدة قياس أولاً.');
@@ -711,6 +875,7 @@ class InventoryService {
             standard_cost: String(item.standard_cost || 0),
             costing_method: item.costing_method || 'WEIGHTED_AVG',
             sale_price: String(item.sale_price || 0),
+            wholesale_price: String(item.wholesale_price || 0),
             min_price: String(item.min_price || 0),
             floor_price: String(item.floor_price || 0),
             min_stock_level: item.min_stock ?? item.min_stock_level ?? 0,
@@ -762,21 +927,7 @@ class InventoryService {
                     });
                 }
             }
-            if (item.prices && item.prices.length > 0) {
-                const insertPrice = database_1.db.prepare(`
-                   INSERT INTO item_prices (id, price_list_id, item_id, unit_id, price)
-                   VALUES (@id, @price_list_id, @item_id, @unit_id, @price)
-                `);
-                for (const p of item.prices) {
-                    insertPrice.run({
-                        id: (0, uuid_1.v4)(),
-                        price_list_id: p.price_list_id,
-                        item_id: newItem.id,
-                        unit_id: p.unit_id,
-                        price: p.price
-                    });
-                }
-            }
+            InventoryService.saveItemPriceRows(newItem.id, item, resolvedBaseUnitId);
             if (item.kit_items && item.kit_items.length > 0) {
                 const insertKit = database_1.db.prepare(`
                     INSERT INTO item_kits (parent_item_id, child_item_id, quantity)
@@ -851,6 +1002,8 @@ class InventoryService {
         return { success: true };
     }
     static updateItem(item) {
+        InventoryService.ensureItemCoreColumns();
+        InventoryService.ensureItemPricingSchema();
         const updateTx = database_1.db.transaction(() => {
             const id = item.id;
             if (!id)
@@ -871,6 +1024,7 @@ class InventoryService {
                 standard_cost: String(item.standard_cost || 0),
                 costing_method: item.costing_method || 'WEIGHTED_AVG',
                 sale_price: String(item.sale_price || 0),
+                wholesale_price: String(item.wholesale_price || 0),
                 min_price: String(item.min_price || 0),
                 floor_price: String(item.floor_price || 0),
                 min_stock_level: item.min_stock ?? item.min_stock_level ?? 0,
@@ -899,6 +1053,7 @@ class InventoryService {
             database_1.db.prepare(`UPDATE items SET ${setSql} WHERE id = @id`).run(finalPayload);
             database_1.db.prepare('DELETE FROM item_units WHERE item_id = ?').run(id);
             database_1.db.prepare('DELETE FROM item_prices WHERE item_id = ?').run(id);
+            database_1.db.prepare('DELETE FROM price_list_items WHERE item_id = ?').run(id);
             database_1.db.prepare('DELETE FROM item_kits WHERE parent_item_id = ?').run(id);
             database_1.db.prepare('DELETE FROM item_alternatives WHERE item_id = ?').run(id);
             if (item.additional_units && item.additional_units.length > 0) {
@@ -917,21 +1072,7 @@ class InventoryService {
                     });
                 }
             }
-            if (item.prices && item.prices.length > 0) {
-                const insertPrice = database_1.db.prepare(`
-                   INSERT INTO item_prices (id, price_list_id, item_id, unit_id, price)
-                   VALUES (@id, @price_list_id, @item_id, @unit_id, @price)
-                `);
-                for (const p of item.prices) {
-                    insertPrice.run({
-                        id: (0, uuid_1.v4)(),
-                        price_list_id: p.price_list_id,
-                        item_id: id,
-                        unit_id: p.unit_id,
-                        price: p.price
-                    });
-                }
-            }
+            InventoryService.saveItemPriceRows(id, item, resolvedBaseUnitId);
             if (item.kit_items && item.kit_items.length > 0) {
                 const insertKit = database_1.db.prepare(`
                     INSERT INTO item_kits (parent_item_id, child_item_id, quantity)
@@ -1874,3 +2015,8 @@ class InventoryService {
     }
 }
 exports.InventoryService = InventoryService;
+InventoryService.DEFAULT_PRICE_LISTS = [
+    { id: 'PL_PURCHASE', name_ar: 'سعر الشراء', name_en: 'Purchase Price', currency_id: 'ILS' },
+    { id: 'PL_WHOLESALE', name_ar: 'سعر البيع جملة', name_en: 'Wholesale Sale Price', currency_id: 'ILS' },
+    { id: 'PL_RETAIL', name_ar: 'سعر البيع مفرق', name_en: 'Retail Sale Price', currency_id: 'ILS' },
+];

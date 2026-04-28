@@ -370,6 +370,12 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
         getAll: () => invoke('dispatch:getAll'),
         getById: (id) => invoke('dispatch:getById', id),
     },
+    salesWorkflow: {
+        postQuotationToPending: (id, userId) => invoke('salesWorkflow:postQuotationToPending', id, userId),
+        convertQuotationToOrder: (payload) => invoke('salesWorkflow:convertQuotationToOrder', payload),
+        postOrderToPending: (id, userId) => invoke('salesWorkflow:postOrderToPending', id, userId),
+        convertOrderToDispatch: (payload) => invoke('salesWorkflow:convertOrderToDispatch', payload),
+    },
     hr: {
         // Departments
         getDepartments: () => invoke('hr-get-departments'),
@@ -774,7 +780,8 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
         void: (params) => invoke('salesInvoices:void', params),
         reopenRejected: (params) => invoke('salesInvoices:reopenRejected', params),
         searchCustomers: (search) => invoke('salesInvoices:searchCustomers', search),
-        searchItems: (search) => invoke('salesInvoices:searchItems', search),
+        searchItems: (search, pricingContext) => invoke('salesInvoices:searchItems', search, pricingContext),
+        resolveItemPrice: (input) => invoke('salesInvoices:resolveItemPrice', input),
     },
     salesQuotation: {
         create: (payload) => invokeStrict('salesQuotation.create', payload),

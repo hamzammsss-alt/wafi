@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 interface CreditPolicyRow {
     id: string;
@@ -193,6 +194,165 @@ export const CreditPoliciesPage: React.FC = () => {
         return item?.code || item?.name_ar || id;
     };
 
+    const handleDeleteRows = async (selectedRows: CreditPolicyRow[]) => {
+        if (selectedRows.length === 0) return;
+        if (!confirm(selectedRows.length === 1 ? 'هل تريد حذف سياسة الائتمان؟' : `هل تريد حذف ${selectedRows.length} سياسات ائتمان؟`)) return;
+
+        try {
+            for (const row of selectedRows) {
+                await window.electronAPI.partner.deleteCreditPolicy(row.id);
+            }
+            await loadRows();
+        } catch (err: any) {
+            alert(err?.message || 'تعذر حذف السياسات المحددة');
+        }
+    };
+
+    const currencyOptions = React.useMemo(
+        () => [
+            { value: '', label: 'افتراضي' },
+            ...currencies.map((currency) => ({
+                value: String(currency.id || currency.code || ''),
+                label: String(currency.code || currency.name_ar || currency.id || ''),
+            })),
+        ],
+        [currencies],
+    );
+
+    const columns = React.useMemo<DefinitionListColumn<CreditPolicyRow>[]>(() => [
+        {
+            key: 'name_ar',
+            label: 'اسم السياسة',
+            width: 260,
+            defaultVisible: true,
+            getSearchValue: (row) => `${row.name_ar || ''} ${row.name_en || ''} ${row.name_he || ''} ${row.code || ''}`,
+            renderCell: (row) => (
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{row.name_ar || '-'}</div>
+                    <div className="truncate text-xs text-slate-400">{row.name_en || row.name_he || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 120,
+            defaultVisible: true,
+            getDisplayValue: (row) => row.code || '-',
+            renderCell: (row) => row.code ? (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600">{row.code}</span>
+            ) : '-',
+        },
+        {
+            key: 'currency_id',
+            label: 'العملة',
+            type: 'enum',
+            filterType: 'lookup',
+            options: currencyOptions,
+            width: 130,
+            defaultVisible: true,
+            getValue: (row) => row.currency_id || '',
+            getDisplayValue: (row) => currencyName(row.currency_id),
+        },
+        {
+            key: 'max_credit_limit',
+            label: 'حد الائتمان',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (row) => Number(row.max_credit_limit || 0),
+            getDisplayValue: (row) => Number(row.max_credit_limit || 0).toLocaleString('en-US'),
+            renderCell: (row) => (
+                <span className="font-mono font-semibold text-slate-800">
+                    {Number(row.max_credit_limit || 0).toLocaleString('en-US')}
+                </span>
+            ),
+        },
+        {
+            key: 'max_checks_limit',
+            label: 'حد الشيكات',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (row) => Number(row.max_checks_limit || 0),
+            getDisplayValue: (row) => Number(row.max_checks_limit || 0).toLocaleString('en-US'),
+        },
+        {
+            key: 'facilitation_days',
+            label: 'التسهيلات',
+            type: 'number',
+            filterType: 'number',
+            width: 130,
+            defaultVisible: true,
+            getValue: (row) => Number(row.facilitation_days || 0),
+            getDisplayValue: (row) => `${Number(row.facilitation_days || 0)} يوم`,
+        },
+        {
+            key: 'allow_over_limit',
+            label: 'تجاوز الحد',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 130,
+            defaultVisible: true,
+            getValue: (row) => (toBool(row.allow_over_limit) ? 1 : 0),
+            renderCell: (row) => (
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${toBool(row.allow_over_limit) ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {toBool(row.allow_over_limit) ? 'مسموح' : 'غير مسموح'}
+                </span>
+            ),
+        },
+        {
+            key: 'check_validation_type',
+            label: 'فحص الشيك',
+            type: 'enum',
+            filterType: 'enum',
+            width: 140,
+            defaultVisible: false,
+            options: [
+                { value: 'NONE', label: 'بدون' },
+                { value: 'WARNING', label: 'تحذير' },
+                { value: 'BLOCK', label: 'منع' },
+            ],
+            getDisplayValue: (row) => row.check_validation_type === 'BLOCK' ? 'منع' : row.check_validation_type === 'WARNING' ? 'تحذير' : 'بدون',
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 130,
+            defaultVisible: true,
+            getValue: (row) => (toBool(row.is_active) ? 1 : 0),
+            renderCell: (row) => (
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${toBool(row.is_active) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {toBool(row.is_active) ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (row) => (
+                <div className="flex justify-center gap-2">
+                    <button onClick={() => openEdit(row)} className="rounded-lg p-2 text-blue-600 hover:bg-blue-50" title="تعديل">
+                        <Edit size={18} />
+                    </button>
+                    <button onClick={() => onDelete(row.id)} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="حذف">
+                        <Trash2 size={18} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [currencyOptions, currencies, rows]);
+
     const overrideFields: Array<{ key: keyof CreditPolicyRow; label: string }> = [
         { key: 'override_max_credit_limit', label: 'حد أقصى' },
         { key: 'override_max_checks_limit', label: 'حد أقصى للشيكات' },
@@ -249,6 +409,24 @@ export const CreditPoliciesPage: React.FC = () => {
                 </button>
             </div>
 
+            <DefinitionMasterList
+                screenKey="definitions.credit-policies"
+                data={rows}
+                loading={loading}
+                columns={columns}
+                rowKey={(row) => String(row.id)}
+                searchPlaceholder="بحث عن سياسة ائتمان..."
+                emptyMessage="لا توجد سياسات ائتمان مطابقة للمعايير الحالية"
+                createLabel="سياسة جديدة"
+                onCreate={openCreate}
+                onEdit={openEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadRows}
+                defaultSort={{ key: 'name_ar', direction: 'asc' }}
+            />
+
+            {false && (
+            <>
             <div className="card overflow-hidden">
                 <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-4 justify-between items-center">
                     <div className="relative w-full sm:w-96">
@@ -319,6 +497,8 @@ export const CreditPoliciesPage: React.FC = () => {
                     </div>
                 )}
             </div>
+            </>
+            )}
 
             {isOpen && (
                 <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">

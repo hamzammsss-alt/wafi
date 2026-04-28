@@ -1,4 +1,68 @@
+import React, { useState } from 'react';
 import { DocumentDefinition } from '../../../src/types/DocumentDefinition';
+
+const PENDING_STATUS = 'PENDING_APPROVAL_L1';
+
+async function workflowResult<T>(call: () => Promise<T>) {
+    try {
+        return { ok: true, data: await call() };
+    } catch (error: any) {
+        return { ok: false, error: { message: String(error?.message || error || 'Workflow failed') } };
+    }
+}
+
+function QuotationWorkflowPanel(context: any) {
+    const { docId, header } = context;
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState('');
+    const status = String(header?.status || 'DRAFT').toUpperCase();
+    const isPending = status === PENDING_STATUS;
+    const isConverted = status === 'CONVERTED';
+
+    if (!docId || (!isPending && !isConverted)) return null;
+
+    const convert = async () => {
+        if (!docId || busy || !isPending) return;
+        setBusy(true);
+        setMessage('');
+        try {
+            const result = await (window as any).electronAPI?.salesWorkflow?.convertQuotationToOrder?.({
+                quotationId: docId,
+                userId: 'admin',
+            });
+            const targetId = String(result?.targetDocumentId || '');
+            setMessage('تم تحويل عرض السعر إلى طلبية مبيعات');
+            if (targetId) {
+                window.location.hash = `/sales/orders/${targetId}`;
+            }
+        } catch (error: any) {
+            setMessage(String(error?.message || 'تعذر تحويل عرض السعر'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return React.createElement(
+        'div',
+        { className: 'mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3' },
+        React.createElement('div', { className: 'text-sm font-semibold text-sky-800' }, isConverted ? 'تم تحويل عرض السعر' : 'عرض السعر عالق'),
+        React.createElement(
+            'div',
+            { className: 'flex flex-wrap items-center gap-2' },
+            message ? React.createElement('span', { className: 'text-xs font-medium text-slate-600' }, message) : null,
+            isPending ? React.createElement(
+                'button',
+                {
+                    type: 'button',
+                    disabled: busy,
+                    onClick: convert,
+                    className: 'rounded-lg bg-sky-700 px-3 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60',
+                },
+                busy ? 'جاري التحويل...' : 'تحويل إلى طلبية',
+            ) : null,
+        ),
+    );
+}
 
 const frameworkClient = {
     list: (params: any) => (window as any).electronAPI?.framework.list('salesQuotations', params),
@@ -6,7 +70,9 @@ const frameworkClient = {
     createDraft: (userId?: string) => (window as any).electronAPI?.framework.createDraft('salesQuotations', userId),
     save: (params: any) => (window as any).electronAPI?.framework.save('salesQuotations', params),
     validate: (id: string) => (window as any).electronAPI?.framework.validate('salesQuotations', id),
-    postOrSubmit: (params: any) => (window as any).electronAPI?.framework.postOrSubmit('salesQuotations', params),
+    postOrSubmit: (params: any) => workflowResult(() =>
+        (window as any).electronAPI?.salesWorkflow?.postQuotationToPending?.(params.id, params.userId || 'admin')
+    ),
     reopenRejected: (params: any) => (window as any).electronAPI?.framework.reopenRejected('salesQuotations', params)
 };
 
@@ -23,6 +89,19 @@ export const QuotationDefinition: DocumentDefinition<any, any> = {
     },
 
     client: frameworkClient,
+
+    statusRules: {
+        editable: ['DRAFT', 'REJECTED'],
+        postable: ['DRAFT', 'REJECTED', 'SENT'],
+        voidable: [],
+        transitions: {
+            DRAFT: [PENDING_STATUS],
+            REJECTED: [PENDING_STATUS],
+            SENT: [PENDING_STATUS],
+            PENDING_APPROVAL_L1: ['CONVERTED'],
+            CONVERTED: [],
+        },
+    },
 
     listColumns: [
         { key: 'invoice_no', label: 'رقم العرض', width: 120, align: 'right' },
@@ -116,5 +195,7 @@ export const QuotationDefinition: DocumentDefinition<any, any> = {
             tax_total,
             grand_total: subtotal + tax_total
         };
-    }
+    },
+
+    renderBeforeLines: (context) => React.createElement(QuotationWorkflowPanel, context),
 };

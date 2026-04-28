@@ -19,6 +19,16 @@ export class FixedAsset {
         public status: AssetStatus = 'Active',
         public bookValue: number = purchaseCost,
         public accumulatedDepreciation: number = 0,
+        public supplierId: string | null = null,
+        public supplierAccountId: string | null = null,
+        public supplierInvoiceNo: string | null = null,
+        public supplierInvoiceAmount: number = purchaseCost,
+        public clearanceCost: number = 0,
+        public clearanceAccountId: string | null = null,
+        public purchaseJournalId: string | null = null,
+        public purchaseJournalNo: string | null = null,
+        public clearanceJournalId: string | null = null,
+        public clearanceJournalNo: string | null = null,
         public readonly createdAt: string = new Date().toISOString()
     ) { }
 
