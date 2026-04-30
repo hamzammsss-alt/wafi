@@ -12,7 +12,6 @@ import {
     Loader2,
     Upload
 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { Brand } from '../../../types';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
@@ -280,27 +279,6 @@ export const BrandsPage = () => {
     return (
         <div className="app-page" dir="rtl">
             {/* Header */}
-            <WorkspaceHeader
-                icon={<Tag size={22} />}
-                title="إدارة الماركات"
-                subtitle="تجهيز العلامات التجارية وربطها بالأصناف داخل نفس تجربة العمل الموحدة."
-                badges={[
-                    { label: `${brands.length} ماركات`, tone: 'info' },
-                    { label: `${brands.filter((brand) => brand.is_active).length} نشطة`, tone: 'neutral' },
-                ]}
-                actions={(
-                    <button
-                        onClick={openCreate}
-                        className="rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-purple-900/15 transition hover:brightness-105"
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Plus size={16} />
-                            <span>إضافة ماركة جديدة</span>
-                        </span>
-                    </button>
-                )}
-                className="mb-8"
-            />
 
             <div className="hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
@@ -334,6 +312,14 @@ export const BrandsPage = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<Tag size={22} />}
+                headerTitle="إدارة الماركات"
+                headerSubtitle="تجهيز العلامات التجارية وربطها بالأصناف داخل نفس تجربة العمل الموحدة."
+                headerBadges={[
+                    { label: `${brands.length} ماركات`, tone: 'info' },
+                    { label: `${brands.filter((brand) => brand.is_active).length} نشطة`, tone: 'neutral' },
+                ]}
+
                 screenKey="definitions.brands"
                 data={brands}
                 loading={loading}

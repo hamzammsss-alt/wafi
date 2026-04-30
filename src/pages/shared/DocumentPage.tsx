@@ -15,6 +15,8 @@ import { useEnterNavigation } from '../../hooks/useEnterNavigation';
 import { DocumentSupportDock } from '../../components/workspace/DocumentSupportDock';
 import { buildDocumentSupportSections, resolveDocumentSupportSectionForField } from '../../components/workspace/documentSupportSections';
 import { useTabs } from '../../contexts/TabsContext';
+import { DocumentStatusBadge } from '../../components/ui/DocumentStatusBadge';
+import { normalizeDocumentStatus } from '../../constants/documentStatus';
 
 interface DocumentPageProps {
     definition: DocumentDefinition<any, any>;
@@ -433,7 +435,7 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
                 return;
             }
             const loadedHeader = { ...(definition.defaultValues?.header || {}), ...(response.data.header || {}) };
-            const nextStatus = String(loadedHeader?.status || 'DRAFT');
+            const nextStatus = normalizeDocumentStatus(loadedHeader?.status || 'DRAFT');
             setDocId(targetId);
             setHeader(loadedHeader);
             setEdit(nextStatus as any);
@@ -529,7 +531,7 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
     const buildPayload = useCallback((targetDocId?: string) => {
         const normalized = definition.normalize ? definition.normalize(header, grid.rows) : { header, lines: grid.rows };
         const lines = normalized.lines.map((line: any) => ensureLine(recalcLine(line), emptyLine));
-        const payloadHeader = { ...normalized.header, ...computeTotals(lines), status };
+        const payloadHeader = { ...normalized.header, ...computeTotals(lines), status: normalizeDocumentStatus(status) };
         const validation = definition.validate ? definition.validate(payloadHeader, lines) : { ok: true, errors: [] };
         if (!validation.ok) {
             return { ok: false, message: issueText(validation.errors[0]) };
@@ -568,7 +570,7 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
             }
             const loadedHeader = { ...(definition.defaultValues?.header || {}), ...(response.data?.header || payload.payload.header) };
             const loadedLines = response.data?.lines || payload.payload.lines;
-            const nextStatus = String(loadedHeader?.status || status);
+            const nextStatus = normalizeDocumentStatus(loadedHeader?.status || status);
             setHeader(loadedHeader);
             setEdit(nextStatus as any);
             gridSetRowsRef.current(materializeLines(loadedLines));
@@ -636,7 +638,7 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
             } else {
                 setLastAction(tr('doc.common.posted', 'Posted'));
             }
-            const nextStatus = String(response.data?.status || status);
+            const nextStatus = normalizeDocumentStatus(response.data?.status || status);
             markClean();
             if (nextStatus === 'POSTED') {
                 setPosted();
@@ -675,7 +677,7 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
                 setErrorText(String(response.error?.message || 'error.documents.void_failed'));
                 return;
             }
-            setEdit(String(response.data?.status || 'VOID') as any);
+            setEdit(normalizeDocumentStatus(response.data?.status || 'VOID') as any);
             markClean();
             setLastAction(tr('doc.common.voided', 'Voided'));
             await loadDoc(docId);
@@ -863,7 +865,9 @@ export default function DocumentPage({ definition, id }: DocumentPageProps) {
                                         </div>
                                         {field.type === 'readonly' ? (
                                             <div className="flex h-10 w-full items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-700">
-                                                {String(value || '-')}
+                                                {field.key === 'status'
+                                                    ? <DocumentStatusBadge status={value || status} />
+                                                    : String(value || '-')}
                                             </div>
                                         ) : field.type === 'textarea' ? (
                                             <textarea

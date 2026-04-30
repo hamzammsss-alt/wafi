@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, Calendar, CheckCircle2, Edit, FileText, Loader2, Plus, Save, Trash2, Truck, X } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
@@ -297,26 +296,6 @@ export const VehiclesPage: React.FC = () => {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<Truck size={24} />}
-                title="تعريف السيارات والمركبات"
-                subtitle="إدارة المركبات والسائقين والترخيص والتأمين من خلال جدول موحد قابل للتصفية."
-                badges={[
-                    { label: `المركبات ${vehicles.length}`, tone: 'warning' },
-                    { label: `النشطة ${vehicles.filter((vehicle) => isActive(vehicle.is_active)).length}`, tone: 'success' },
-                    { label: `السائقين ${drivers.length}`, tone: 'info' },
-                ]}
-                actions={(
-                    <button
-                        onClick={openCreate}
-                        className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-orange-700"
-                    >
-                        <Plus size={18} />
-                        مركبة جديدة
-                    </button>
-                )}
-                className="mb-6"
-            />
 
             {error && !isModalOpen && (
                 <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -329,6 +308,15 @@ export const VehiclesPage: React.FC = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<Truck size={24} />}
+                headerTitle="تعريف السيارات والمركبات"
+                headerSubtitle="إدارة المركبات والسائقين والترخيص والتأمين من خلال جدول موحد قابل للتصفية."
+                headerBadges={[
+                    { label: `المركبات ${vehicles.length}`, tone: 'warning' },
+                    { label: `النشطة ${vehicles.filter((vehicle) => isActive(vehicle.is_active)).length}`, tone: 'success' },
+                    { label: `السائقين ${drivers.length}`, tone: 'info' },
+                ]}
+
                 screenKey="definitions.vehicles"
                 data={vehicles}
                 loading={loading}

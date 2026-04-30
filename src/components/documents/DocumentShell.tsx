@@ -3,6 +3,7 @@ import { CheckCircle2, Command, FilePlus2, Printer, Save, Send } from 'lucide-re
 import { DocumentStatus } from '../../types/approval';
 import { DocumentStatusBadge } from '../ui/DocumentStatusBadge';
 import { DocumentAuditTimeline } from './DocumentAuditTimeline';
+import { canUseDocumentPrimaryAction, normalizeDocumentStatus } from '../../constants/documentStatus';
 
 interface DocumentShellProps {
     title: string;
@@ -63,6 +64,8 @@ export const DocumentShell: React.FC<DocumentShellProps> = ({
     printDisabled = false,
 }) => {
     const currentDir = (typeof document !== 'undefined' && document?.documentElement?.dir) || 'ltr';
+    const normalizedStatus = normalizeDocumentStatus(status);
+    const primaryActionDisabled = postDisabled || !canUseDocumentPrimaryAction(normalizedStatus);
 
     useEffect(() => {
         if (primaryHeaderRef?.current) {
@@ -132,7 +135,7 @@ export const DocumentShell: React.FC<DocumentShellProps> = ({
                         )}
                         <button
                             onClick={onPost}
-                            disabled={postDisabled || (status !== 'DRAFT' && status !== 'PENDING_APPROVAL' && status !== 'REJECTED')}
+                            disabled={primaryActionDisabled}
                             className="rounded-xl bg-gradient-to-r from-teal-600 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-cyan-900/20 transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-55"
                         >
                             <span className="inline-flex items-center gap-2">

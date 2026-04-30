@@ -14,7 +14,6 @@ import {
     Save,
     TrendingDown,
 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../components/workspace/WorkspaceHeader';
 import { Account } from '../../../../types';
 import {
     PurchaseSupplier,
@@ -484,39 +483,6 @@ export function FixedAssetForm() {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<Package size={24} />}
-                title={isEdit ? 'تعديل تعريف أصل ثابت' : 'تعريف أصل ثابت جديد'}
-                subtitle="إدخال بيانات الأصل وقيمته وربط الحسابات وسياسة الإهلاك من شاشة واحدة."
-                badges={[
-                    { label: `تكلفة الشراء ${fmt(purchaseCost)}`, tone: 'info' },
-                    { label: `القيمة الدفترية ${fmt(netBookValue)}`, tone: 'success' },
-                    ...(isEdit ? [{ label: STATUS_LABEL[form.status], tone: 'warning' as const }] : []),
-                ]}
-                actions={(
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => navigate('/assets/register')}
-                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-                        >
-                            <ArrowRight size={18} />
-                            رجوع للسجل
-                        </button>
-                        <button
-                            id="btn-save"
-                            type="button"
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-md transition hover:bg-blue-700 disabled:opacity-70"
-                        >
-                            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                            {saving ? 'جارٍ الحفظ...' : 'حفظ الأصل'}
-                        </button>
-                    </div>
-                )}
-                className="mb-6"
-            />
 
             {error && (
                 <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -531,9 +497,55 @@ export function FixedAssetForm() {
                 </div>
             )}
 
-            <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-slate-200">
-                <TabButton active={activeTab === 'definition'} onClick={() => setActiveTab('definition')} icon={<Package size={16} />} label="بيانات الأصل" />
-                <TabButton active={activeTab === 'schedule'} onClick={() => setActiveTab('schedule')} icon={<TrendingDown size={16} />} label={`جدول الإهلاك (${schedule.length})`} disabled={!isEdit} />
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                        <h1 className="text-xl font-extrabold text-slate-900">
+                            {isEdit ? 'تعديل تعريف أصل ثابت' : 'تعريف أصل ثابت جديد'}
+                        </h1>
+                        <p className="mt-1 text-sm font-medium text-slate-500">
+                            إدخال بيانات الأصل وقيمته وربط الحسابات وسياسة الإهلاك من شاشة واحدة.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700">
+                                تكلفة الشراء {fmt(purchaseCost)}
+                            </span>
+                            <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                                القيمة الدفترية {fmt(netBookValue)}
+                            </span>
+                            {isEdit && (
+                                <span className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700">
+                                    {STATUS_LABEL[form.status]}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/assets/register')}
+                            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                        >
+                            <ArrowRight size={16} />
+                            <span>رجوع للسجل</span>
+                        </button>
+                        <button
+                            id="btn-save"
+                            type="button"
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="inline-flex h-10 items-center gap-2 rounded-2xl bg-blue-600 px-5 text-sm font-bold text-white shadow-md transition hover:bg-blue-700 disabled:opacity-70"
+                        >
+                            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                            <span>{saving ? 'جارٍ الحفظ...' : 'حفظ الأصل'}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <TabButton active={activeTab === 'definition'} onClick={() => setActiveTab('definition')} icon={<Package size={16} />} label="بيانات الأصل" />
+                    <TabButton active={activeTab === 'schedule'} onClick={() => setActiveTab('schedule')} icon={<TrendingDown size={16} />} label={`جدول الإهلاك (${schedule.length})`} disabled={!isEdit} />
+                </div>
             </div>
 
             {activeTab === 'definition' && (

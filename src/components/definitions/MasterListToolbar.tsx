@@ -12,8 +12,13 @@ import {
     Trash2,
 } from 'lucide-react';
 import { FloatingDropdown } from '../ui/FloatingDropdown';
+import type { WorkspaceBadge } from '../workspace/WorkspaceHeader';
 
 interface MasterListToolbarProps {
+    headerIcon?: React.ReactNode;
+    headerTitle?: React.ReactNode;
+    headerSubtitle?: React.ReactNode;
+    headerBadges?: WorkspaceBadge[];
     createLabel?: string;
     selectedRowsCount: number;
     totalRowsCount: number;
@@ -32,7 +37,18 @@ interface MasterListToolbarProps {
     extraActions?: React.ReactNode;
 }
 
+const badgeToneClasses: Record<NonNullable<WorkspaceBadge['tone']>, string> = {
+    neutral: 'border-slate-200 bg-white/80 text-slate-600',
+    info: 'border-sky-200 bg-sky-50 text-sky-700',
+    success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    warning: 'border-amber-200 bg-amber-50 text-amber-700',
+};
+
 const MasterListToolbar: React.FC<MasterListToolbarProps> = ({
+    headerIcon,
+    headerTitle,
+    headerSubtitle,
+    headerBadges = [],
     createLabel = 'جديد',
     selectedRowsCount,
     totalRowsCount,
@@ -52,10 +68,48 @@ const MasterListToolbar: React.FC<MasterListToolbarProps> = ({
 }) => {
     const [openMenu, setOpenMenu] = React.useState<'export' | 'properties' | null>(null);
     const exportItemClass = 'flex w-full items-center justify-between rounded-xl px-3 py-2 text-right text-sm font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-800';
+    const hasHeader = Boolean(headerIcon || headerTitle || headerSubtitle || headerBadges.length);
 
     return (
         <div className="mb-4 overflow-hidden rounded-[28px] border border-slate-200/90 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.06)]">
             <div className="border-b border-slate-100 bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_52%,#f3f8ff_100%)] px-4 py-4">
+                {hasHeader && (
+                    <div className="mb-4 flex min-w-0 flex-wrap items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                            {headerIcon && (
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-600 to-sky-500 text-white shadow-md shadow-cyan-900/15">
+                                    {headerIcon}
+                                </div>
+                            )}
+                            <div className="min-w-0">
+                                {headerTitle && (
+                                    <h1 className="truncate text-xl font-extrabold tracking-tight text-slate-900 md:text-2xl">
+                                        {headerTitle}
+                                    </h1>
+                                )}
+                                {headerSubtitle && (
+                                    <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-500">
+                                        {headerSubtitle}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {headerBadges.length > 0 && (
+                            <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+                                {headerBadges.map((badge, index) => (
+                                    <span
+                                        key={`${badge.label}-${index}`}
+                                        className={`rounded-xl border px-3 py-1.5 text-xs font-bold ${badgeToneClasses[badge.tone || 'neutral']} ${badge.mono ? 'font-mono' : ''}`}
+                                    >
+                                        {badge.label}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                         {onCreate && (

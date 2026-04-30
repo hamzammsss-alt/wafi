@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Tag, Plus, Search, Edit, Trash2, X, Save, ArrowLeft, Package, DollarSign, CheckCircle2 } from 'lucide-react';
-import { WorkspaceHeader } from '../../src/components/workspace/WorkspaceHeader';
+import { Tag, Plus, Edit, Trash2, X, Save, ArrowLeft, Package, DollarSign, CheckCircle2 } from 'lucide-react';
 import { useCreateIntent } from '../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../src/components/definitions/DefinitionMasterList';
 
 export const PriceListsPage: React.FC = () => {
     const [priceLists, setPriceLists] = useState<any[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [currentList, setCurrentList] = useState<any>({ name_ar: '', currency_id: 'ILS', is_active: 1 });
@@ -104,7 +102,7 @@ export const PriceListsPage: React.FC = () => {
 
     useCreateIntent(openCreate);
 
-    const filteredLists = priceLists.filter(p => p.name_ar.includes(searchTerm));
+    const filteredLists = priceLists;
 
     const openListEdit = (list: any) => {
         setCurrentList(list);
@@ -300,27 +298,7 @@ export const PriceListsPage: React.FC = () => {
         return (
             <div className="app-page h-full" dir="rtl">
                 <div className="max-w-6xl mx-auto">
-                    <WorkspaceHeader
-                        icon={<Tag size={24} />}
-                        title={list?.name_ar || 'قائمة أسعار'}
-                        subtitle="إدارة أصناف القائمة السعرية"
-                        badges={[
-                            { label: `الأصناف ${listItems.length}`, tone: 'warning' },
-                            { label: `الوحدات ${units.length}`, tone: 'info' },
-                        ]}
-                        actions={
-                            <>
-                                <button onClick={() => setSelectedListId(null)} className="p-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100">
-                                    <ArrowLeft size={20} />
-                                </button>
-                                <button onClick={() => setShowItemModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-2">
-                                    <Plus size={18} /> إضافة صنف
-                                </button>
-                            </>
-                        }
-                        className="mb-6"
-                    />
-                    <div className="hidden items-center gap-4 mb-6">
+                                        <div className="hidden items-center gap-4 mb-6">
                         <button onClick={() => setSelectedListId(null)} className="p-2 hover:bg-gray-200 rounded-lg">
                             <ArrowLeft size={24} />
                         </button>
@@ -336,6 +314,14 @@ export const PriceListsPage: React.FC = () => {
                     </div>
 
                     <DefinitionMasterList
+                        headerIcon={<Tag size={24} />}
+                        headerTitle={list?.name_ar || 'قائمة أسعار'}
+                        headerSubtitle="إدارة أصناف القائمة السعرية"
+                        headerBadges={[
+                            { label: `الأصناف ${listItems.length}`, tone: 'warning' },
+                            { label: `الوحدات ${units.length}`, tone: 'info' },
+                        ]}
+
                         screenKey={`definitions.price-list-items.${selectedListId}`}
                         data={listItems}
                         loading={isLoading}
@@ -349,6 +335,16 @@ export const PriceListsPage: React.FC = () => {
                         onDelete={handleDeleteItemRows}
                         onRefresh={() => loadListItems(selectedListId)}
                         defaultSort={{ key: 'item_code', direction: 'asc' }}
+                        toolbarExtraActions={(
+                            <button
+                                type="button"
+                                onClick={() => setSelectedListId(null)}
+                                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-sky-300 hover:text-sky-700"
+                            >
+                                <ArrowLeft size={16} />
+                                <span>رجوع</span>
+                            </button>
+                        )}
                     />
 
                     {false && (
@@ -450,34 +446,7 @@ export const PriceListsPage: React.FC = () => {
     return (
         <div className="app-page h-full" dir="rtl">
             <div className="max-w-6xl mx-auto">
-                <WorkspaceHeader
-                    icon={<Tag size={24} />}
-                    title="قوائم الأسعار"
-                    subtitle="إدارة القوائم السعرية للعملاء"
-                    badges={[
-                        { label: `الإجمالي ${priceLists.length}`, tone: 'warning' },
-                        { label: `المعروض ${filteredLists.length}`, tone: 'info' },
-                    ]}
-                    actions={
-                        <>
-                            <div className="relative group">
-                                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="بحث عن قائمة..."
-                                    className="input w-full md:w-64 pr-10 pl-4 py-2.5 rounded-xl"
-                                />
-                            </div>
-                            <button onClick={openCreate} className="btn btn-primary text-white px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-200 hover:brightness-105 transition">
-                                <Plus size={18} /> قائمة جديدة
-                            </button>
-                        </>
-                    }
-                    className="mb-6"
-                />
-                <div className="hidden card p-6 mb-6 justify-between items-center">
+                                <div className="hidden card p-6 mb-6 justify-between items-center">
                     <div className="flex items-center gap-4">
                         <div className="bg-purple-100 p-3 rounded-xl">
                             <Tag className="text-purple-600" size={24} />
@@ -493,6 +462,14 @@ export const PriceListsPage: React.FC = () => {
                 </div>
 
                 <DefinitionMasterList
+                    headerIcon={<Tag size={24} />}
+                    headerTitle="قوائم الأسعار"
+                    headerSubtitle="إدارة القوائم السعرية للعملاء"
+                    headerBadges={[
+                        { label: `الإجمالي ${priceLists.length}`, tone: 'warning' },
+                        { label: `المعروض ${filteredLists.length}`, tone: 'info' },
+                    ]}
+
                     screenKey="definitions.price-lists"
                     data={filteredLists}
                     loading={isLoading}

@@ -30,14 +30,48 @@ const META_ALLOWLIST = new Set<string>([
     'settingKey',
     'reason',
     'docNo',
+    'documentNo',
+    'voucherNo',
+    'invoiceNo',
     'route',
     'targetStatus',
     'fromStatus',
     'toStatus',
+    'workflowLevel',
+    'sourceModule',
+    'sourceType',
+    'sourceId',
+    'journalId',
+    'journalNo',
+    'reversalStatus',
+    'reversalJournalId',
+    'reversalJournalNo',
+    'amount',
+    'total',
+    'currencyCode',
     'ipcid',
 ]);
 
 const REDACT_KEY_RE = /(password|secret|token|authorization|cookie|api[_-]?key|refresh[_-]?token|access[_-]?token|pin|otp|hash|salt)/i;
+const DEFAULT_SUMMARY_I18N_KEYS: Record<string, string> = {
+    'document.create': 'audit.event.document.create',
+    'document.update': 'audit.event.document.update',
+    'document.save': 'audit.event.document.update',
+    'document.submit': 'audit.event.document.submit',
+    'document.post': 'audit.event.document.post',
+    'document.reopen': 'audit.event.document.reopen',
+    'document.void': 'audit.event.document.void',
+    'permission.denied': 'audit.event.permission.denied',
+    'permission.allowed': 'audit.event.permission.allowed',
+    'policy.violation': 'audit.event.policy.violation',
+    'view.save': 'audit.event.view.save',
+    'view.share': 'audit.event.view.share',
+    'view.delete': 'audit.event.view.delete',
+    'view.set_default': 'audit.event.view.set_default',
+    'definition.create': 'audit.event.definition.create',
+    'definition.update': 'audit.event.definition.update',
+    'settings.update': 'audit.event.settings.update',
+};
 
 let globalAuditService: AuditService | null = null;
 
@@ -132,6 +166,9 @@ export class AuditService {
         const createdAt = this.normalizeTimestamp(event.createdAt);
         const sanitizedMeta = this.sanitizeMeta(event.meta || null);
         const sanitizedFields = this.sanitizeFieldChanges(fieldChanges);
+        const summaryI18nKey = this.normalizeText(
+            event.summaryI18nKey || DEFAULT_SUMMARY_I18N_KEYS[normalizedEventType] || null,
+        );
 
         this.repo.insertEvent(
             {
@@ -147,7 +184,7 @@ export class AuditService {
                 eventType: normalizedEventType,
                 correlationId: normalizedCorrelation,
                 ipcid: this.normalizeText(event.ipcid || ctx.ipcid || null),
-                summaryI18nKey: this.normalizeText(event.summaryI18nKey || null),
+                summaryI18nKey,
                 metaJson: sanitizedMeta ? safeJson(sanitizedMeta) : null,
                 createdAt,
             },
@@ -161,6 +198,51 @@ export class AuditService {
         );
 
         return { id: eventId, duplicate: false };
+    }
+
+    recordDocumentEvent(
+        ctx: AuditContext,
+        event: {
+            docType: string;
+            docId: string;
+            action: 'create' | 'update' | 'save' | 'submit' | 'post' | 'reopen' | 'void';
+            docNo?: string | null;
+            entityType?: string;
+            entityId?: string;
+            eventType?: string;
+            summaryI18nKey?: string | null;
+            meta?: Record<string, unknown> | null;
+            correlationId?: string | null;
+            ipcid?: string | null;
+            createdAt?: string;
+        },
+        fieldChanges: AuditFieldChangeInput[] = [],
+    ): { id: string; duplicate: boolean } {
+        const docType = this.normalizeRequired(event.docType, 'docType');
+        const docId = this.normalizeRequired(event.docId, 'docId');
+        const action = this.normalizeRequired(event.action, 'action');
+        const eventType = this.normalizeText(event.eventType || null) || `document.${action}`;
+
+        return this.recordEvent(
+            ctx,
+            {
+                entityType: this.normalizeText(event.entityType || null) || docType,
+                entityId: this.normalizeText(event.entityId || null) || docId,
+                docType,
+                docId,
+                eventType,
+                summaryI18nKey: event.summaryI18nKey || DEFAULT_SUMMARY_I18N_KEYS[eventType] || null,
+                correlationId: event.correlationId || ctx.correlationId || null,
+                ipcid: event.ipcid || ctx.ipcid || null,
+                createdAt: event.createdAt,
+                meta: {
+                    ...(event.meta || {}),
+                    action,
+                    docNo: event.docNo || event.meta?.docNo || null,
+                },
+            },
+            fieldChanges,
+        );
     }
 
     listEvents(query: AuditListQuery): AuditListResult {

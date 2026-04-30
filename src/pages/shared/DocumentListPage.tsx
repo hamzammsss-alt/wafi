@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Filter, RefreshCcw } from 'lucide-react';
 import { DocumentDefinition } from '../../types/DocumentDefinition';
 import { DocumentStatusBadge } from '../../components/ui/DocumentStatusBadge';
 import { useEnterNavigation } from '../../hooks/useEnterNavigation';
+import { getDocumentStatusOptions } from '../../constants/documentStatus';
 
 interface DocumentListPageProps {
     definition: DocumentDefinition<any, any>;
@@ -37,6 +38,12 @@ export default function DocumentListPage({ definition, hideFilterBar }: Document
     const tableRef = useRef<HTMLDivElement>(null);
     const filtersRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const statusOptions = useMemo(() => getDocumentStatusOptions(definition.statusRules), [definition.statusRules]);
+    const hasStatusColumn = useMemo(
+        () => definition.listColumns.some((column) => String(column.key || '').toLowerCase() === 'status'),
+        [definition.listColumns],
+    );
+    const columnSpan = definition.listColumns.length + 1 + (hasStatusColumn ? 0 : 1);
 
     const loadData = async (reset = false) => {
         try {
@@ -186,7 +193,7 @@ export default function DocumentListPage({ definition, hideFilterBar }: Document
             </div>
 
             <div ref={filtersRef} className={`z-0 flex items-center gap-4 rounded-2xl border border-slate-200/80 bg-white/80 p-3 shadow-sm backdrop-blur md:p-4 ${
-                (hideFilterBar || definition.docType === 'RECEIPT' || definition.title?.includes('قبض')) ? 'hidden' : ''
+                hideFilterBar ? 'hidden' : ''
             }`}>
                 <div className="relative max-w-md flex-1">
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
@@ -212,10 +219,11 @@ export default function DocumentListPage({ definition, hideFilterBar }: Document
                         dir={currentDir}
                     >
                         <option value="ALL">{tr('ui.list.status.all', 'All statuses')}</option>
-                        <option value="DRAFT">{tr('status.draft', 'Draft')}</option>
-                        <option value="PENDING_APPROVAL_L1">{tr('status.pending_approval', 'Pending approval')}</option>
-                        <option value="POSTED">{tr('status.posted', 'Posted')}</option>
-                        <option value="REJECTED">{tr('status.rejected', 'Rejected')}</option>
+                        {statusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {tr(option.labelI18nKey, option.label)}
+                            </option>
+                        ))}
                     </select>
                 </div>
 
@@ -246,9 +254,11 @@ export default function DocumentListPage({ definition, hideFilterBar }: Document
                                     {column.label}
                                 </th>
                             ))}
-                            <th className="border-b border-slate-200 px-4 py-3 text-right text-xs font-semibold text-slate-600 md:px-6">
-                                {tr('status.label', 'Status')}
-                            </th>
+                            {!hasStatusColumn && (
+                                <th className="border-b border-slate-200 px-4 py-3 text-right text-xs font-semibold text-slate-600 md:px-6">
+                                    {tr('status.label', 'Status')}
+                                </th>
+                            )}
                         </tr>
                     </thead>
 
@@ -271,19 +281,23 @@ export default function DocumentListPage({ definition, hideFilterBar }: Document
                                             key={column.key}
                                             className={`whitespace-nowrap px-4 py-3 text-sm text-slate-700 md:px-6 ${column.align === 'center' ? 'text-center' : column.align === 'right' ? 'text-right' : 'text-left'}`}
                                         >
-                                            {column.render ? column.render(row[column.key], row) : row[column.key]}
+                                            {String(column.key || '').toLowerCase() === 'status'
+                                                ? <DocumentStatusBadge status={row[column.key]} />
+                                                : column.render ? column.render(row[column.key], row) : row[column.key]}
                                         </td>
                                     ))}
-                                    <td className="whitespace-nowrap px-4 py-3 md:px-6">
-                                        <DocumentStatusBadge status={row.status} />
-                                    </td>
+                                    {!hasStatusColumn && (
+                                        <td className="whitespace-nowrap px-4 py-3 md:px-6">
+                                            <DocumentStatusBadge status={row.status} />
+                                        </td>
+                                    )}
                                 </tr>
                             );
                         })}
 
                         {loading && (
                             <tr>
-                                <td colSpan={definition.listColumns.length + 2} className="px-6 py-8 text-center text-slate-500">
+                                <td colSpan={columnSpan} className="px-6 py-8 text-center text-slate-500">
                                     {tr('ui.list.loading', 'Loading...')}
                                 </td>
                             </tr>
@@ -291,7 +305,7 @@ export default function DocumentListPage({ definition, hideFilterBar }: Document
 
                         {!loading && rows.length === 0 && (
                             <tr>
-                                <td colSpan={definition.listColumns.length + 2} className="px-6 py-8 text-center text-slate-500">
+                                <td colSpan={columnSpan} className="px-6 py-8 text-center text-slate-500">
                                     {tr('ui.list.empty', 'No records found')}
                                 </td>
                             </tr>

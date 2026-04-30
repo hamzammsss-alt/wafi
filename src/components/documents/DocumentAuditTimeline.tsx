@@ -26,10 +26,20 @@ const EVENT_STYLE_MAP: Record<string, { key: string; fallback: string; color: st
         fallback: 'Document Updated',
         color: 'text-blue-700 bg-blue-100',
     },
+    'document.submit': {
+        key: 'audit.event.document.submit',
+        fallback: 'Document Submitted',
+        color: 'text-amber-700 bg-amber-100',
+    },
     'document.post': {
         key: 'audit.event.document.post',
         fallback: 'Document Posted',
         color: 'text-indigo-700 bg-indigo-100',
+    },
+    'document.reopen': {
+        key: 'audit.event.document.reopen',
+        fallback: 'Document Reopened',
+        color: 'text-sky-700 bg-sky-100',
     },
     'document.void': {
         key: 'audit.event.document.void',

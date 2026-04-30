@@ -13,7 +13,6 @@ import {
     Hash
 } from 'lucide-react';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 
 export const Taxes = () => {
     const [taxes, setTaxes] = useState<any[]>([]);
@@ -249,27 +248,6 @@ export const Taxes = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
-            <WorkspaceHeader
-                icon={<Percent size={22} />}
-                title="الضرائب والرسوم"
-                subtitle="إدارة الضرائب والرسوم الثابتة والنسبية ضمن نفس تجربة التعريفات الاحترافية."
-                badges={[
-                    { label: `${taxes.length} ضريبة/رسم`, tone: 'info' },
-                    { label: `${taxes.filter((tax) => Number(tax.is_fixed) === 1).length} ثابت`, tone: 'warning' },
-                ]}
-                actions={(
-                    <button
-                        onClick={() => setIsAdding(true)}
-                        className="rounded-xl bg-gradient-to-r from-emerald-600 to-green-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:brightness-105"
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Plus size={16} />
-                            <span>إضافة ضريبة أو رسم</span>
-                        </span>
-                    </button>
-                )}
-                className="mb-8"
-            />
 
             {/* Error Alert */}
             {error && (
@@ -283,6 +261,14 @@ export const Taxes = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<Percent size={22} />}
+                headerTitle="الضرائب والرسوم"
+                headerSubtitle="إدارة الضرائب والرسوم الثابتة والنسبية ضمن نفس تجربة التعريفات الاحترافية."
+                headerBadges={[
+                    { label: `${taxes.length} ضريبة/رسم`, tone: 'info' },
+                    { label: `${taxes.filter((tax) => Number(tax.is_fixed) === 1).length} ثابت`, tone: 'warning' },
+                ]}
+
                 screenKey="definitions.taxes"
                 data={taxes}
                 loading={loading}

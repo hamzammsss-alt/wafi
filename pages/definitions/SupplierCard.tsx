@@ -4,7 +4,6 @@ import {
     CheckCircle2, AlertCircle, Building, Globe, Save, User, FileText, Briefcase, Boxes
 } from 'lucide-react';
 import { BusinessPartner, Account } from '../../types';
-import { WorkspaceHeader } from '../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../src/hooks/useCreateIntent';
 
 export const SupplierCard: React.FC = () => {
@@ -173,40 +172,8 @@ export const SupplierCard: React.FC = () => {
 
     return (
         <div className="app-page h-full flex flex-col gap-4" dir="rtl">
-            <WorkspaceHeader
-                icon={<Truck size={24} />}
-                title="بطاقة مورد"
-                subtitle="إدارة بيانات الموردين والذمم الدائنة"
-                badges={[
-                    { label: `الإجمالي ${suppliers.length}`, tone: 'warning' },
-                    { label: `المعروض ${filteredSuppliers.length}`, tone: 'success' },
-                    { label: `الحسابات ${accounts.length}`, tone: 'info' },
-                ]}
-                actions={
-                    <>
-                        <div className="relative group">
-                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors" size={20} />
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                placeholder="بحث (اسم، رقم، هاتف)..."
-                                className="w-full md:w-64 pr-10 pl-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
-                            />
-                        </div>
-                        <button
-                            onClick={openCreate}
-                            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 transition-colors flex items-center gap-2 font-medium shadow-lg shadow-indigo-200"
-                        >
-                            <Plus size={20} />
-                            مورد جديد
-                        </button>
-                    </>
-                }
-            />
-
             {/* Header Section */}
-            <div className="hidden card p-6 flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="card p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-2xl flex items-center justify-center shadow-inner border border-indigo-100">
                         <Truck size={28} className="text-indigo-600" />
@@ -214,6 +181,17 @@ export const SupplierCard: React.FC = () => {
                     <div>
                         <h1 className="text-2xl font-bold text-gray-800">بطاقة مــورد</h1>
                         <p className="text-sm text-gray-500 mt-1">إدارة بيانات الموردين والذمم الدائنة</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700">
+                                الإجمالي {suppliers.length}
+                            </span>
+                            <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                                المعروض {filteredSuppliers.length}
+                            </span>
+                            <span className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700">
+                                الحسابات {accounts.length}
+                            </span>
+                        </div>
                     </div>
                 </div>
 

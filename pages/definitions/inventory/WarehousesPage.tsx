@@ -14,7 +14,6 @@ import {
     Phone,
     User
 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { Warehouse } from '../../../types';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
@@ -240,27 +239,6 @@ export const WarehousesPage = () => {
     return (
         <div className="app-page" dir="rtl">
             {/* Header */}
-            <WorkspaceHeader
-                icon={<WarehouseIcon size={22} />}
-                title="إدارة المستودعات"
-                subtitle="ضبط المستودعات ومعلومات التشغيل بنفس الهوية الموحدة لباقي الشاشات المرجعية."
-                badges={[
-                    { label: `${warehouses.length} مستودعات`, tone: 'info' },
-                    { label: `${warehouses.filter((warehouse) => warehouse.is_active).length} نشط`, tone: 'neutral' },
-                ]}
-                actions={(
-                    <button
-                        onClick={openCreate}
-                        className="rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-orange-900/15 transition hover:brightness-105"
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Plus size={16} />
-                            <span>إضافة مستودع جديد</span>
-                        </span>
-                    </button>
-                )}
-                className="mb-8"
-            />
 
             <div className="hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
@@ -294,6 +272,14 @@ export const WarehousesPage = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<WarehouseIcon size={22} />}
+                headerTitle="إدارة المستودعات"
+                headerSubtitle="ضبط المستودعات ومعلومات التشغيل بنفس الهوية الموحدة لباقي الشاشات المرجعية."
+                headerBadges={[
+                    { label: `${warehouses.length} مستودعات`, tone: 'info' },
+                    { label: `${warehouses.filter((warehouse) => warehouse.is_active).length} نشط`, tone: 'neutral' },
+                ]}
+
                 screenKey="definitions.warehouses"
                 data={warehouses}
                 loading={loading}

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Edit, FileText, Loader2, Phone, Plus, Save, Trash2, User, X } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
@@ -220,25 +219,6 @@ export const DriversPage: React.FC = () => {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<User size={24} />}
-                title="تعريف السائقين"
-                subtitle="إدارة السائقين والرخص ومعلومات الاتصال من خلال جدول موحد قابل للتصفية."
-                badges={[
-                    { label: `السائقين ${drivers.length}`, tone: 'warning' },
-                    { label: `النشطين ${drivers.filter((driver) => isActive(driver.is_active)).length}`, tone: 'success' },
-                ]}
-                actions={(
-                    <button
-                        onClick={openCreate}
-                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-blue-700"
-                    >
-                        <Plus size={18} />
-                        سائق جديد
-                    </button>
-                )}
-                className="mb-6"
-            />
 
             {error && !isModalOpen && (
                 <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -251,6 +231,14 @@ export const DriversPage: React.FC = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<User size={24} />}
+                headerTitle="تعريف السائقين"
+                headerSubtitle="إدارة السائقين والرخص ومعلومات الاتصال من خلال جدول موحد قابل للتصفية."
+                headerBadges={[
+                    { label: `السائقين ${drivers.length}`, tone: 'warning' },
+                    { label: `النشطين ${drivers.filter((driver) => isActive(driver.is_active)).length}`, tone: 'success' },
+                ]}
+
                 screenKey="definitions.drivers"
                 data={drivers}
                 loading={loading}

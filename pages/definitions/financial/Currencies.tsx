@@ -12,7 +12,6 @@ import {
     TrendingUp,
     X,
 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 import { commonCurrencies } from '../../../src/lib/currency-data';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
@@ -501,11 +500,12 @@ export const Currencies = () => {
 
     return (
         <div className="h-full bg-gray-50 p-4 md:p-6" dir="rtl">
-            <WorkspaceHeader
-                icon={<Coins size={24} />}
-                title="إدارة العملات وأسعار الصرف"
-                subtitle={`تحديث ومتابعة أسعار العملات مقابل العملة الرئيسية${baseCurrency?.name_ar ? ` (${baseCurrency.name_ar})` : ''}`}
-                badges={[
+
+            <DefinitionMasterList
+                headerIcon={<Coins size={24} />}
+                headerTitle="إدارة العملات وأسعار الصرف"
+                headerSubtitle={`تحديث ومتابعة أسعار العملات مقابل العملة الرئيسية${baseCurrency?.name_ar ? ` (${baseCurrency.name_ar})` : ''}`}
+                headerBadges={[
                     { label: `العملات ${currencies.length}`, tone: 'warning' },
                     ...(baseCurrency
                         ? [{ label: `العملة الرئيسية ${baseCurrency.name_ar || baseCurrency.code}`, tone: 'info' as const }]
@@ -514,30 +514,7 @@ export const Currencies = () => {
                         ? [{ label: `الأسعار الثابتة ${fixedCurrenciesCount}`, tone: 'success' as const }]
                         : []),
                 ]}
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button
-                            onClick={handleScrape}
-                            disabled={scraping}
-                            className="flex items-center gap-2 rounded-xl border bg-white px-4 py-2 font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-blue-600 disabled:opacity-70"
-                        >
-                            <RefreshCw size={18} className={scraping ? 'animate-spin text-blue-600' : ''} />
-                            {scraping ? 'جارٍ التحديث...' : 'تحديث أسعار الصرف'}
-                        </button>
 
-                        <button
-                            onClick={openModal}
-                            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2 font-bold text-white shadow-md transition hover:bg-emerald-700 hover:shadow-lg"
-                        >
-                            <Plus size={20} />
-                            إضافة عملة
-                        </button>
-                    </div>
-                }
-                className="mb-6"
-            />
-
-            <DefinitionMasterList
                 screenKey="definitions.currencies"
                 data={currencies}
                 loading={loading}

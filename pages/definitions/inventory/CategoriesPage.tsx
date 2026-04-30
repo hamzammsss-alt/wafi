@@ -14,7 +14,6 @@ import {
     Upload,
     X,
 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
@@ -291,27 +290,6 @@ export const CategoriesPage = () => {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<Layers size={22} />}
-                title="مجموعات الأصناف"
-                subtitle="عرض جدولي منظم بنفس أسلوب شاشة الأصناف."
-                badges={[
-                    { label: `${categories.length} مجموعة`, tone: 'info' },
-                    { label: `${categories.filter((category) => !category.parent_id).length} رئيسية`, tone: 'neutral' },
-                ]}
-                actions={(
-                    <button
-                        onClick={openCreate}
-                        className="rounded-xl bg-gradient-to-r from-sky-600 to-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-sky-900/15 transition hover:brightness-105"
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Plus size={16} />
-                            <span>إضافة مجموعة</span>
-                        </span>
-                    </button>
-                )}
-                className="mb-6"
-            />
 
             {error && (
                 <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -324,6 +302,14 @@ export const CategoriesPage = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<Layers size={22} />}
+                headerTitle="مجموعات الأصناف"
+                headerSubtitle="عرض جدولي منظم بنفس أسلوب شاشة الأصناف."
+                headerBadges={[
+                    { label: `${categories.length} مجموعة`, tone: 'info' },
+                    { label: `${categories.filter((category) => !category.parent_id).length} رئيسية`, tone: 'neutral' },
+                ]}
+
                 screenKey="definitions.categories"
                 data={categories}
                 loading={loading}

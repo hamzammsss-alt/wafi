@@ -16,7 +16,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { AccountPicker } from '../../../components/AccountPicker';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 
 export const PaymentMethods = () => {
     const [methods, setMethods] = useState<any[]>([]);
@@ -254,27 +253,6 @@ export const PaymentMethods = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
-            <WorkspaceHeader
-                icon={<CreditCard size={22} />}
-                title="طرق الدفع"
-                subtitle="تعريف وسائل الدفع وربطها بالحسابات بنفس تجربة القوائم المرجعية الموحدة."
-                badges={[
-                    { label: `${methods.length} طريقة`, tone: 'info' },
-                    { label: `${methods.filter((method) => method.is_active).length} نشطة`, tone: 'success' },
-                ]}
-                actions={(
-                    <button
-                        onClick={() => setIsAdding(true)}
-                        className="rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-purple-900/15 transition hover:brightness-105"
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Plus size={16} />
-                            <span>إضافة طريقة دفع</span>
-                        </span>
-                    </button>
-                )}
-                className="mb-8"
-            />
 
             {/* Error Alert */}
             {error && (
@@ -288,6 +266,14 @@ export const PaymentMethods = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<CreditCard size={22} />}
+                headerTitle="طرق الدفع"
+                headerSubtitle="تعريف وسائل الدفع وربطها بالحسابات بنفس تجربة القوائم المرجعية الموحدة."
+                headerBadges={[
+                    { label: `${methods.length} طريقة`, tone: 'info' },
+                    { label: `${methods.filter((method) => method.is_active).length} نشطة`, tone: 'success' },
+                ]}
+
                 screenKey="definitions.payment-methods"
                 data={methods}
                 loading={loading}

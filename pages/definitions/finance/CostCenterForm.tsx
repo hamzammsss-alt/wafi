@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, Loader2, Save } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 
 type CostCenterFormState = {
     code: string;
@@ -112,20 +111,6 @@ export function CostCenterForm() {
 
     return (
         <div className="app-page space-y-6" dir="rtl">
-            <WorkspaceHeader
-                icon={<Save size={24} />}
-                title={isEdit ? 'تعديل مركز تكلفة' : 'إضافة مركز تكلفة'}
-                subtitle="تهيئة بيانات مركز التكلفة وربطه بالهيكل التنظيمي"
-                actions={
-                    <button
-                        onClick={() => navigate('/master/cost-centers')}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-100"
-                    >
-                        <ArrowRight size={16} />
-                        رجوع
-                    </button>
-                }
-            />
             <div className="max-w-3xl mx-auto bg-white rounded-xl border border-gray-200 shadow-sm">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <h1 className="text-xl font-bold text-gray-800">

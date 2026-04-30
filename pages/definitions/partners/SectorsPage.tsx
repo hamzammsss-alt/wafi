@@ -1,6 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { Building2, Plus, Search, Edit, Trash2, Save, X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
@@ -195,26 +194,7 @@ export const SectorsPage: React.FC = () => {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<Building2 size={24} />}
-                title="تعريف القطاعات"
-                subtitle="إدارة قطاعات العملاء"
-                badges={[
-                    { label: `الإجمالي ${rows.length}`, tone: 'warning' },
-                    { label: `المعروض ${filtered.length}`, tone: 'success' },
-                ]}
-                actions={
-                    <button
-                        onClick={openCreate}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
-                    >
-                        <Plus size={18} />
-                        قطاع جديد
-                    </button>
-                }
-                className="mb-6"
-            />
-            <div className="hidden flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div className="hidden flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                         <div className="p-2 bg-indigo-100 rounded-lg text-indigo-700">
@@ -235,6 +215,14 @@ export const SectorsPage: React.FC = () => {
             </div>
 
             <DefinitionMasterList
+                headerIcon={<Building2 size={24} />}
+                headerTitle="تعريف القطاعات"
+                headerSubtitle="إدارة قطاعات العملاء"
+                headerBadges={[
+                    { label: `الإجمالي ${rows.length}`, tone: 'warning' },
+                    { label: `المعروض ${filtered.length}`, tone: 'success' },
+                ]}
+
                 screenKey="definitions.sectors"
                 data={rows}
                 loading={loading}

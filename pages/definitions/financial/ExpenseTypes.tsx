@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     AlertCircle,
-    Banknote,
     Edit,
     Link2,
     Loader2,
@@ -10,7 +9,6 @@ import {
     Trash2,
     X,
 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
 type ExpenseTypeRow = {
@@ -225,28 +223,6 @@ export const ExpenseTypes = () => {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<Banknote size={22} />}
-                title="أنواع المصاريف"
-                subtitle="جدول منظم لأنواع المصاريف مع فلترة وربط مباشر بالحسابات."
-                badges={[
-                    { label: `${types.length} نوع`, tone: 'info' },
-                    { label: `${filteredTypes.length} نتيجة`, tone: 'neutral' },
-                    { label: `${types.filter((row) => normalizeText(row.account_id)).length} مرتبط بحساب`, tone: 'success' },
-                ]}
-                actions={(
-                    <button
-                        onClick={openCreate}
-                        className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-blue-900/15 transition hover:brightness-105"
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Plus size={16} />
-                            <span>إضافة نوع جديد</span>
-                        </span>
-                    </button>
-                )}
-                className="mb-6"
-            />
 
             {error && (
                 <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -258,7 +234,36 @@ export const ExpenseTypes = () => {
                 </div>
             )}
 
-            <div className="mb-4 flex flex-wrap items-center gap-3">
+            <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                        <h1 className="text-xl font-extrabold text-slate-900">أنواع المصاريف</h1>
+                        <p className="mt-1 text-sm font-medium text-slate-500">
+                            جدول منظم لأنواع المصاريف مع فلترة وربط مباشر بالحسابات.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <span className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700">
+                                {types.length} نوع
+                            </span>
+                            <span className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">
+                                {filteredTypes.length} نتيجة
+                            </span>
+                            <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                                {types.filter((row) => normalizeText(row.account_id)).length} مرتبط بحساب
+                            </span>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={openCreate}
+                        className="inline-flex h-10 items-center gap-2 rounded-2xl bg-blue-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
+                    >
+                        <Plus size={16} />
+                        <span>إضافة نوع جديد</span>
+                    </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
                 <div className="relative min-w-[260px] flex-1">
                     <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
@@ -292,6 +297,7 @@ export const ExpenseTypes = () => {
                     <option value="linked">مرتبطة بحساب</option>
                     <option value="unlinked">غير مرتبطة</option>
                 </select>
+                </div>
             </div>
 
             <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">

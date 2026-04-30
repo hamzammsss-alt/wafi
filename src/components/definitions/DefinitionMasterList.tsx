@@ -16,6 +16,7 @@ import type {
 } from '../../hooks/useScreenViewManager';
 import { getFloatingMenuPositionFromPoint, getFloatingMenuPositionFromRect } from '../../lib/floatingMenu';
 import FilterDrawer from '../ui/FilterDrawer';
+import type { WorkspaceBadge } from '../workspace/WorkspaceHeader';
 import MasterListToolbar from './MasterListToolbar';
 import { WafiColumnDef, WafiDataGrid, WafiDataGridHandle } from '../../../pages/treasury/operations/WafiDataGrid';
 
@@ -40,6 +41,10 @@ export interface DefinitionListColumn<T> {
 }
 
 interface DefinitionMasterListProps<T> {
+    headerIcon?: React.ReactNode;
+    headerTitle?: React.ReactNode;
+    headerSubtitle?: React.ReactNode;
+    headerBadges?: WorkspaceBadge[];
     screenKey: string;
     data: T[];
     loading?: boolean;
@@ -377,6 +382,10 @@ function matchesFilter<T>(row: T, column: DefinitionListColumn<T>, filter: Scree
 }
 
 export function DefinitionMasterList<T>({
+    headerIcon,
+    headerTitle,
+    headerSubtitle,
+    headerBadges,
     screenKey,
     data,
     loading = false,
@@ -806,6 +815,10 @@ export function DefinitionMasterList<T>({
     return (
         <div className={className}>
             <MasterListToolbar
+                headerIcon={headerIcon}
+                headerTitle={headerTitle}
+                headerSubtitle={headerSubtitle}
+                headerBadges={headerBadges}
                 createLabel={createLabel}
                 selectedRowsCount={selectedRows.length}
                 totalRowsCount={data.length}

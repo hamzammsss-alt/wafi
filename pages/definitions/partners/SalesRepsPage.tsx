@@ -12,7 +12,6 @@ import {
     Phone,
     Target
 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { SalesRep } from '../../../types'; // Assuming type exists or we define it locally
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
@@ -232,27 +231,6 @@ export const SalesRepsPage = () => {
     return (
         <div className="app-page" dir="rtl">
             {/* Header */}
-            <WorkspaceHeader
-                icon={<Briefcase size={22} />}
-                title="مندوبي المبيعات"
-                subtitle="إدارة فريق المبيعات والعمولات والأهداف بنفس أسلوب الشاشات المرجعية الموحد."
-                badges={[
-                    { label: `${reps.length} مندوبين`, tone: 'info' },
-                    { label: `${reps.filter((rep) => rep.is_active).length} نشط`, tone: 'neutral' },
-                ]}
-                actions={(
-                    <button
-                        onClick={openCreate}
-                        className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-violet-900/15 transition hover:brightness-105"
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Plus size={16} />
-                            <span>إضافة مندوب جديد</span>
-                        </span>
-                    </button>
-                )}
-                className="mb-8"
-            />
 
             <div className="hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
@@ -286,6 +264,14 @@ export const SalesRepsPage = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<Briefcase size={22} />}
+                headerTitle="مندوبي المبيعات"
+                headerSubtitle="إدارة فريق المبيعات والعمولات والأهداف بنفس أسلوب الشاشات المرجعية الموحد."
+                headerBadges={[
+                    { label: `${reps.length} مندوبين`, tone: 'info' },
+                    { label: `${reps.filter((rep) => rep.is_active).length} نشط`, tone: 'neutral' },
+                ]}
+
                 screenKey="definitions.sales-reps"
                 data={reps}
                 loading={loading}

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, CheckCircle, Edit, Trash2, Archive } from 'lucide-react';
-import { WorkspaceHeader } from '../../../components/workspace/WorkspaceHeader';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../components/definitions/DefinitionMasterList';
 
 interface FixedAssetRow {
@@ -194,30 +193,18 @@ export function FixedAssetList() {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<Archive size={24} />}
-                title="سجل الأصول الثابتة"
-                subtitle="إدارة الأصول والإهلاك والقيم الدفترية من خلال جدول موحد قابل للتصفية."
-                badges={[
+
+            <DefinitionMasterList
+                headerIcon={<Archive size={24} />}
+                headerTitle="سجل الأصول الثابتة"
+                headerSubtitle="إدارة الأصول والإهلاك والقيم الدفترية من خلال جدول موحد قابل للتصفية."
+                headerBadges={[
                     { label: `الأصول ${assets.length}`, tone: 'warning' },
                     { label: `تكلفة الشراء ${fmt(totalCost)}`, tone: 'info' },
                     { label: `مجمع الإهلاك ${fmt(totalDep)}`, tone: 'neutral' },
                     { label: `القيمة الدفترية ${fmt(totalBook)}`, tone: 'success' },
                 ]}
-                actions={(
-                    <button
-                        id="btn-new-asset"
-                        onClick={() => navigate('/assets/register/new')}
-                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-blue-700"
-                    >
-                        <Plus size={18} />
-                        أصل جديد
-                    </button>
-                )}
-                className="mb-6"
-            />
 
-            <DefinitionMasterList
                 screenKey="definitions.fixed-assets"
                 data={filtered}
                 loading={loading}

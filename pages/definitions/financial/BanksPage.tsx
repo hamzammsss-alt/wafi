@@ -3,7 +3,6 @@ import { Save, Plus, Trash2, Edit, Building, X, Search, Loader2, Archive, Link a
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import initialBanks from './initial_banks.json';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import { AccountPicker } from '../../../components/AccountPicker';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
@@ -174,27 +173,7 @@ export const BanksPage = () => {
 
     return (
         <div className="h-full bg-gray-50 p-4 md:p-6 font-sans" dir="rtl">
-            <WorkspaceHeader
-                icon={<Building size={24} />}
-                title="دليل البنوك والفروع"
-                subtitle="تعريف البنوك والفروع وربطها مع العمليات البنكية داخل النظام"
-                badges={[
-                    { label: `الإجمالي ${banks.length}`, tone: 'warning' },
-                    { label: `المربوط ${banks.filter((bank) => bank.gl_account_code).length}`, tone: 'success' },
-                ]}
-                actions={
-                    <>
-                        <button onClick={openCreate} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition-colors shadow-sm hover:shadow">
-                            <Plus size={18} /> إضافة بنك/فرع جديد
-                        </button>
-                        <button onClick={handleImportHtml} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-medium transition-colors shadow-sm hover:shadow">
-                            استيراد ملف البنوك
-                        </button>
-                    </>
-                }
-                className="mb-6"
-            />
-            <h1 className="hidden text-3xl font-bold text-gray-800 flex items-center gap-3 mb-8">
+                        <h1 className="hidden text-3xl font-bold text-gray-800 flex items-center gap-3 mb-8">
                 <div className="bg-emerald-100 p-3 rounded-xl text-emerald-600">
                     <Building size={32} />
                 </div>
@@ -202,6 +181,14 @@ export const BanksPage = () => {
             </h1>
 
             <DefinitionMasterList
+                headerIcon={<Building size={24} />}
+                headerTitle="دليل البنوك والفروع"
+                headerSubtitle="تعريف البنوك والفروع وربطها مع العمليات البنكية داخل النظام"
+                headerBadges={[
+                    { label: `الإجمالي ${banks.length}`, tone: 'warning' },
+                    { label: `المربوط ${banks.filter((bank) => bank.gl_account_code).length}`, tone: 'success' },
+                ]}
+
                 screenKey="definitions.banks"
                 data={banks}
                 loading={loading}
@@ -282,29 +269,29 @@ export const BanksPage = () => {
 
                                         <td className="p-2 flex gap-2 justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                             {/* Reconcile Button */}
-                                            {/* We need bank.id but bank also needs a linked GL account? 
+                                            {/* We need bank.id but bank also needs a linked GL account?
                                                 Usually bank record IS creating an account or LINKED to one.
                                                 Assuming bank.id connects to account logic or we pass account ID if bank has one.
                                                 Wait. Bank Definition -> saves to `banks` table?
                                                 Does `banks` table have `linked_account_id`?
                                                 Let's check getBanks(). If not, we might fail to reconcile.
-                                                Assuming bank.id is NOT account.id. 
+                                                Assuming bank.id is NOT account.id.
                                                 We need to Find the account.
                                                 Or navigate with Bank ID and let RecPage find account?
                                                 RecPage expects Account ID.
-                                                
+
                                                 Heuristic: navigate with bankId, let RecPage try to match?
                                                 Or: BanksPage usually implies these are our banks.
                                                 If we don't have account ID, we can't reconcile.
-                                                
+
                                                 Let's add the button. If user clicks, RecPage will try to select `selectedAccount`.
                                                 If `bankId` in RecPage matches an ACCOUNT ID in the list, it selects it.
                                                 So we must pass the ACCOUNT ID of the bank.
-                                                
+
                                                 The `banks` table (from initial_banks.json) might interact with `accounts`?
                                                 Usually `banks` table is master data. `accounts` is Chart of Accounts.
                                                 We need to know which Account ID corresponds to this Bank.
-                                                
+
                                                 If `bank` object has `account_id` or similar?
                                                 Let's blindly pass `bank.id` for now, assuming user might have used BankID as AccountID or we can fix later.
                                                 The user request is simple: "Create this page".

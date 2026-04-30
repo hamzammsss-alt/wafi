@@ -10,7 +10,6 @@ import {
     Loader2,
     AlertCircle
 } from 'lucide-react';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
@@ -369,27 +368,7 @@ export const CreditPoliciesPage: React.FC = () => {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<ShieldCheck size={24} />}
-                title="سياسات الائتمان"
-                subtitle="تعريف وإدارة قواعد الائتمان الافتراضية"
-                badges={[
-                    { label: `الإجمالي ${rows.length}`, tone: 'warning' },
-                    { label: `المعروض ${filtered.length}`, tone: 'success' },
-                    { label: `العملات ${currencies.length}`, tone: 'info' },
-                ]}
-                actions={
-                    <button
-                        onClick={openCreate}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
-                    >
-                        <Plus size={18} />
-                        سياسة جديدة
-                    </button>
-                }
-                className="mb-6"
-            />
-            <div className="hidden flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                        <div className="hidden flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                         <div className="p-2 bg-cyan-100 rounded-lg text-cyan-700">
@@ -410,6 +389,15 @@ export const CreditPoliciesPage: React.FC = () => {
             </div>
 
             <DefinitionMasterList
+                headerIcon={<ShieldCheck size={24} />}
+                headerTitle="سياسات الائتمان"
+                headerSubtitle="تعريف وإدارة قواعد الائتمان الافتراضية"
+                headerBadges={[
+                    { label: `الإجمالي ${rows.length}`, tone: 'warning' },
+                    { label: `المعروض ${filtered.length}`, tone: 'success' },
+                    { label: `العملات ${currencies.length}`, tone: 'info' },
+                ]}
+
                 screenKey="definitions.credit-policies"
                 data={rows}
                 loading={loading}

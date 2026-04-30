@@ -14,7 +14,6 @@ import {
     X
 } from 'lucide-react';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 
 type CostCenterRow = {
     id: string;
@@ -370,27 +369,6 @@ export const CostCenters = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
-            <WorkspaceHeader
-                icon={<Layers size={22} />}
-                title="مراكز التكلفة"
-                subtitle="الهيكل التنظيمي للمراكز والمشاريع والفروع مع نفس هوية القوائم المرجعية."
-                badges={[
-                    { label: `${listRows.length} مركز`, tone: 'info' },
-                    { label: `${centers.filter((center) => !center.parent_id).length} رئيسي`, tone: 'warning' },
-                ]}
-                actions={(
-                    <button
-                        onClick={() => setIsAdding(true)}
-                        className="rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-orange-900/15 transition hover:brightness-105"
-                    >
-                        <span className="inline-flex items-center gap-2">
-                            <Plus size={16} />
-                            <span>إضافة مركز رئيسي</span>
-                        </span>
-                    </button>
-                )}
-                className="mb-8"
-            />
 
             {error && (
                 <div className="mb-6 flex items-center gap-3 rounded-lg border border-red-100 bg-red-50 p-4 text-red-700">
@@ -403,6 +381,14 @@ export const CostCenters = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<Layers size={22} />}
+                headerTitle="مراكز التكلفة"
+                headerSubtitle="الهيكل التنظيمي للمراكز والمشاريع والفروع مع نفس هوية القوائم المرجعية."
+                headerBadges={[
+                    { label: `${listRows.length} مركز`, tone: 'info' },
+                    { label: `${centers.filter((center) => !center.parent_id).length} رئيسي`, tone: 'warning' },
+                ]}
+
                 screenKey="definitions.cost-centers"
                 data={listRows}
                 loading={loading}

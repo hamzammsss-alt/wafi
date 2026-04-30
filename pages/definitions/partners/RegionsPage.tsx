@@ -13,7 +13,6 @@ import {
     MapPin
 } from 'lucide-react';
 import { Region } from '../../../types';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
@@ -233,26 +232,7 @@ export const RegionsPage = () => {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<Map size={24} />}
-                title="إدارة المناطق"
-                subtitle="تعريف المناطق الجغرافية للتوزيع والمبيعات"
-                badges={[
-                    { label: `الإجمالي ${regions.length}`, tone: 'warning' },
-                    { label: `المعروض ${filteredRegions.length}`, tone: 'info' },
-                ]}
-                actions={
-                    <button
-                        onClick={openCreate}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium transition-all shadow-sm hover:shadow-md active:scale-95"
-                    >
-                        <Plus size={20} />
-                        إضافة منطقة جديدة
-                    </button>
-                }
-                className="mb-6"
-            />
-            {/* Header */}
+                        {/* Header */}
             <div className="hidden flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
@@ -285,6 +265,14 @@ export const RegionsPage = () => {
             )}
 
             <DefinitionMasterList
+                headerIcon={<Map size={24} />}
+                headerTitle="إدارة المناطق"
+                headerSubtitle="تعريف المناطق الجغرافية للتوزيع والمبيعات"
+                headerBadges={[
+                    { label: `الإجمالي ${regions.length}`, tone: 'warning' },
+                    { label: `المعروض ${filteredRegions.length}`, tone: 'info' },
+                ]}
+
                 screenKey="definitions.regions"
                 data={regions}
                 loading={loading}

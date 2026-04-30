@@ -79,6 +79,9 @@ export class SqliteAuditRepo {
             CREATE INDEX IF NOT EXISTS idx_audit_events_company_entity_created_desc
                 ON audit_events(company_id, entity_type, entity_id, created_at DESC);
 
+            CREATE INDEX IF NOT EXISTS idx_audit_events_company_doc_created_desc
+                ON audit_events(company_id, doc_type, doc_id, created_at DESC, id DESC);
+
             CREATE INDEX IF NOT EXISTS idx_audit_events_company_user_created_desc
                 ON audit_events(company_id, user_id, created_at DESC);
 

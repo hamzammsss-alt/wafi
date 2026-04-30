@@ -1,6 +1,6 @@
 import React from 'react';
 
-type WorkspaceBadge = {
+export type WorkspaceBadge = {
     label: string;
     tone?: 'neutral' | 'info' | 'success' | 'warning';
     mono?: boolean;

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Layers, Plus, Search, Edit2, Trash2, X } from 'lucide-react';
 import { Account } from '../../../types';
-import { WorkspaceHeader } from '../../../src/components/workspace/WorkspaceHeader';
 import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 
 interface AssetCategory {
@@ -243,27 +242,16 @@ export const AssetCategories = () => {
 
     return (
         <div className="app-page" dir="rtl">
-            <WorkspaceHeader
-                icon={<Layers size={24} />}
-                title="مجموعات الأصول الثابتة"
-                subtitle="تعريف وتصنيف الأصول الثابتة ونسب الإهلاك بنفس تجربة الجداول الموحدة."
-                badges={[
+
+            <DefinitionMasterList
+                headerIcon={<Layers size={24} />}
+                headerTitle="مجموعات الأصول الثابتة"
+                headerSubtitle="تعريف وتصنيف الأصول الثابتة ونسب الإهلاك بنفس تجربة الجداول الموحدة."
+                headerBadges={[
                     { label: `الإجمالي ${categories.length}`, tone: 'warning' },
                     { label: `المعروض ${filtered.length}`, tone: 'info' },
                 ]}
-                actions={(
-                    <button
-                        onClick={handleNewGroup}
-                        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-indigo-700"
-                    >
-                        <Plus size={18} />
-                        مجموعة جديدة
-                    </button>
-                )}
-                className="mb-6"
-            />
 
-            <DefinitionMasterList
                 screenKey="definitions.asset-categories"
                 data={filtered}
                 loading={loading}

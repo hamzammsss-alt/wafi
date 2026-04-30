@@ -2,7 +2,9 @@ export const auditI18nPlaceholders = {
     en: {
         'audit.event.document.create': 'Document Created',
         'audit.event.document.update': 'Document Updated',
+        'audit.event.document.submit': 'Document Submitted',
         'audit.event.document.post': 'Document Posted',
+        'audit.event.document.reopen': 'Document Reopened',
         'audit.event.document.void': 'Document Voided',
         'audit.event.permission.denied': 'Permission Denied',
         'audit.event.permission.allowed': 'Permission Allowed',
@@ -18,7 +20,9 @@ export const auditI18nPlaceholders = {
     ar: {
         'audit.event.document.create': 'تم إنشاء المستند',
         'audit.event.document.update': 'تم تحديث المستند',
+        'audit.event.document.submit': 'تم إرسال المستند للاعتماد',
         'audit.event.document.post': 'تم ترحيل المستند',
+        'audit.event.document.reopen': 'تمت إعادة فتح المستند',
         'audit.event.document.void': 'تم إلغاء المستند',
         'audit.event.permission.denied': 'تم رفض الصلاحية',
         'audit.event.permission.allowed': 'تم السماح بالصلاحية',
@@ -34,7 +38,9 @@ export const auditI18nPlaceholders = {
     he: {
         'audit.event.document.create': 'המסמך נוצר',
         'audit.event.document.update': 'המסמך עודכן',
+        'audit.event.document.submit': 'המסמך נשלח לאישור',
         'audit.event.document.post': 'המסמך נרשם',
+        'audit.event.document.reopen': 'המסמך נפתח מחדש',
         'audit.event.document.void': 'המסמך בוטל',
         'audit.event.permission.denied': 'הרשאה נדחתה',
         'audit.event.permission.allowed': 'הרשאה אושרה',
