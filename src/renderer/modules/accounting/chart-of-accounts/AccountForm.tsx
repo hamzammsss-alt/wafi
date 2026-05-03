@@ -90,17 +90,17 @@ export function AccountForm(props: AccountFormProps) {
     const showError = (key: keyof AccountFormErrors): string => errors[key] || '';
     const inputClass = (key?: keyof AccountFormErrors) => {
         const hasError = key ? Boolean(showError(key)) : false;
-        return `border rounded px-2 py-1 ${hasError ? 'border-red-500 bg-red-50' : 'border-slate-300'}`;
+        return `h-11 rounded-xl border bg-white px-3 text-sm outline-none transition focus:ring-2 ${hasError ? 'border-red-400 bg-red-50 focus:border-red-400 focus:ring-red-100' : 'border-slate-200 focus:border-sky-400 focus:ring-sky-100'} disabled:bg-slate-50 disabled:text-slate-400`;
     };
     const allowedSubtypes = SUBTYPES_BY_TYPE[form.accountType] || ACCOUNT_SUBTYPES;
     const isFixedCurrency = form.currencyBehavior === 'FIXED_CURRENCY';
     const referenceHint = REFERENCE_HINT_BY_SUBTYPE[form.accountSubtype] || 'المرجع: يعتمد على نوع الحساب وتعريفات المستندات';
 
     return (
-        <form className="border rounded p-3 grid grid-cols-2 gap-2 text-sm" onKeyDown={moveFocusForward}>
-            <h2 className="col-span-2 text-base font-semibold">{t('coa.form.title')}</h2>
+        <form className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm md:grid-cols-2" onKeyDown={moveFocusForward}>
+            <h2 className="text-base font-extrabold text-slate-900 md:col-span-2">{t('coa.form.title')}</h2>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.account_code')}</span>
                 <input
                     ref={firstFieldRef}
@@ -124,7 +124,7 @@ export function AccountForm(props: AccountFormProps) {
                 {showError('accountCode') ? <span className="text-xs text-red-600">{showError('accountCode')}</span> : null}
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.name')}</span>
                 <input
                     className={inputClass('name')}
@@ -134,7 +134,7 @@ export function AccountForm(props: AccountFormProps) {
                 {showError('name') ? <span className="text-xs text-red-600">{showError('name')}</span> : null}
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.parent')}</span>
                 <select
                     className={inputClass('parentId')}
@@ -151,7 +151,7 @@ export function AccountForm(props: AccountFormProps) {
                 {showError('parentId') ? <span className="text-xs text-red-600">{showError('parentId')}</span> : null}
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.account_type')}</span>
                 <select
                     className={inputClass('accountType')}
@@ -167,7 +167,7 @@ export function AccountForm(props: AccountFormProps) {
                 {showError('accountType') ? <span className="text-xs text-red-600">{showError('accountType')}</span> : null}
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.account_subtype')}</span>
                 <select
                     className={inputClass('accountSubtype')}
@@ -183,7 +183,7 @@ export function AccountForm(props: AccountFormProps) {
                 {showError('accountSubtype') ? <span className="text-xs text-red-600">{showError('accountSubtype')}</span> : null}
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.currency_behavior')}</span>
                 <select
                     className={inputClass()}
@@ -196,7 +196,7 @@ export function AccountForm(props: AccountFormProps) {
                 </select>
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>نوع المرجع</span>
                 <select
                     className={inputClass()}
@@ -211,7 +211,7 @@ export function AccountForm(props: AccountFormProps) {
                 </select>
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.currency_code')}</span>
                 <input
                     className={inputClass('currencyCode')}
@@ -222,11 +222,11 @@ export function AccountForm(props: AccountFormProps) {
                 {showError('currencyCode') ? <span className="text-xs text-red-600">{showError('currencyCode')}</span> : null}
             </label>
 
-            <div className="col-span-2 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold leading-6 text-slate-600 md:col-span-2">
                 {referenceHint}
             </div>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.scope_type')}</span>
                 <select
                     className={inputClass()}
@@ -238,7 +238,7 @@ export function AccountForm(props: AccountFormProps) {
                 </select>
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.branch_id')}</span>
                 <input
                     className={inputClass('branchId')}
@@ -248,7 +248,7 @@ export function AccountForm(props: AccountFormProps) {
                 {showError('branchId') ? <span className="text-xs text-red-600">{showError('branchId')}</span> : null}
             </label>
 
-            <label className="flex flex-col gap-1">
+            <label className="flex flex-col gap-1.5 font-bold text-slate-700">
                 <span>{t('coa.form.status')}</span>
                 <select
                     className={inputClass()}
@@ -260,7 +260,7 @@ export function AccountForm(props: AccountFormProps) {
                 </select>
             </label>
 
-            <label className="flex items-center gap-2">
+            <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 font-bold text-slate-700">
                 <input
                     type="checkbox"
                     checked={form.postingAllowed}
@@ -269,7 +269,7 @@ export function AccountForm(props: AccountFormProps) {
                 <span>{t('coa.form.posting_allowed')}</span>
             </label>
 
-            <label className="flex items-center gap-2">
+            <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 font-bold text-slate-700">
                 <input
                     type="checkbox"
                     checked={form.requiresCostCenter}
@@ -278,7 +278,7 @@ export function AccountForm(props: AccountFormProps) {
                 <span>{t('coa.form.requires_cost_center')}</span>
             </label>
 
-            <label className="flex items-center gap-2">
+            <label className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 font-bold text-slate-700 md:col-span-2">
                 <input
                     type="checkbox"
                     checked={form.requiresAnalysisCode}

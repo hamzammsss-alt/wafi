@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { Ruler, Plus, Search, Trash2, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Ruler, Plus, Trash2, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Unit } from '../../../types';
 import {
     UnitCalculationMode,
@@ -21,7 +21,6 @@ const CALCULATION_MODE_OPTIONS: Array<{ value: UnitCalculationMode; label: strin
 export const UnitsPage = () => {
     const [units, setUnits] = useState<Unit[]>([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
     const [isAdding, setIsAdding] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -184,11 +183,19 @@ export const UnitsPage = () => {
         }
     };
 
-    const filteredUnits = units.filter((u) =>
-        (u.name_ar || '').toLowerCase().includes(search.toLowerCase()) ||
-        (u.name_en || '').toLowerCase().includes(search.toLowerCase()) ||
-        (u.name_he || '').toLowerCase().includes(search.toLowerCase()) ||
-        (u.code || '').toLowerCase().includes(search.toLowerCase())
+    const activeUnitsCount = useMemo(
+        () => units.filter((unit) => Number(unit.is_active || 0) === 1).length,
+        [units],
+    );
+
+    const usedUnitsCount = useMemo(
+        () => units.filter((unit) => Number(unit.is_used || 0) === 1).length,
+        [units],
+    );
+
+    const calculatedUnitsCount = useMemo(
+        () => units.filter((unit) => getUnitCalculationMode(unit) !== 'MANUAL').length,
+        [units],
     );
 
     const columns = useMemo<DefinitionListColumn<Unit>[]>(() => [
@@ -346,26 +353,7 @@ export const UnitsPage = () => {
     ], [parentById]);
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-8" dir="rtl">
-            <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-                <div>
-                    <h1 className="flex items-center gap-3 text-2xl font-bold text-gray-800">
-                        <div className="rounded-lg bg-blue-100 p-2 text-blue-600">
-                            <Ruler size={24} />
-                        </div>
-                        إدارة الوحدات
-                    </h1>
-                    <p className="mt-1 mr-12 text-gray-500">جميع معلومات تعريف الوحدات للأصناف</p>
-                </div>
-
-                <button
-                    onClick={() => setIsAdding(true)}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow-md active:scale-95"
-                >
-                    <Plus size={20} />
-                    إضافة وحدة جديدة
-                </button>
-            </div>
+        <div className="h-full bg-gray-50 p-4 md:p-6" dir="rtl">
 
             {error && (
                 <div className="mb-6 flex items-center gap-3 rounded-lg border border-red-100 bg-red-50 p-4 text-red-700">
@@ -377,111 +365,29 @@ export const UnitsPage = () => {
                 </div>
             )}
 
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                <div className="flex flex-col items-center justify-between gap-4 border-b border-gray-100 bg-gray-50/50 p-4 sm:flex-row">
-                    <div className="relative w-full sm:w-96">
-                        <input
-                            type="text"
-                            placeholder="بحث عن وحدة..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-4 pr-10 shadow-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                        />
-                        <Search className="absolute right-3 top-3 text-gray-400" size={18} />
-                    </div>
-                    <div className="rounded-md border bg-white px-3 py-1 text-sm font-medium text-gray-500 shadow-sm">
-                        إجمالي الوحدات: <span className="font-bold text-blue-600">{units.length}</span>
-                    </div>
-                </div>
-
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center p-12 text-center text-gray-400">
-                        <Loader2 size={40} className="mb-4 animate-spin text-blue-500" />
-                        <p>جاري تحميل البيانات...</p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-right text-sm">
-                            <thead className="border-b bg-[#f8fafc] font-semibold uppercase tracking-wider text-gray-600">
-                                <tr>
-                                    <th className="px-4 py-3">الرقم</th>
-                                    <th className="px-4 py-3">الاسم</th>
-                                    <th className="px-4 py-3">آخر تغيير</th>
-                                    <th className="px-4 py-3">الاسم - العربية</th>
-                                    <th className="px-4 py-3">الاسم - English</th>
-                                    <th className="px-4 py-3">الاسم - עברית</th>
-                                    <th className="px-4 py-3">فعال</th>
-                                    <th className="px-4 py-3">مستخدم</th>
-                                    <th className="px-4 py-3">نوع الوحدة</th>
-                                    <th className="px-4 py-3">طريقة الحساب</th>
-                                    <th className="px-4 py-3">تابع ل</th>
-                                    <th className="px-4 py-3">مستوى</th>
-                                    <th className="px-4 py-3">رمز - العربية</th>
-                                    <th className="px-4 py-3">رمز - English</th>
-                                    <th className="px-4 py-3">رمز - עברית</th>
-                                    <th className="px-4 py-3">ضرب</th>
-                                    <th className="px-4 py-3">المعامل الكلي</th>
-                                    <th className="w-24 px-4 py-3 text-center">إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {filteredUnits.length > 0 ? (
-                                    filteredUnits.map((unit, index) => (
-                                        <tr key={unit.id || `unit-${index}`} className="group transition-colors hover:bg-slate-50">
-                                            <td className="px-4 py-3 font-mono text-left">{unit.code || '-'}</td>
-                                            <td className="px-4 py-3 font-medium text-gray-800">{unit.name_ar || '-'}</td>
-                                            <td className="px-4 py-3 text-xs text-gray-500">{unit.updated_at ? new Date(unit.updated_at).toLocaleString('en-GB') : '-'}</td>
-                                            <td className="px-4 py-3">{unit.name_ar || '-'}</td>
-                                            <td className="px-4 py-3">{unit.name_en || '-'}</td>
-                                            <td className="px-4 py-3">{unit.name_he || '-'}</td>
-                                            <td className="px-4 py-3">{Number(unit.is_active || 0) === 1 ? 'نعم' : 'لا'}</td>
-                                            <td className="px-4 py-3">{Number(unit.is_used || 0) === 1 ? 'نعم' : 'لا'}</td>
-                                            <td className="px-4 py-3">{unit.unit_type || '-'}</td>
-                                            <td className="px-4 py-3">
-                                                <div className="space-y-1">
-                                                    <div className="font-medium text-gray-700">
-                                                        {CALCULATION_MODE_OPTIONS.find((option) => option.value === getUnitCalculationMode(unit))?.label || 'إدخال يدوي'}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500">
-                                                        {unit.formula_hint || getUnitFormulaHint(getUnitCalculationMode(unit))}
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3">{parentById.get(unit.parent_unit_id || '')?.code || '-'}</td>
-                                            <td className="px-4 py-3 text-center">{unit.level_no || 1}</td>
-                                            <td className="px-4 py-3">{unit.symbol_ar || unit.code || '-'}</td>
-                                            <td className="px-4 py-3">{unit.symbol_en || unit.symbol || unit.code || '-'}</td>
-                                            <td className="px-4 py-3">{unit.symbol_he || '-'}</td>
-                                            <td className="px-4 py-3 text-left font-mono">{Number(unit.multiplier || 1)}</td>
-                                            <td className="px-4 py-3 text-left font-mono">{Number(unit.total_factor || 1)}</td>
-                                            <td className="px-4 py-3 text-center opacity-0 transition-opacity group-hover:opacity-100">
-                                                <button
-                                                    onClick={() => handleDelete(unit.id)}
-                                                    className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
-                                                    title="حذف"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={18} className="py-16 text-center text-gray-400">
-                                            <div className="flex flex-col items-center gap-3">
-                                                <div className="rounded-full bg-gray-50 p-4">
-                                                    <Search size={32} className="text-gray-300" />
-                                                </div>
-                                                <p>لا توجد وحدات مطابقة للبحث</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+            <DefinitionMasterList
+                headerIcon={<Ruler size={24} />}
+                headerTitle="إدارة الوحدات"
+                headerSubtitle="جميع معلومات تعريف الوحدات للأصناف بنفس خصائص جدول العملات وأسعار الصرف."
+                headerBadges={[
+                    { label: `إجمالي الوحدات ${units.length}`, tone: 'warning' },
+                    { label: `الفعالة ${activeUnitsCount}`, tone: 'success' },
+                    { label: `المستخدمة ${usedUnitsCount}`, tone: 'info' },
+                    { label: `المحسوبة ${calculatedUnitsCount}`, tone: 'neutral' },
+                ]}
+                screenKey="definitions.units"
+                data={units}
+                loading={loading}
+                columns={columns}
+                rowKey={(unit) => String(unit.id || unit.code)}
+                searchPlaceholder="بحث عن وحدة أو رمز أو نوع..."
+                emptyMessage="لا توجد وحدات مطابقة للمعايير الحالية"
+                createLabel="إضافة وحدة جديدة"
+                onCreate={() => setIsAdding(true)}
+                onDelete={handleDeleteRows}
+                onRefresh={loadUnits}
+                defaultSort={{ key: 'code', direction: 'asc' }}
+            />
 
             {isAdding && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">

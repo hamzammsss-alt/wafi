@@ -8,6 +8,24 @@ interface PlaceholderPageProps {
     icon?: React.ReactNode;
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+    Sales: 'المبيعات',
+    Distribution: 'التوزيع',
+    Import: 'الاستيراد',
+    Export: 'التصدير',
+    Banking: 'البنوك',
+    Reports: 'التقارير والتحليلات',
+    System: 'النظام',
+    Editions: 'الإصدارات',
+    Security: 'الأمان والصلاحيات',
+    GL: 'الحسابات العامة',
+};
+
+function getCategoryLabel(category: string) {
+    const trimmed = String(category || '').trim();
+    return CATEGORY_LABELS[trimmed] || trimmed;
+}
+
 export const PlaceholderPage: React.FC<PlaceholderPageProps> = ({
     title,
     category,
@@ -21,7 +39,7 @@ export const PlaceholderPage: React.FC<PlaceholderPageProps> = ({
                     {icon || <FileQuestion size={48} className="text-indigo-600" />}
                 </div>
                 <h1 className="text-3xl font-bold text-gray-800 mb-3">{title}</h1>
-                <p className="text-sm text-gray-500 mb-2">القسم: {category}</p>
+                <p className="text-sm text-gray-500 mb-2">القسم: {getCategoryLabel(category)}</p>
                 {description && (
                     <p className="text-gray-600 mb-6">{description}</p>
                 )}

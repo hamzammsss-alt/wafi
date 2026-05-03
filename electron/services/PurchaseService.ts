@@ -987,7 +987,17 @@ export class PurchaseService {
 
     static getReturns() {
         return db.prepare(`
-            SELECT pr.*, s.name_ar as supplier_name 
+            SELECT
+                pr.*,
+                COALESCE(s.name_ar, s.name_en, s.code, '') as supplier_name,
+                COALESCE(
+                    (SELECT c.code FROM currencies c WHERE c.id = pr.currency_id LIMIT 1),
+                    (SELECT c.code FROM currencies c WHERE UPPER(c.code) = UPPER(pr.currency_id) LIMIT 1),
+                    CASE
+                        WHEN LENGTH(TRIM(COALESCE(pr.currency_id, ''))) = 3 THEN UPPER(TRIM(pr.currency_id))
+                        ELSE 'ILS'
+                    END
+                ) as currency_code
             FROM purchase_returns pr
             LEFT JOIN business_partners s ON pr.supplier_id = s.id
             ORDER BY pr.created_at DESC

@@ -1,5 +1,5 @@
 ﻿
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ArrowRight,
     ChevronDown,
@@ -7,7 +7,6 @@ import {
     FileText,
     Plus,
     Printer,
-    RefreshCw,
     Save,
     Search,
     Share2,
@@ -17,12 +16,12 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { useTabs } from '../../src/contexts/TabsContext';
 import { DocumentSupportDock } from '../../src/components/workspace/DocumentSupportDock';
-import { WorkspaceHeader } from '../../src/components/workspace/WorkspaceHeader';
 import { getInventoryOperationSupportSections } from '../../src/components/workspace/documentSupportSections';
 import { useEnterNavigation } from '../../src/hooks/useEnterNavigation';
 import { Item, Warehouse } from '../../types';
 import { exportToCSV } from '../../utils/export';
 import { FloatingDropdown, floatingMenuItemClass } from '../../src/components/ui/FloatingDropdown';
+import DefinitionMasterList, { DefinitionListColumn } from '../../src/components/definitions/DefinitionMasterList';
 
 type ViewMode = 'LIST' | 'FORM';
 type ToolbarMenu = 'track' | 'convert' | 'export' | null;
@@ -83,6 +82,14 @@ const CONVERT_MENU_ITEMS: Array<{ id: string; label: string }> = [
     { id: 'purchaseOrder', label: 'إلى طلبية مشتريات' },
     { id: 'salesInvoice', label: 'إلى فاتورة مبيعات' },
     { id: 'purchaseInvoice', label: 'إلى فاتورة مشتريات' }
+];
+
+const INTERNAL_ORDER_STATUS_OPTIONS = [
+    { value: 'PENDING', label: 'قيد الطلب' },
+    { value: 'IN_TRANSIT', label: 'قيد النقل' },
+    { value: 'COMPLETED', label: 'مكتملة' },
+    { value: 'CANCELLED', label: 'ملغاة' },
+    { value: 'DRAFT', label: 'مسودة' }
 ];
 
 const nowDate = (): string => new Date().toISOString().split('T')[0];
@@ -225,9 +232,6 @@ export const InternalOrderPage = () => {
     const [loadingList, setLoadingList] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'IN_TRANSIT' | 'COMPLETED' | 'CANCELLED' | 'DRAFT'>('ALL');
-    const [listSearch, setListSearch] = useState('');
-
     const [searchTerm, setSearchTerm] = useState('');
     const [showItemPicker, setShowItemPicker] = useState(false);
 
@@ -321,28 +325,6 @@ export const InternalOrderPage = () => {
         [orders, selectedOrderId]
     );
 
-    const filteredOrders = useMemo(() => {
-        const query = normalizeText(listSearch);
-        return orders.filter((row) => {
-            const statusMatches = statusFilter === 'ALL' || String(row.status || '').toUpperCase() === statusFilter;
-            if (!statusMatches) return false;
-            if (!query) return true;
-
-            const parsed = parseInternalOrderNotes(row.notes);
-            const haystack = [
-                row.code,
-                row.date,
-                row.status,
-                row.from_warehouse_name,
-                row.to_warehouse_name,
-                parsed.notes,
-                parsed.requiredDate
-            ].map(normalizeText);
-
-            return haystack.some((value) => value.includes(query));
-        });
-    }, [orders, listSearch, statusFilter]);
-
     const filteredItems = useMemo(() => {
         const query = normalizeText(searchTerm);
         if (!query) return items.slice(0, 20);
@@ -420,7 +402,7 @@ export const InternalOrderPage = () => {
             return;
         }
 
-        const row = filteredOrders.find((candidate) => String(candidate.id) === String(selectedOrderId));
+        const row = orders.find((candidate) => String(candidate.id) === String(selectedOrderId));
         if (!row) {
             alert('تعذر العثور على الطلبية المحددة.');
             return;
@@ -694,7 +676,7 @@ export const InternalOrderPage = () => {
     };
 
     const exportOrders = (format: ExportFormat) => {
-        const rows = filteredOrders.map((row, index) => {
+        const rows = orders.map((row, index) => {
             const parsed = parseInternalOrderNotes(row.notes);
             const totalQty = Number(row.total_quantity) || 0;
             const receivedQty = Number(row.received_quantity) || 0;
@@ -747,6 +729,171 @@ export const InternalOrderPage = () => {
 
     const totalQty = useMemo(() => lines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0), [lines]);
     const totalReceivedQty = useMemo(() => lines.reduce((sum, line) => sum + (Number(line.receivedQuantity) || 0), 0), [lines]);
+    const ordersTotalQty = useMemo(() => orders.reduce((sum, row) => sum + (Number(row.total_quantity) || 0), 0), [orders]);
+    const pendingOrdersCount = useMemo(
+        () => orders.filter((row) => String(row.status || '').toUpperCase() === 'PENDING').length,
+        [orders]
+    );
+    const completedOrdersCount = useMemo(
+        () => orders.filter((row) => String(row.status || '').toUpperCase() === 'COMPLETED').length,
+        [orders]
+    );
+
+    const handleListSelectedRowsChange = useCallback((rows: InternalOrderRow[]) => {
+        setSelectedOrderId(rows[0]?.id ? String(rows[0].id) : null);
+    }, []);
+
+    const listColumns = useMemo<DefinitionListColumn<InternalOrderRow>[]>(() => [
+        {
+            key: 'code',
+            label: 'رقم الطلبية',
+            width: 150,
+            defaultVisible: true,
+            getSearchValue: (row) => {
+                const parsed = parseInternalOrderNotes(row.notes);
+                return [
+                    row.code,
+                    row.date,
+                    row.status,
+                    row.from_warehouse_name,
+                    row.to_warehouse_name,
+                    parsed.requiredDate,
+                    parsed.notes
+                ].filter(Boolean).join(' ');
+            },
+            renderCell: (row) => (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs font-bold text-sky-700">
+                    {row.code || '-'}
+                </span>
+            )
+        },
+        {
+            key: 'date',
+            label: 'تاريخ الطلب',
+            type: 'date',
+            filterType: 'date',
+            width: 130,
+            defaultVisible: true,
+            getValue: (row) => onlyDate(row.date),
+            getDisplayValue: (row) => onlyDate(row.date) || '-'
+        },
+        {
+            key: 'status',
+            label: 'الحالة',
+            type: 'enum',
+            filterType: 'enum',
+            width: 140,
+            defaultVisible: true,
+            options: INTERNAL_ORDER_STATUS_OPTIONS,
+            getValue: (row) => String(row.status || '').toUpperCase(),
+            getDisplayValue: (row) => statusLabel(row.status),
+            renderCell: (row) => (
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(row.status)}`}>
+                    {statusLabel(row.status)}
+                </span>
+            )
+        },
+        {
+            key: 'from_warehouse_name',
+            label: 'المزود (من)',
+            width: 190,
+            defaultVisible: true,
+            getDisplayValue: (row) => row.from_warehouse_name || '-'
+        },
+        {
+            key: 'to_warehouse_name',
+            label: 'الطالب (إلى)',
+            width: 190,
+            defaultVisible: true,
+            getDisplayValue: (row) => row.to_warehouse_name || '-'
+        },
+        {
+            key: 'lines_count',
+            label: 'عدد الأصناف',
+            type: 'number',
+            filterType: 'number',
+            width: 120,
+            defaultVisible: true,
+            getValue: (row) => Number(row.lines_count || 0),
+            getDisplayValue: (row) => String(Number(row.lines_count || 0))
+        },
+        {
+            key: 'total_quantity',
+            label: 'الكمية المطلوبة',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            getValue: (row) => Number(row.total_quantity || 0),
+            getDisplayValue: (row) => Number(row.total_quantity || 0).toFixed(3)
+        },
+        {
+            key: 'received_quantity',
+            label: 'المستلم',
+            type: 'number',
+            filterType: 'number',
+            width: 120,
+            defaultVisible: true,
+            getValue: (row) => Number(row.received_quantity || 0),
+            getDisplayValue: (row) => Number(row.received_quantity || 0).toFixed(3)
+        },
+        {
+            key: 'remaining_quantity',
+            label: 'المتبقي',
+            type: 'number',
+            filterType: 'number',
+            width: 120,
+            defaultVisible: true,
+            getValue: (row) => Number(row.total_quantity || 0) - Number(row.received_quantity || 0),
+            getDisplayValue: (row) => (Number(row.total_quantity || 0) - Number(row.received_quantity || 0)).toFixed(3)
+        },
+        {
+            key: 'required_date',
+            label: 'تاريخ الاحتياج',
+            type: 'date',
+            filterType: 'date',
+            width: 140,
+            defaultVisible: false,
+            getValue: (row) => parseInternalOrderNotes(row.notes).requiredDate,
+            getDisplayValue: (row) => parseInternalOrderNotes(row.notes).requiredDate || '-'
+        },
+        {
+            key: 'notes',
+            label: 'ملاحظات',
+            width: 260,
+            defaultVisible: true,
+            getDisplayValue: (row) => parseInternalOrderNotes(row.notes).notes || '-',
+            renderCell: (row) => (
+                <span className="line-clamp-2 text-slate-600" title={parseInternalOrderNotes(row.notes).notes || ''}>
+                    {parseInternalOrderNotes(row.notes).notes || '-'}
+                </span>
+            )
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 110,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (row) => (
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedOrderId(String(row.id));
+                        void openOrderFromRow(row);
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-sky-700 transition hover:border-sky-300 hover:bg-sky-50"
+                    title="فتح الطلبية"
+                >
+                    فتح
+                </button>
+            )
+        }
+    ], [openOrderFromRow]);
 
     if (viewMode === 'LIST') {
         return (
@@ -757,220 +904,90 @@ export const InternalOrderPage = () => {
                     description="يمكنك إدارة الأصناف والمستودعات والعملاء والمركبات من نفس شاشة الطلبية."
                 />
 
-                <WorkspaceHeader
-                    icon={<Truck size={22} />}
-                    title="طلبيات المستودع الداخلية"
-                    subtitle="إدارة الطلبات الداخلية والتحويلات بين المستودعات بأسلوب موحد."
-                    badges={[
+                <DefinitionMasterList
+                    headerIcon={<Truck size={24} />}
+                    headerTitle="طلبيات المستودع الداخلية"
+                    headerSubtitle="إدارة الطلبات الداخلية والتحويلات بين المستودعات بنفس خصائص جدول العملات وأسعار الصرف."
+                    headerBadges={[
                         { label: `${orders.length} طلبية`, tone: 'info' },
-                        { label: `${totalQty} كمية`, tone: 'neutral' },
+                        { label: `${ordersTotalQty.toFixed(3)} كمية`, tone: 'neutral', mono: true },
+                        { label: `قيد الطلب ${pendingOrdersCount}`, tone: 'warning' },
+                        { label: `مكتملة ${completedOrdersCount}`, tone: 'success' }
                     ]}
-                    actions={(
+                    screenKey="inventory.internal-orders"
+                    data={orders}
+                    loading={loadingList}
+                    columns={listColumns}
+                    rowKey={(row) => String(row.id)}
+                    searchPlaceholder="بحث برقم الطلبية أو المستودع أو الملاحظات..."
+                    emptyMessage="لا توجد طلبيات مطابقة للمعايير الحالية"
+                    createLabel="طلبية جديدة"
+                    onCreate={() => {
+                        resetForm();
+                        setViewMode('FORM');
+                    }}
+                    onRefresh={loadOrders}
+                    onRowDoubleClick={openOrderFromRow}
+                    onSelectedRowsChange={handleListSelectedRowsChange}
+                    defaultSort={{ key: 'date', direction: 'desc' }}
+                    toolbarExtraActions={(
                         <>
-                            <button type="button" onClick={() => void loadOrders()} className="app-toolbar-btn app-focus-ring">
-                                <RefreshCw size={16} />
-                                <span>تحديث</span>
-                            </button>
-                            <button type="button" onClick={() => void openSelectedOrder()} className="app-toolbar-btn app-focus-ring">
+                            <button
+                                type="button"
+                                onClick={() => void openSelectedOrder()}
+                                disabled={!selectedOrderId}
+                                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 text-sm font-semibold text-sky-700 shadow-sm transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
                                 <FileText size={16} />
                                 <span>فتح المحدد</span>
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    resetForm();
-                                    setViewMode('FORM');
-                                }}
-                                className="rounded-xl bg-gradient-to-r from-orange-600 to-amber-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-orange-900/15 transition hover:brightness-105"
+
+                            <FloatingDropdown
+                                isOpen={openMenu === 'track'}
+                                onClose={() => setOpenMenu(null)}
+                                menuWidth={230}
+                                title="التتبع"
+                                trigger={
+                                    <button
+                                        type="button"
+                                        onClick={() => setOpenMenu((prev) => (prev === 'track' ? null : 'track'))}
+                                        className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-sky-300 hover:text-sky-700"
+                                    >
+                                        <FileText size={16} />
+                                        <span>التتبع</span>
+                                        <ChevronDown size={14} />
+                                    </button>
+                                }
                             >
-                                <span className="inline-flex items-center gap-2">
-                                    <Plus size={16} />
-                                    <span>طلبية جديدة</span>
-                                </span>
-                            </button>
+                                {TRACK_MENU_ITEMS.map(({ id, label }) => (
+                                    <button key={id} type="button" role="menuitem" onClick={() => void handleTrackAction(id)} className={floatingMenuItemClass}>{label}</button>
+                                ))}
+                            </FloatingDropdown>
+
+                            <FloatingDropdown
+                                isOpen={openMenu === 'convert'}
+                                onClose={() => setOpenMenu(null)}
+                                menuWidth={230}
+                                title="تحويل"
+                                trigger={
+                                    <button
+                                        type="button"
+                                        onClick={() => setOpenMenu((prev) => (prev === 'convert' ? null : 'convert'))}
+                                        className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-sky-300 hover:text-sky-700"
+                                    >
+                                        <Share2 size={16} />
+                                        <span>تحويل</span>
+                                        <ChevronDown size={14} />
+                                    </button>
+                                }
+                            >
+                                {CONVERT_MENU_ITEMS.map(({ id, label }) => (
+                                    <button key={id} type="button" role="menuitem" onClick={() => void handleConvertAction(id)} className={floatingMenuItemClass}>{label}</button>
+                                ))}
+                            </FloatingDropdown>
                         </>
                     )}
-                    className="mb-3"
                 />
-
-                <div className="hidden bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-800">طلبيات المستودع الداخلية</h1>
-                        <p className="text-xs text-slate-500 mt-1">الصفحة الرئيسية قبل إنشاء طلبية جديدة</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => void loadOrders()} className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50">
-                            <RefreshCw size={15} />
-                            تحديث
-                        </button>
-                        <button type="button" onClick={() => void openSelectedOrder()} className="inline-flex items-center gap-1.5 px-3 py-2 border border-sky-300 bg-sky-50 rounded-lg text-sm text-sky-700 hover:bg-sky-100">
-                            <FileText size={15} />
-                            فتح المحدد
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                resetForm();
-                                setViewMode('FORM');
-                            }}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-semibold"
-                        >
-                            <Plus size={16} />
-                            طلبية جديدة
-                        </button>
-                    </div>
-                </div>
-
-                <div className="bg-white border border-slate-200 rounded-lg p-2 flex items-center gap-2 flex-wrap">
-                    <FloatingDropdown
-                        isOpen={openMenu === 'track'}
-                        onClose={() => setOpenMenu(null)}
-                        menuWidth={230}
-                        title="التتبع"
-                        trigger={
-                            <button
-                                type="button"
-                                onClick={() => setOpenMenu((prev) => (prev === 'track' ? null : 'track'))}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50"
-                            >
-                                <FileText size={15} />
-                                التتبع
-                                <ChevronDown size={14} />
-                            </button>
-                        }
-                    >
-                        {TRACK_MENU_ITEMS.map(({ id, label }) => (
-                            <button key={id} type="button" role="menuitem" onClick={() => void handleTrackAction(id)} className={floatingMenuItemClass}>{label}</button>
-                        ))}
-                    </FloatingDropdown>
-
-                    <FloatingDropdown
-                        isOpen={openMenu === 'convert'}
-                        onClose={() => setOpenMenu(null)}
-                        menuWidth={230}
-                        title="تحويل"
-                        trigger={
-                            <button
-                                type="button"
-                                onClick={() => setOpenMenu((prev) => (prev === 'convert' ? null : 'convert'))}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50"
-                            >
-                                <Share2 size={15} />
-                                تحويل
-                                <ChevronDown size={14} />
-                            </button>
-                        }
-                    >
-                        {CONVERT_MENU_ITEMS.map(({ id, label }) => (
-                            <button key={id} type="button" role="menuitem" onClick={() => void handleConvertAction(id)} className={floatingMenuItemClass}>{label}</button>
-                        ))}
-                    </FloatingDropdown>
-
-                    <FloatingDropdown
-                        isOpen={openMenu === 'export'}
-                        onClose={() => setOpenMenu(null)}
-                        menuWidth={190}
-                        title="تصدير"
-                        trigger={
-                            <button
-                                type="button"
-                                onClick={() => setOpenMenu((prev) => (prev === 'export' ? null : 'export'))}
-                                className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50"
-                            >
-                                <Download size={15} />
-                                تصدير
-                                <ChevronDown size={14} />
-                            </button>
-                        }
-                    >
-                        <button type="button" role="menuitem" onClick={() => exportOrders('excel')} className={floatingMenuItemClass}>Excel / CSV</button>
-                        <button type="button" role="menuitem" onClick={() => exportOrders('html')} className={floatingMenuItemClass}>HTML</button>
-                        <button type="button" role="menuitem" onClick={() => exportOrders('json')} className={floatingMenuItemClass}>JSON</button>
-                        <button type="button" role="menuitem" onClick={() => exportOrders('pdf')} className={floatingMenuItemClass}>PDF</button>
-                    </FloatingDropdown>
-                </div>
-
-                <div className="bg-white border border-slate-200 rounded-lg p-3 flex items-center gap-2">
-                    <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-                        <option value="ALL">الكل</option>
-                        <option value="PENDING">قيد الطلب</option>
-                        <option value="IN_TRANSIT">قيد النقل</option>
-                        <option value="COMPLETED">مكتملة</option>
-                        <option value="CANCELLED">ملغاة</option>
-                        <option value="DRAFT">مسودة</option>
-                    </select>
-
-                    <div className="relative flex-1">
-                        <Search size={16} className="absolute right-3 top-2.5 text-slate-400" />
-                        <input
-                            type="text"
-                            value={listSearch}
-                            onChange={(event) => setListSearch(event.target.value)}
-                            className="w-full pr-9 pl-3 py-2 border border-slate-300 rounded-lg text-sm"
-                            placeholder="بحث برقم الطلبية أو المستودع أو الملاحظات..."
-                        />
-                    </div>
-                </div>
-
-                <div className="bg-white border border-slate-200 rounded-lg overflow-auto flex-1">
-                    <table className="w-full min-w-[1240px] text-right text-sm">
-                        <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10">
-                            <tr>
-                                <th className="px-3 py-2 border-b border-slate-200 w-10 text-center">#</th>
-                                <th className="px-3 py-2 border-b border-slate-200">رقم الطلبية</th>
-                                <th className="px-3 py-2 border-b border-slate-200">تاريخ الطلب</th>
-                                <th className="px-3 py-2 border-b border-slate-200">الحالة</th>
-                                <th className="px-3 py-2 border-b border-slate-200">المزود (من)</th>
-                                <th className="px-3 py-2 border-b border-slate-200">الطالب (إلى)</th>
-                                <th className="px-3 py-2 border-b border-slate-200">عدد الأصناف</th>
-                                <th className="px-3 py-2 border-b border-slate-200">الكمية المطلوبة</th>
-                                <th className="px-3 py-2 border-b border-slate-200">المستلم</th>
-                                <th className="px-3 py-2 border-b border-slate-200">المتبقي</th>
-                                <th className="px-3 py-2 border-b border-slate-200">ملاحظات</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loadingList && (
-                                <tr>
-                                    <td colSpan={11} className="px-3 py-10 text-center text-slate-500">جاري تحميل الطلبيات الداخلية...</td>
-                                </tr>
-                            )}
-
-                            {!loadingList && filteredOrders.length === 0 && (
-                                <tr>
-                                    <td colSpan={11} className="px-3 py-10 text-center text-slate-400">لا توجد طلبيات مطابقة.</td>
-                                </tr>
-                            )}
-
-                            {!loadingList && filteredOrders.map((row) => {
-                                const parsed = parseInternalOrderNotes(row.notes);
-                                const checked = String(row.id) === String(selectedOrderId || '');
-                                const requiredQty = Number(row.total_quantity) || 0;
-                                const receivedQty = Number(row.received_quantity) || 0;
-                                return (
-                                    <tr
-                                        key={row.id}
-                                        className={`border-b border-slate-100 hover:bg-sky-50 cursor-pointer ${checked ? 'bg-sky-100/70' : ''}`}
-                                        onClick={() => setSelectedOrderId(String(row.id))}
-                                        onDoubleClick={() => void openOrderFromRow(row)}
-                                    >
-                                        <td className="px-3 py-2 text-center"><input type="checkbox" readOnly checked={checked} /></td>
-                                        <td className="px-3 py-2 font-mono text-sky-800">{row.code || '-'}</td>
-                                        <td className="px-3 py-2">{onlyDate(row.date) || '-'}</td>
-                                        <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusClass(row.status)}`}>{statusLabel(row.status)}</span></td>
-                                        <td className="px-3 py-2">{row.from_warehouse_name || '-'}</td>
-                                        <td className="px-3 py-2">{row.to_warehouse_name || '-'}</td>
-                                        <td className="px-3 py-2">{Number(row.lines_count) || 0}</td>
-                                        <td className="px-3 py-2">{requiredQty.toFixed(3)}</td>
-                                        <td className="px-3 py-2">{receivedQty.toFixed(3)}</td>
-                                        <td className="px-3 py-2">{(requiredQty - receivedQty).toFixed(3)}</td>
-                                        <td className="px-3 py-2 truncate max-w-[320px]" title={parsed.notes || ''}>{parsed.notes || '-'}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
             </div>
         );
     }

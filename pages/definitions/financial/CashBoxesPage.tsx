@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Edit, Loader2, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { Edit, Loader2, Save, Trash2, Wallet, X } from 'lucide-react';
 import { AccountPicker } from '../../../components/AccountPicker';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
 type CurrencyRow = {
@@ -65,6 +66,9 @@ const getCurrencyLabel = (currency?: CurrencyRow | null) => {
     return currency.name_ar || currency.name_en || currency.code;
 };
 
+const isCashBoxActive = (row: Partial<CashBoxRow> | null | undefined) =>
+    row?.is_active === false || row?.is_active === 0 ? false : true;
+
 export function CashBoxesPage() {
     const electronApi = (window as any).electronAPI;
     const masterDataApi = electronApi?.masterData;
@@ -74,7 +78,6 @@ export function CashBoxesPage() {
     const [currencies, setCurrencies] = useState<CurrencyRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [search, setSearch] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [accountPickerOpen, setAccountPickerOpen] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -90,25 +93,26 @@ export function CashBoxesPage() {
         [currencies, formData.currency_code, formData.currency_id],
     );
 
-    const filteredCashBoxes = useMemo(() => {
-        const term = search.trim().toLowerCase();
-        if (!term) return cashBoxes;
+    const currencyFilterOptions = useMemo(
+        () =>
+            currencies
+                .filter((currency) => currency.code)
+                .map((currency) => ({
+                    value: currency.code,
+                    label: `${getCurrencyLabel(currency)} (${currency.code})`,
+                })),
+        [currencies],
+    );
 
-        return cashBoxes.filter((row) =>
-            [
-                row.code,
-                row.name_ar,
-                row.name_en,
-                row.currency_code,
-                row.currency_name,
-                row.gl_account_code,
-                row.gl_account_name,
-                row.note,
-            ]
-                .filter(Boolean)
-                .some((value) => String(value).toLowerCase().includes(term)),
-        );
-    }, [cashBoxes, search]);
+    const activeCashBoxesCount = useMemo(
+        () => cashBoxes.filter((row) => isCashBoxActive(row)).length,
+        [cashBoxes],
+    );
+
+    const linkedCashBoxesCount = useMemo(
+        () => cashBoxes.filter((row) => row.gl_account_id || row.gl_account_code).length,
+        [cashBoxes],
+    );
 
     const loadData = async () => {
         setLoading(true);
@@ -240,8 +244,151 @@ export function CashBoxesPage() {
         }
     };
 
+    const handleDeleteRows = async (rows: CashBoxRow[]) => {
+        const rowsToDelete = rows.filter((row) => row.id);
+        if (rowsToDelete.length === 0) return;
+
+        const message = rowsToDelete.length === 1
+            ? 'هل تريد تعطيل هذا الصندوق؟'
+            : `هل تريد تعطيل ${rowsToDelete.length} صناديق؟`;
+
+        if (!confirm(message)) return;
+
+        try {
+            for (const row of rowsToDelete) {
+                await masterDataApi.deleteCashBox(row.id);
+            }
+            await loadData();
+        } catch (err) {
+            console.error(err);
+            setError('تعذر حذف الصندوق.');
+        }
+    };
+
+    const columns = useMemo<DefinitionListColumn<CashBoxRow>[]>(() => [
+        {
+            key: 'code',
+            label: 'الرمز',
+            width: 110,
+            defaultVisible: true,
+            getDisplayValue: (row) => row.code || '-',
+            renderCell: (row) => (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs font-bold text-sky-700">
+                    {row.code || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'name_ar',
+            label: 'اسم الصندوق',
+            width: 230,
+            defaultVisible: true,
+            getSearchValue: (row) => `${row.code || ''} ${row.name_ar || ''} ${row.name_en || ''}`,
+            renderCell: (row) => (
+                <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-slate-800">{row.name_ar || '-'}</div>
+                    {row.name_en && <div className="truncate text-xs text-slate-400">{row.name_en}</div>}
+                </div>
+            ),
+        },
+        {
+            key: 'currency_code',
+            label: 'العملة',
+            type: 'enum',
+            filterType: 'enum',
+            options: currencyFilterOptions,
+            width: 170,
+            defaultVisible: true,
+            getValue: (row) => row.currency_code || row.currency_id || '',
+            getDisplayValue: (row) => row.currency_name || row.currency_code || '-',
+            renderCell: (row) => (
+                <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
+                    {row.currency_name || row.currency_code || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'gl_account_code',
+            label: 'الحساب المرتبط',
+            width: 230,
+            defaultVisible: true,
+            getSearchValue: (row) => `${row.gl_account_code || ''} ${row.gl_account_name || ''} ${row.gl_account_id || ''}`,
+            getDisplayValue: (row) =>
+                [row.gl_account_code, row.gl_account_name].filter(Boolean).join(' - ') || '-',
+            renderCell: (row) => (
+                <div className="min-w-0">
+                    <div className="truncate font-mono text-xs font-semibold text-sky-700">{row.gl_account_code || '-'}</div>
+                    <div className="truncate text-xs text-slate-700">{row.gl_account_name || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            key: 'note',
+            label: 'ملاحظة',
+            width: 220,
+            defaultVisible: true,
+            getDisplayValue: (row) => row.note || '-',
+            renderCell: (row) => (
+                <span className="line-clamp-2 text-slate-600">{row.note || '-'}</span>
+            ),
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'enum',
+            filterType: 'enum',
+            width: 120,
+            defaultVisible: true,
+            options: [
+                { value: 'active', label: 'فعال' },
+                { value: 'inactive', label: 'غير فعال' },
+            ],
+            getValue: (row) => (isCashBoxActive(row) ? 'active' : 'inactive'),
+            getDisplayValue: (row) => (isCashBoxActive(row) ? 'فعال' : 'غير فعال'),
+            renderCell: (row) => (
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                    isCashBoxActive(row)
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-slate-100 text-slate-500'
+                }`}>
+                    {isCashBoxActive(row) ? 'فعال' : 'غير فعال'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (row) => (
+                <div className="flex items-center justify-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => handleEdit(row)}
+                        className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                        title="تعديل"
+                    >
+                        <Edit size={16} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleDelete(row.id)}
+                        className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                        title="تعطيل"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [currencyFilterOptions, handleDelete, handleEdit]);
+
     return (
-        <div className="min-h-screen bg-slate-50 p-4 md:p-6" dir="rtl">
+        <div className="h-full bg-gray-50 p-4 md:p-6" dir="rtl">
 
             {error && !isModalOpen && (
                 <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -249,115 +396,29 @@ export function CashBoxesPage() {
                 </div>
             )}
 
-            <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
-                    <div>
-                        <h1 className="text-xl font-extrabold text-slate-900">الصناديق</h1>
-                        <p className="mt-1 text-sm font-medium text-slate-500">
-                            تعريف صناديق القبض والصرف وربط كل صندوق بالحساب والعملة.
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            <span className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700">
-                                الإجمالي {cashBoxes.length}
-                            </span>
-                            <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-                                المعروض {filteredCashBoxes.length}
-                            </span>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={openCreate}
-                        className="inline-flex h-10 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
-                    >
-                        <Plus size={16} />
-                        <span>إضافة صندوق</span>
-                    </button>
-                </div>
-
-                <div className="relative max-w-md">
-                    <Search className="absolute right-3 top-3.5 text-slate-400" size={18} />
-                    <input
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="ابحث برمز الصندوق أو اسمه أو العملة أو الحساب..."
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-10 pl-4 text-sm outline-none transition focus:border-cyan-500 focus:bg-white"
-                    />
-                </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center gap-3 p-14 text-slate-500">
-                        <Loader2 className="animate-spin text-sky-600" size={32} />
-                        <p>جارٍ تحميل الصناديق...</p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-right text-sm">
-                            <thead className="bg-slate-50 text-slate-600">
-                                <tr>
-                                    <th className="px-4 py-3 font-bold">الرمز</th>
-                                    <th className="px-4 py-3 font-bold">اسم الصندوق</th>
-                                    <th className="px-4 py-3 font-bold">العملة</th>
-                                    <th className="px-4 py-3 font-bold">الحساب المرتبط</th>
-                                    <th className="px-4 py-3 font-bold">ملاحظة</th>
-                                    <th className="px-4 py-3 text-center font-bold">إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {filteredCashBoxes.length > 0 ? (
-                                    filteredCashBoxes.map((row) => (
-                                        <tr key={row.id} className="transition hover:bg-sky-50/40">
-                                            <td className="px-4 py-3 font-mono font-bold text-sky-700">{row.code}</td>
-                                            <td className="px-4 py-3">
-                                                <div className="font-semibold text-slate-800">{row.name_ar}</div>
-                                                {row.name_en && <div className="text-xs text-slate-500">{row.name_en}</div>}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
-                                                    {row.currency_name || row.currency_code || '-'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="font-mono text-xs text-sky-700">{row.gl_account_code || '-'}</div>
-                                                <div className="text-slate-700">{row.gl_account_name || '-'}</div>
-                                            </td>
-                                            <td className="max-w-xs px-4 py-3 text-slate-600">
-                                                <span className="line-clamp-2">{row.note || '-'}</span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center justify-center gap-2">
-                                                    <button
-                                                        onClick={() => handleEdit(row)}
-                                                        className="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-                                                        title="تعديل"
-                                                    >
-                                                        <Edit size={16} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(row.id)}
-                                                        className="rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
-                                                        title="تعطيل"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={6} className="px-4 py-14 text-center text-slate-400">
-                                            لا توجد صناديق مطابقة.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+            <DefinitionMasterList
+                headerIcon={<Wallet size={24} />}
+                headerTitle="الصناديق"
+                headerSubtitle="تعريف صناديق القبض والصرف وربط كل صندوق بالحساب والعملة بنفس خصائص جدول العملات وأسعار الصرف."
+                headerBadges={[
+                    { label: `الإجمالي ${cashBoxes.length}`, tone: 'warning' },
+                    { label: `الفعالة ${activeCashBoxesCount}`, tone: 'success' },
+                    { label: `المرتبطة ${linkedCashBoxesCount}`, tone: 'info' },
+                ]}
+                screenKey="definitions.cash-boxes"
+                data={cashBoxes}
+                loading={loading}
+                columns={columns}
+                rowKey={(row) => String(row.id || row.code)}
+                searchPlaceholder="بحث برمز الصندوق أو اسمه أو العملة أو الحساب..."
+                emptyMessage="لا توجد صناديق مطابقة للمعايير الحالية"
+                createLabel="إضافة صندوق"
+                onCreate={openCreate}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadData}
+                defaultSort={{ key: 'code', direction: 'asc' }}
+            />
 
             <AnimatePresence>
                 {isModalOpen && (

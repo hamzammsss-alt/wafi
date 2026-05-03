@@ -61,6 +61,7 @@ interface DefinitionMasterListProps<T> {
     toolbarExtraActions?: React.ReactNode;
     defaultSort?: { key: string; direction: 'asc' | 'desc' };
     onRowDoubleClick?: (row: T) => void;
+    onSelectedRowsChange?: (rows: T[]) => void;
     summaryBadges?: React.ReactNode;
     className?: string;
 }
@@ -402,6 +403,7 @@ export function DefinitionMasterList<T>({
     toolbarExtraActions,
     defaultSort,
     onRowDoubleClick,
+    onSelectedRowsChange,
     summaryBadges,
     className = '',
 }: DefinitionMasterListProps<T>) {
@@ -608,6 +610,10 @@ export function DefinitionMasterList<T>({
         const selected = new Set(selectedRowIds);
         return filteredRows.filter((row) => selected.has(rowKey(row)));
     }, [filteredRows, selectedRowIds, rowKey]);
+
+    useEffect(() => {
+        onSelectedRowsChange?.(selectedRows);
+    }, [onSelectedRowsChange, selectedRows]);
 
     const quickSearchFields = useMemo(() => {
         return searchableColumns.map((column) => ({

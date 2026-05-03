@@ -1,16 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccountForm } from './AccountForm';
 import { tAccountingModule as t } from './accounting.i18n';
-import { AccountTreeGrid } from './AccountTreeGrid';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../../components/definitions/DefinitionMasterList';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronsDownUp, ChevronsUpDown, CircleOff, Edit, Layers, Lock, RefreshCw } from 'lucide-react';
 import {
     AccountFormErrors,
     AccountFormModel,
     AccountQueryInput,
     AccountRowDto,
     AccountTreeNode,
+    AccountType,
+    CurrencyBehavior,
+    FlattenedAccountRow,
+    ScopeType,
 } from './accounting.types';
 import {
-    buildParentMap,
     collectInitialExpandedIds,
     flattenVisibleTree,
     normalizeAccountTree,
@@ -72,6 +76,10 @@ const REFERENCE_BY_SUBTYPE_DEFAULT: Record<string, AccountFormModel['referenceTy
     CASH: 'USER',
 };
 
+const ACCOUNT_TYPES: AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'];
+const CURRENCY_BEHAVIORS: CurrencyBehavior[] = ['BASE_ONLY', 'FIXED_CURRENCY', 'MULTI_CURRENCY'];
+const SCOPE_TYPES: ScopeType[] = ['COMPANY', 'BRANCH'];
+
 function normalizeAccountCodeInput(value: string): string {
     return String(value || '')
         .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)))
@@ -112,7 +120,6 @@ export default function ChartOfAccountsPage() {
     const [statusMessage, setStatusMessage] = useState<string>('');
     const [busy, setBusy] = useState<boolean>(false);
 
-    const searchRef = useRef<HTMLInputElement | null>(null);
     const firstFormFieldRef = useRef<HTMLInputElement | null>(null);
 
     const loadData = useCallback(async (): Promise<void> => {
@@ -138,10 +145,6 @@ export default function ChartOfAccountsPage() {
         void loadData();
     }, [loadData]);
 
-    useEffect(() => {
-        searchRef.current?.focus();
-    }, []);
-
     const parentOptions = useMemo(
         () =>
             flatAccounts.filter((item) => {
@@ -152,11 +155,15 @@ export default function ChartOfAccountsPage() {
     );
 
     const categories = useMemo(
-        () => Array.from(new Set(flatAccounts.map((item) => item.accountCategory))).sort(),
+        () => Array.from(new Set(flatAccounts.map((item) => item.accountCategory).filter(Boolean))).sort(),
         [flatAccounts],
     );
 
-    const parentMap = useMemo(() => buildParentMap(tree), [tree]);
+    const subtypes = useMemo(
+        () => Array.from(new Set(flatAccounts.map((item) => item.accountSubtype).filter(Boolean))).sort(),
+        [flatAccounts],
+    );
+
     const rows = useMemo(() => flattenVisibleTree(tree, expandedIds, query), [tree, expandedIds, query]);
     const suggestNextChildCode = useCallback(
         (parentId: string | null): string => {
@@ -398,67 +405,328 @@ export default function ChartOfAccountsPage() {
         }
     }, [api, flatAccounts, loadData, selectedId]);
 
-    const moveSelection = useCallback((direction: 1 | -1): void => {
-        if (!rows.length) return;
-        const index = rows.findIndex((item) => item.node.id === selectedId);
-        const nextIndex = index < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, index + direction));
-        setSelectedId(rows[nextIndex].node.id);
-    }, [rows, selectedId]);
-
-    const onGridKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-        if (!rows.length) return;
-        const current = rows.find((item) => item.node.id === selectedId);
-        if (!current) return;
-
-        if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            moveSelection(1);
-            return;
-        }
-        if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            moveSelection(-1);
-            return;
-        }
-        if (event.key === 'ArrowRight' && current.hasChildren) {
-            event.preventDefault();
-            setExpandedIds((prev) => {
-                const next = new Set(prev);
-                next.add(current.node.id);
-                return next;
-            });
-            return;
-        }
-        if (event.key === 'ArrowLeft') {
-            event.preventDefault();
-            if (current.hasChildren && current.isExpanded) {
-                setExpandedIds((prev) => {
-                    const next = new Set(prev);
-                    next.delete(current.node.id);
-                    return next;
-                });
-                return;
+    const allExpandableIds = useMemo(() => {
+        const ids = new Set<string>();
+        const walk = (nodes: AccountTreeNode[]) => {
+            for (const node of nodes) {
+                if (node.children.length > 0) ids.add(node.id);
+                walk(node.children);
             }
-            const parentId = parentMap.get(current.node.id);
-            if (parentId) {
-                setSelectedId(parentId);
+        };
+        walk(tree);
+        return ids;
+    }, [tree]);
+
+    const selectedAccount = useMemo(
+        () => flatAccounts.find((item) => item.id === selectedId) || null,
+        [flatAccounts, selectedId],
+    );
+
+    const headerStats = useMemo(() => {
+        const active = flatAccounts.filter((item) => item.status === 'ACTIVE').length;
+        const inactive = flatAccounts.length - active;
+        const postable = flatAccounts.filter((item) => item.postingAllowed).length;
+        const headers = flatAccounts.length - postable;
+        return { active, inactive, postable, headers };
+    }, [flatAccounts]);
+
+    const accountTypeOptions = useMemo(
+        () => ACCOUNT_TYPES.map((item) => ({ value: item, label: t(`accounting.foundation.enum.${item}`) })),
+        [],
+    );
+
+    const categoryOptions = useMemo(
+        () => categories.map((item) => ({ value: item, label: t(`accounting.foundation.enum.${item}`) })),
+        [categories],
+    );
+
+    const subtypeOptions = useMemo(
+        () => subtypes.map((item) => ({ value: item, label: t(`accounting.foundation.enum.${item}`) })),
+        [subtypes],
+    );
+
+    const currencyBehaviorOptions = useMemo(
+        () => CURRENCY_BEHAVIORS.map((item) => ({ value: item, label: t(`accounting.foundation.enum.${item}`) })),
+        [],
+    );
+
+    const scopeOptions = useMemo(
+        () => SCOPE_TYPES.map((item) => ({ value: item, label: t(`accounting.foundation.enum.${item}`) })),
+        [],
+    );
+
+    const openRows = useCallback(() => {
+        setExpandedIds(new Set(allExpandableIds));
+    }, [allExpandableIds]);
+
+    const closeRows = useCallback(() => {
+        setExpandedIds(new Set());
+    }, []);
+
+    const editRow = useCallback((row: FlattenedAccountRow) => {
+        setSelectedId(row.node.id);
+        setTimeout(() => firstFormFieldRef.current?.focus(), 0);
+    }, []);
+
+    const handleSelectedRowsChange = useCallback((selectedRows: FlattenedAccountRow[]) => {
+        if (selectedRows.length === 1) {
+            setSelectedId(selectedRows[0].node.id);
+        }
+    }, []);
+
+    const handleDeleteRows = useCallback(async (selectedRows: FlattenedAccountRow[]) => {
+        if (!api?.deleteAccount || selectedRows.length === 0) return;
+        const text = selectedRows.length === 1
+            ? 'هل تريد حذف الحساب المحدد؟'
+            : `هل تريد حذف ${selectedRows.length} حسابات محددة؟`;
+        if (!window.confirm(text)) return;
+
+        setBusy(true);
+        try {
+            for (const row of selectedRows) {
+                await api.deleteAccount(row.node.id);
             }
-            return;
+            setSelectedId('');
+            await loadData();
+            setStatusMessage('تم حذف الحسابات المحددة.');
+        } catch (error: any) {
+            setStatusMessage(String(error?.messageKey || error?.message || 'تعذر حذف الحسابات المحددة.'));
+        } finally {
+            setBusy(false);
         }
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            firstFormFieldRef.current?.focus();
-        }
-    };
+    }, [api, loadData]);
+
+    const columns = useMemo<DefinitionListColumn<FlattenedAccountRow>[]>(() => [
+        {
+            key: 'accountCode',
+            label: 'الرمز',
+            type: 'text',
+            filterType: 'text',
+            width: 150,
+            defaultVisible: true,
+            align: 'right',
+            getValue: (row) => row.node.accountCode,
+            getDisplayValue: (row) => row.node.accountCode,
+            getSearchValue: (row) => `${row.node.accountCode} ${row.node.name}`,
+            renderCell: (row) => (
+                <span className="font-mono font-bold text-slate-800" dir="ltr">
+                    {row.node.accountCode}
+                </span>
+            ),
+        },
+        {
+            key: 'name',
+            label: 'اسم الحساب',
+            type: 'text',
+            filterType: 'text',
+            width: 320,
+            defaultVisible: true,
+            align: 'right',
+            getValue: (row) => row.node.name,
+            getDisplayValue: (row) => row.node.name,
+            getSearchValue: (row) => `${row.node.accountCode} ${row.node.name}`,
+            renderCell: (row) => (
+                <div className="flex min-w-0 items-center gap-2" style={{ paddingRight: `${row.depth * 18}px` }}>
+                    {row.hasChildren ? (
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                setExpandedIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(row.node.id)) next.delete(row.node.id);
+                                    else next.add(row.node.id);
+                                    return next;
+                                });
+                            }}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-sky-300 hover:text-sky-700"
+                            aria-label={row.isExpanded ? 'طي الحساب' : 'فتح الحساب'}
+                            title={row.isExpanded ? 'طي الحساب' : 'فتح الحساب'}
+                        >
+                            {row.isExpanded ? <ChevronDown size={15} /> : <ChevronLeft size={15} />}
+                        </button>
+                    ) : (
+                        <span className="h-7 w-7 shrink-0" />
+                    )}
+                    <span className={`truncate ${row.node.postingAllowed ? 'font-semibold text-slate-800' : 'font-extrabold text-slate-900'}`}>
+                        {row.node.name}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            key: 'postingAllowed',
+            label: 'نوع الحساب',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 145,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (row) => (row.node.postingAllowed ? 1 : 0),
+            getDisplayValue: (row) => (row.node.postingAllowed ? 'ترحيل' : 'رئيسي'),
+            renderCell: (row) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${row.node.postingAllowed ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {row.node.postingAllowed ? <CheckCircle2 size={12} /> : <Layers size={12} />}
+                    {row.node.postingAllowed ? 'ترحيل' : 'رئيسي'}
+                </span>
+            ),
+        },
+        {
+            key: 'accountType',
+            label: 'النموذج',
+            type: 'enum',
+            filterType: 'enum',
+            options: accountTypeOptions,
+            width: 155,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (row) => row.node.accountType,
+            getDisplayValue: (row) => t(`accounting.foundation.enum.${row.node.accountType}`),
+        },
+        {
+            key: 'accountCategory',
+            label: 'التصنيف',
+            type: 'enum',
+            filterType: 'enum',
+            options: categoryOptions,
+            width: 180,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (row) => row.node.accountCategory,
+            getDisplayValue: (row) => t(`accounting.foundation.enum.${row.node.accountCategory}`),
+        },
+        {
+            key: 'accountSubtype',
+            label: 'التصنيف الفرعي',
+            type: 'enum',
+            filterType: 'enum',
+            options: subtypeOptions,
+            width: 180,
+            defaultVisible: false,
+            align: 'center',
+            getValue: (row) => row.node.accountSubtype,
+            getDisplayValue: (row) => t(`accounting.foundation.enum.${row.node.accountSubtype}`),
+        },
+        {
+            key: 'currencyBehavior',
+            label: 'سلوك العملة',
+            type: 'enum',
+            filterType: 'enum',
+            options: currencyBehaviorOptions,
+            width: 170,
+            defaultVisible: false,
+            align: 'center',
+            getValue: (row) => row.node.currencyBehavior,
+            getDisplayValue: (row) => t(`accounting.foundation.enum.${row.node.currencyBehavior}`),
+        },
+        {
+            key: 'currencyCode',
+            label: 'رمز العملة',
+            type: 'text',
+            filterType: 'text',
+            width: 120,
+            defaultVisible: false,
+            align: 'center',
+            getValue: (row) => row.node.currencyCode || '',
+            getDisplayValue: (row) => row.node.currencyCode || '-',
+            renderCell: (row) => <span className="font-mono text-slate-600">{row.node.currencyCode || '-'}</span>,
+        },
+        {
+            key: 'scopeType',
+            label: 'النطاق',
+            type: 'enum',
+            filterType: 'enum',
+            options: scopeOptions,
+            width: 130,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (row) => row.node.scopeType,
+            getDisplayValue: (row) => t(`accounting.foundation.enum.${row.node.scopeType}`),
+        },
+        {
+            key: 'requiresCostCenter',
+            label: 'مركز تكلفة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 125,
+            defaultVisible: false,
+            align: 'center',
+            getValue: (row) => (row.node.requiresCostCenter ? 1 : 0),
+            getDisplayValue: (row) => (row.node.requiresCostCenter ? 'نعم' : 'لا'),
+        },
+        {
+            key: 'requiresAnalysisCode',
+            label: 'رمز تحليل',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 125,
+            defaultVisible: false,
+            align: 'center',
+            getValue: (row) => (row.node.requiresAnalysisCode ? 1 : 0),
+            getDisplayValue: (row) => (row.node.requiresAnalysisCode ? 'نعم' : 'لا'),
+        },
+        {
+            key: 'level',
+            label: 'المستوى',
+            type: 'number',
+            filterType: 'number',
+            width: 110,
+            defaultVisible: false,
+            align: 'center',
+            getValue: (row) => row.node.level,
+            getDisplayValue: (row) => String(row.node.level),
+        },
+        {
+            key: 'status',
+            label: 'الحالة',
+            type: 'enum',
+            filterType: 'enum',
+            options: [
+                { value: 'ACTIVE', label: 'نشط' },
+                { value: 'INACTIVE', label: 'غير نشط' },
+            ],
+            width: 125,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (row) => row.node.status,
+            getDisplayValue: (row) => (row.node.status === 'ACTIVE' ? 'نشط' : 'غير نشط'),
+            renderCell: (row) => (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${row.node.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {row.node.status === 'ACTIVE' ? <CheckCircle2 size={12} /> : <CircleOff size={12} />}
+                    {row.node.status === 'ACTIVE' ? 'نشط' : 'غير نشط'}
+                </span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 110,
+            defaultVisible: true,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            align: 'center',
+            getValue: () => '',
+            getDisplayValue: () => '',
+            renderCell: (row) => (
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        editRow(row);
+                    }}
+                    className="rounded-lg p-2 text-blue-600 transition hover:bg-blue-50"
+                    title="تعديل"
+                    aria-label="تعديل"
+                >
+                    <Edit size={16} />
+                </button>
+            ),
+        },
+    ], [accountTypeOptions, categoryOptions, currencyBehaviorOptions, editRow, scopeOptions, subtypeOptions]);
 
     useEffect(() => {
         const handler = (event: KeyboardEvent): void => {
-            if (event.ctrlKey && event.key.toLowerCase() === 'f') {
-                event.preventDefault();
-                searchRef.current?.focus();
-                searchRef.current?.select();
-                return;
-            }
             if (event.ctrlKey && event.key.toLowerCase() === 'n') {
                 event.preventDefault();
                 createNewForm();
@@ -486,90 +754,111 @@ export default function ChartOfAccountsPage() {
     }, [createNewForm, flatAccounts, saveForm, selectedId]);
 
     return (
-        <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-xl font-bold">{t('coa.toolbar.title')}</h1>
-                    <p className="text-xs text-slate-500">{t('coa.toolbar.subtitle')}</p>
-                    <p className="text-xs text-slate-400 mt-1">{t('coa.toolbar.shortcuts')}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button type="button" className="px-3 py-2 border rounded" onClick={createNewForm}>
-                        {t('coa.toolbar.new')}
-                    </button>
-                    <button type="button" className="px-3 py-2 border rounded bg-sky-600 text-white" onClick={() => void saveForm()}>
-                        {t('coa.toolbar.save')}
-                    </button>
-                    <button type="button" className="px-3 py-2 border rounded" onClick={() => void toggleActive()}>
-                        {t('coa.toolbar.toggle_active')}
-                    </button>
-                    <button type="button" className="px-3 py-2 border rounded" onClick={() => void loadData()}>
-                        {t('coa.toolbar.refresh')}
-                    </button>
-                </div>
-            </div>
+        <div className="h-full overflow-auto bg-slate-50 p-6" dir="rtl">
+            <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_430px]">
+                <div className="min-w-0">
+                    <DefinitionMasterList
+                        headerIcon={<Layers className="h-5 w-5" />}
+                        headerTitle="دليل الحسابات"
+                        headerSubtitle="إدارة شجرة الحسابات الأساسية مع نفس خصائص الجداول الموحدة في النظام."
+                        headerBadges={[
+                            { label: `${flatAccounts.length} حساب`, tone: 'info', mono: true },
+                            { label: `${headerStats.postable} ترحيل`, tone: 'success', mono: true },
+                            { label: `${headerStats.headers} رئيسي`, tone: 'neutral', mono: true },
+                            { label: `${headerStats.inactive} غير نشط`, tone: 'warning', mono: true },
+                        ]}
+                        screenKey="gl.chart-of-accounts"
+                        data={rows}
+                        loading={busy}
+                        columns={columns}
+                        rowKey={(row) => row.node.id}
+                        searchPlaceholder="بحث برقم الحساب أو اسم الحساب..."
+                        emptyMessage="لا توجد حسابات مطابقة للمعايير الحالية"
+                        createLabel="حساب جديد"
+                        onCreate={createNewForm}
+                        onEdit={editRow}
+                        onDelete={api?.deleteAccount ? handleDeleteRows : undefined}
+                        onRefresh={loadData}
+                        onRowDoubleClick={editRow}
+                        onSelectedRowsChange={handleSelectedRowsChange}
+                        defaultSort={{ key: 'accountCode', direction: 'asc' }}
+                        toolbarExtraActions={(
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={openRows}
+                                    className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-sky-300 hover:text-sky-700"
+                                    title="فتح كل مستويات الشجرة"
+                                >
+                                    <ChevronsUpDown size={16} />
+                                    <span>فتح الكل</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={closeRows}
+                                    className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-sky-300 hover:text-sky-700"
+                                    title="طي كل مستويات الشجرة"
+                                >
+                                    <ChevronsDownUp size={16} />
+                                    <span>طي الكل</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => void toggleActive()}
+                                    disabled={!selectedAccount}
+                                    className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-amber-300 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                    title="تفعيل أو تعطيل الحساب المحدد"
+                                >
+                                    <Lock size={16} />
+                                    <span>تفعيل/تعطيل</span>
+                                </button>
+                                <label className="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm">
+                                    <input
+                                        type="checkbox"
+                                        checked={query.includeInactive}
+                                        onChange={(event) => setQuery((prev) => ({ ...prev, includeInactive: event.target.checked }))}
+                                        className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-300"
+                                    />
+                                    <span>إظهار غير النشطة</span>
+                                </label>
+                            </div>
+                        )}
+                    />
 
-            <div className="grid grid-cols-12 gap-3">
-                <div className="col-span-7 space-y-2">
-                    <div className="grid grid-cols-12 gap-2">
-                        <input
-                            ref={searchRef}
-                            className="col-span-6 border rounded px-2 py-1"
-                            value={query.searchText}
-                            onChange={(event) => setQuery((prev) => ({ ...prev, searchText: event.target.value }))}
-                            placeholder={t('coa.search.placeholder')}
-                        />
-                        <select
-                            className="col-span-3 border rounded px-2 py-1"
-                            value={query.category}
-                            onChange={(event) => setQuery((prev) => ({ ...prev, category: event.target.value }))}
-                        >
-                            <option value="ALL">{t('fd.filter.all')}</option>
-                            {categories.map((item) => (
-                                <option key={item} value={item}>
-                                    {t(`accounting.foundation.enum.${item}`)}
-                                </option>
-                            ))}
-                        </select>
-                        <select
-                            className="col-span-3 border rounded px-2 py-1"
-                            value={query.structure}
-                            onChange={(event) =>
-                                setQuery((prev) => ({ ...prev, structure: event.target.value as AccountQueryInput['structure'] }))
-                            }
-                        >
-                            <option value="ALL">{t('coa.filter.structure.all')}</option>
-                            <option value="POSTING">{t('coa.filter.structure.posting')}</option>
-                            <option value="HEADER">{t('coa.filter.structure.header')}</option>
-                        </select>
+                    <div className="mt-3 flex min-h-10 flex-wrap items-center gap-2 text-sm">
+                        {busy ? (
+                            <span className="inline-flex items-center gap-2 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 font-semibold text-sky-700">
+                                <RefreshCw size={14} className="animate-spin" />
+                                جاري التحديث...
+                            </span>
+                        ) : null}
+                        {statusMessage ? (
+                            <span className="rounded-xl border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-600 shadow-sm">
+                                {statusMessage}
+                            </span>
+                        ) : null}
+                    </div>
+                </div>
+
+                <aside className="min-w-0 xl:sticky xl:top-4">
+                    <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h2 className="text-lg font-extrabold text-slate-900">نموذج الحساب</h2>
+                                <p className="mt-1 text-sm text-slate-500">
+                                    {selectedAccount
+                                        ? `${selectedAccount.accountCode} - ${selectedAccount.name}`
+                                        : 'أدخل بيانات الحساب أو اختر حسابًا من الجدول.'}
+                                </p>
+                            </div>
+                            {selectedAccount ? (
+                                <span className={`rounded-full px-3 py-1 text-xs font-bold ${selectedAccount.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                    {selectedAccount.status === 'ACTIVE' ? 'نشط' : 'غير نشط'}
+                                </span>
+                            ) : null}
+                        </div>
                     </div>
 
-                    <label className="inline-flex items-center gap-2 text-sm">
-                        <input
-                            type="checkbox"
-                            checked={query.includeInactive}
-                            onChange={(event) => setQuery((prev) => ({ ...prev, includeInactive: event.target.checked }))}
-                        />
-                        <span>{t('coa.filter.include_inactive')}</span>
-                    </label>
-
-                    <AccountTreeGrid
-                        rows={rows}
-                        selectedId={selectedId}
-                        onSelect={setSelectedId}
-                        onToggleExpand={(id) =>
-                            setExpandedIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(id)) next.delete(id);
-                                else next.add(id);
-                                return next;
-                            })
-                        }
-                        onGridKeyDown={onGridKeyDown}
-                    />
-                </div>
-
-                <div className="col-span-5">
                     <AccountForm
                         form={form}
                         errors={errors}
@@ -577,11 +866,32 @@ export default function ChartOfAccountsPage() {
                         firstFieldRef={firstFormFieldRef}
                         onChange={updateForm}
                     />
-                </div>
-            </div>
 
-            {busy ? <div className="text-xs text-slate-500">{t('coa.toolbar.refresh')}</div> : null}
-            {statusMessage ? <div className="text-xs text-slate-600">{statusMessage}</div> : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={createNewForm}
+                            className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-sky-300 hover:text-sky-700"
+                        >
+                            حساب جديد
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void saveForm()}
+                            className="inline-flex h-11 items-center gap-2 rounded-xl bg-sky-600 px-5 text-sm font-bold text-white shadow-lg shadow-sky-900/15 transition hover:bg-sky-700"
+                        >
+                            حفظ
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void loadData()}
+                            className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-sky-300 hover:text-sky-700"
+                        >
+                            تحديث
+                        </button>
+                    </div>
+                </aside>
+            </div>
         </div>
     );
 }

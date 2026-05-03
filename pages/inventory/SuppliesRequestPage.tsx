@@ -1,41 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import { Save, Plus, Trash2, Search, FileQuestion, Calendar, User, Briefcase, Box } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Save, Trash2, Search, FileQuestion, Calendar, User, Briefcase, Box } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { Item, Warehouse } from '../../types';
+import DefinitionMasterList, { DefinitionListColumn } from '../../src/components/definitions/DefinitionMasterList';
 
 interface RequestLine {
     id: string;
     itemId: string;
+    itemCode?: string;
     name: string;
     quantity: number;
     notes: string;
 }
 
 export const SuppliesRequestPage = () => {
-    // Header State
     const [header, setHeader] = useState({
         date: new Date().toISOString().split('T')[0],
-        warehouseId: '',    // Store to request from
-        department: '',     // Requesting Department
-        requesterName: '',  // Employee Name
+        warehouseId: '',
+        department: '',
+        requesterName: '',
         notes: '',
-        ref_no: 'REQ-NEW'
+        ref_no: 'REQ-NEW',
     });
 
-    const [lines, setLines] = useState<any[]>([]);
+    const [lines, setLines] = useState<RequestLine[]>([]);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [items, setItems] = useState<Item[]>([]);
-
-    // UI State
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [showItemPicker, setShowItemPicker] = useState(false);
 
-    useEffect(() => {
-        loadMasterData();
-    }, []);
-
-    const loadMasterData = async () => {
+    const loadMasterData = useCallback(async () => {
         try {
             // @ts-ignore
             if (window.electronAPI) {
@@ -44,57 +39,230 @@ export const SuppliesRequestPage = () => {
                     // @ts-ignore
                     window.electronAPI.inventory.getWarehouses(),
                     // @ts-ignore
-                    window.electronAPI.inventory.getItems()
+                    window.electronAPI.inventory.getItems(),
                 ]);
+
                 setWarehouses(whs || []);
                 setItems(itms || []);
 
                 if (whs && whs.length > 0) {
-                    setHeader(h => ({ ...h, warehouseId: whs[0].id }));
+                    setHeader((currentHeader) => ({ ...currentHeader, warehouseId: currentHeader.warehouseId || whs[0].id }));
                 }
             }
         } catch (err) {
-            console.error("Failed to load master data", err);
+            console.error('Failed to load master data', err);
         }
-    };
+    }, []);
 
-    const addLine = () => {
-        setLines([...lines, { id: uuidv4(), itemId: '', name: '', quantity: 1, notes: '' }]);
-    };
+    useEffect(() => {
+        void loadMasterData();
+    }, [loadMasterData]);
 
-    const updateLine = (id: string, field: string, value: any) => {
-        setLines(lines.map(l => l.id === id ? { ...l, [field]: value } : l));
-    };
+    const updateLine = useCallback((id: string, field: keyof RequestLine, value: string | number) => {
+        setLines((currentLines) => currentLines.map((line) => line.id === id ? { ...line, [field]: value } : line));
+    }, []);
 
-    const removeLine = (id: string) => {
-        setLines(lines.filter(l => l.id !== id));
-    };
+    const removeLine = useCallback((id: string) => {
+        setLines((currentLines) => currentLines.filter((line) => line.id !== id));
+    }, []);
 
-    const handleItemSelect = (item: Item) => {
-        const newLine = {
+    const handleItemSelect = useCallback((item: Item) => {
+        const displayName = String(item.name_ar || item.name_en || item.code || '').trim();
+        const newLine: RequestLine = {
             id: uuidv4(),
             itemId: item.id,
-            name: item.name_ar,
+            itemCode: item.code,
+            name: displayName,
             quantity: 1,
-            notes: ''
+            notes: '',
         };
-        setLines([...lines, newLine]);
+
+        setLines((currentLines) => [...currentLines, newLine]);
         setSearchTerm('');
         setShowItemPicker(false);
-    };
+    }, []);
 
-    const filteredItems = items.filter(i =>
-        i.name_ar.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        i.code.toLowerCase().includes(searchTerm.toLowerCase())
-    ).slice(0, 20);
+    const filteredItems = useMemo(() => {
+        const term = searchTerm.trim().toLowerCase();
+        if (!term) return [];
+
+        return items.filter((item) =>
+            String(item.name_ar || '').toLowerCase().includes(term) ||
+            String(item.name_en || '').toLowerCase().includes(term) ||
+            String(item.code || '').toLowerCase().includes(term)
+        ).slice(0, 20);
+    }, [items, searchTerm]);
+
+    const totalQuantity = useMemo(
+        () => lines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0),
+        [lines],
+    );
+
+    const handleDeleteLines = useCallback((selectedLines: RequestLine[]) => {
+        const selectedIds = new Set(selectedLines.map((line) => line.id));
+        setLines((currentLines) => currentLines.filter((line) => !selectedIds.has(line.id)));
+    }, []);
+
+    const getLineKey = useCallback((line: RequestLine) => line.id, []);
+
+    const lineColumns = useMemo<DefinitionListColumn<RequestLine>[]>(() => [
+        {
+            key: 'itemCode',
+            label: 'الرمز',
+            type: 'text',
+            filterType: 'text',
+            width: 130,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (line) => line.itemCode || '',
+            getDisplayValue: (line) => line.itemCode || '-',
+            renderCell: (line) => (
+                <span className="font-mono text-xs font-semibold text-sky-700">
+                    {line.itemCode || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'name',
+            label: 'المادة',
+            type: 'text',
+            filterType: 'text',
+            width: 280,
+            defaultVisible: true,
+            align: 'right',
+            getValue: (line) => line.name,
+            getDisplayValue: (line) => line.name || '-',
+            renderCell: (line) => (
+                <span className="font-semibold text-slate-700">
+                    {line.name || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'quantity',
+            label: 'الكمية',
+            type: 'number',
+            filterType: 'number',
+            width: 150,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (line) => line.quantity,
+            getDisplayValue: (line) => String(Number(line.quantity) || 0),
+            renderCell: (line) => (
+                <input
+                    type="number"
+                    min="1"
+                    value={line.quantity}
+                    onClick={(event) => event.stopPropagation()}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                    onChange={(event) => updateLine(line.id, 'quantity', Number.parseFloat(event.target.value) || 0)}
+                    className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-2 text-center font-mono font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+            ),
+        },
+        {
+            key: 'notes',
+            label: 'ملاحظات',
+            type: 'text',
+            filterType: 'text',
+            width: 320,
+            defaultVisible: true,
+            align: 'right',
+            getValue: (line) => line.notes,
+            getDisplayValue: (line) => line.notes || '-',
+            renderCell: (line) => (
+                <input
+                    type="text"
+                    value={line.notes}
+                    onClick={(event) => event.stopPropagation()}
+                    onDoubleClick={(event) => event.stopPropagation()}
+                    onChange={(event) => updateLine(line.id, 'notes', event.target.value)}
+                    placeholder="ملاحظة..."
+                    className="h-9 w-full min-w-[14rem] rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            type: 'text',
+            filterType: 'text',
+            width: 100,
+            defaultVisible: true,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            align: 'center',
+            getValue: () => '',
+            getDisplayValue: () => '',
+            renderCell: (line) => (
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        removeLine(line.id);
+                    }}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-rose-100 bg-white text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                    aria-label="حذف السطر"
+                >
+                    <Trash2 size={15} />
+                </button>
+            ),
+        },
+    ], [removeLine, updateLine]);
+
+    const lineHeaderBadges = useMemo(() => [
+        { label: `${lines.length} مادة`, tone: 'info' as const, mono: true },
+        { label: `${totalQuantity} كمية`, tone: 'success' as const, mono: true },
+    ], [lines.length, totalQuantity]);
+
+    const itemPickerAction = useMemo(() => (
+        <div className="relative z-[70]">
+            <div className="flex h-11 w-72 items-center rounded-2xl border border-slate-200 bg-white px-3 shadow-sm transition focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
+                <Search size={16} className="ml-2 text-slate-400" />
+                <input
+                    type="text"
+                    placeholder="بحث لإضافة مادة..."
+                    className="w-full bg-transparent text-sm text-slate-700 outline-none"
+                    value={searchTerm}
+                    onChange={(event) => {
+                        setSearchTerm(event.target.value);
+                        setShowItemPicker(true);
+                    }}
+                    onFocus={() => setShowItemPicker(true)}
+                />
+            </div>
+
+            {showItemPicker && searchTerm && (
+                <div className="absolute left-0 right-0 top-full z-[80] mt-2 max-h-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-xl">
+                    {filteredItems.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-right text-sm transition hover:bg-blue-50"
+                            onClick={() => handleItemSelect(item)}
+                        >
+                            <span className="font-semibold text-slate-700">{item.name_ar}</span>
+                            <span className="font-mono text-xs text-slate-400">{item.code}</span>
+                        </button>
+                    ))}
+                    {filteredItems.length === 0 && (
+                        <div className="p-3 text-center text-xs text-slate-400">لا توجد نتائج</div>
+                    )}
+                </div>
+            )}
+        </div>
+    ), [filteredItems, handleItemSelect, searchTerm, showItemPicker]);
 
     const handleSave = async () => {
+        const validLines = lines.filter((line) => String(line.itemId || '').trim());
+
         if (!header.warehouseId) {
-            alert("الرجاء اختيار المستودع");
+            alert('الرجاء اختيار المستودع');
             return;
         }
-        if (lines.length === 0) {
-            alert("الرجاء إضافة أصناف");
+        if (validLines.length === 0) {
+            alert('الرجاء إضافة أصناف');
             return;
         }
 
@@ -102,7 +270,7 @@ export const SuppliesRequestPage = () => {
         try {
             const payload = {
                 header,
-                lines
+                lines: validLines,
             };
 
             // @ts-ignore
@@ -113,28 +281,27 @@ export const SuppliesRequestPage = () => {
                     warehouseId: header.warehouseId,
                     date: header.date,
                     notes: `Requested By: ${header.requesterName} (${header.department}) - ${header.notes}`,
-                    items: lines.map(l => ({ itemId: l.itemId, quantity: l.quantity }))
+                    items: validLines.map((line) => ({ itemId: line.itemId, quantity: line.quantity })),
                 });
-                alert("تم إرسال طلب اللوازم بنجاح");
+                alert('تم إرسال طلب اللوازم بنجاح');
                 setLines([]);
-                setHeader(h => ({ ...h, notes: '', requesterName: '', department: '' }));
+                setHeader((currentHeader) => ({ ...currentHeader, notes: '', requesterName: '', department: '' }));
             } else {
-                console.log("Saving Supplies Request:", payload);
-                alert("تم الحفظ (محاكاة)");
+                console.log('Saving Supplies Request:', payload);
+                alert('تم الحفظ (محاكاة)');
             }
         } catch (err: any) {
-            alert("فشل الحفظ: " + err.message);
+            alert(`فشل الحفظ: ${err.message}`);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 relative animate-in fade-in duration-300">
-            {/* Toolbar */}
-            <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm">
+        <div className="relative flex h-full flex-col bg-slate-50 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3 shadow-sm">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
                         <FileQuestion size={20} />
                     </div>
                     <div>
@@ -142,204 +309,115 @@ export const SuppliesRequestPage = () => {
                         <p className="text-xs text-slate-500">Supplies Request</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <button
-                        onClick={handleSave}
-                        disabled={loading}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50"
-                    >
-                        <Save size={18} />
-                        <span>إرسال الطلب</span>
-                    </button>
-                </div>
+                <button
+                    onClick={handleSave}
+                    disabled={loading}
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+                >
+                    <Save size={18} />
+                    <span>إرسال الطلب</span>
+                </button>
             </div>
 
             <div className="flex-1 overflow-auto p-6">
-                <div className="max-w-6xl mx-auto space-y-6">
-
-                    {/* Header Card */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                        <h2 className="font-bold text-slate-700 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                <div className="mx-auto max-w-6xl space-y-6">
+                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <h2 className="mb-4 flex items-center gap-2 border-b border-slate-100 pb-2 font-bold text-slate-700">
                             <User size={18} className="text-blue-500" />
                             بيانات مقدم الطلب
                         </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-1.5">القسم / الإدارة</label>
+                                <label className="mb-1.5 block text-sm font-medium text-slate-600">القسم / الإدارة</label>
                                 <div className="relative">
                                     <input
                                         type="text"
                                         value={header.department}
-                                        onChange={e => setHeader({ ...header, department: e.target.value })}
+                                        onChange={(event) => setHeader({ ...header, department: event.target.value })}
                                         placeholder="القسم..."
-                                        className="w-full pl-3 pr-10 py-2.5 border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                        className="w-full rounded-lg border border-slate-200 py-2.5 pl-3 pr-10 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                     />
                                     <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-1.5">اسم الموظف</label>
+                                <label className="mb-1.5 block text-sm font-medium text-slate-600">اسم الموظف</label>
                                 <div className="relative">
                                     <input
                                         type="text"
                                         value={header.requesterName}
-                                        onChange={e => setHeader({ ...header, requesterName: e.target.value })}
+                                        onChange={(event) => setHeader({ ...header, requesterName: event.target.value })}
                                         placeholder="اسم الطالب..."
-                                        className="w-full pl-3 pr-10 py-2.5 border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                        className="w-full rounded-lg border border-slate-200 py-2.5 pl-3 pr-10 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                     />
                                     <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-1.5">تاريخ الطلب</label>
+                                <label className="mb-1.5 block text-sm font-medium text-slate-600">تاريخ الطلب</label>
                                 <div className="relative">
                                     <input
                                         type="date"
                                         value={header.date}
-                                        onChange={e => setHeader({ ...header, date: e.target.value })}
-                                        className="w-full pl-3 pr-10 py-2.5 border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                        onChange={(event) => setHeader({ ...header, date: event.target.value })}
+                                        className="w-full rounded-lg border border-slate-200 py-2.5 pl-3 pr-10 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                     />
                                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-600 mb-1.5">المستودع المطلوب منه</label>
+                                <label className="mb-1.5 block text-sm font-medium text-slate-600">المستودع المطلوب منه</label>
                                 <select
                                     value={header.warehouseId}
-                                    onChange={e => setHeader({ ...header, warehouseId: e.target.value })}
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                    onChange={(event) => setHeader({ ...header, warehouseId: event.target.value })}
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                 >
-                                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name || w.name_ar}</option>)}
+                                    {warehouses.map((warehouse) => (
+                                        <option key={warehouse.id} value={warehouse.id}>
+                                            {warehouse.name || warehouse.name_ar}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
                             <div className="lg:col-span-4">
-                                <label className="block text-sm font-medium text-slate-600 mb-1.5">ملاحظات / سبب الطلب</label>
+                                <label className="mb-1.5 block text-sm font-medium text-slate-600">ملاحظات / سبب الطلب</label>
                                 <input
                                     type="text"
                                     value={header.notes}
-                                    onChange={e => setHeader({ ...header, notes: e.target.value })}
+                                    onChange={(event) => setHeader({ ...header, notes: event.target.value })}
                                     placeholder="ملاحظات إضافية..."
-                                    className="w-full p-2.5 border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
+                                    className="w-full rounded-lg border border-slate-200 p-2.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                 />
                             </div>
                         </div>
                     </div>
 
-                    {/* Items Section */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[400px]">
-                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 rounded-t-xl">
-                            <h2 className="font-bold text-slate-700 flex items-center gap-2">
-                                <Box size={18} className="text-blue-500" />
-                                المواد المطلوبة
-                            </h2>
-                            <div className="relative">
-                                {/* Search Input */}
-                                <div className="flex items-center bg-white border border-slate-200 rounded-lg px-3 py-1.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 w-64 shadow-sm transition-all">
-                                    <Search size={16} className="text-slate-400 ml-2" />
-                                    <input
-                                        type="text"
-                                        placeholder="بحث لإضافة مادة..."
-                                        className="w-full outline-none text-sm"
-                                        value={searchTerm}
-                                        onChange={e => { setSearchTerm(e.target.value); setShowItemPicker(true); }}
-                                        onFocus={() => setShowItemPicker(true)}
-                                    />
-                                </div>
-                                {/* Dropdown */}
-                                {showItemPicker && searchTerm && (
-                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
-                                        {filteredItems.map(item => (
-                                            <button
-                                                key={item.id}
-                                                className="w-full text-right px-4 py-2 hover:bg-blue-50 text-sm border-b border-slate-50 last:border-0 flex justify-between group"
-                                                onClick={() => handleItemSelect(item)}
-                                            >
-                                                <span className="font-medium text-slate-700 group-hover:text-blue-700">{item.name_ar}</span>
-                                                <span className="text-slate-400 text-xs font-mono">{item.code}</span>
-                                            </button>
-                                        ))}
-                                        {filteredItems.length === 0 && (
-                                            <div className="p-3 text-center text-xs text-slate-400">لا توجد نتائج</div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-auto">
-                            <table className="w-full text-right">
-                                <thead className="bg-slate-50 text-slate-600 text-xs font-bold uppercase tracking-wider sticky top-0">
-                                    <tr>
-                                        <th className="px-6 py-3 border-b border-slate-200 w-16 text-center">#</th>
-                                        <th className="px-6 py-3 border-b border-slate-200">المادة</th>
-                                        <th className="px-6 py-3 border-b border-slate-200 w-32">الكمية</th>
-                                        <th className="px-6 py-3 border-b border-slate-200 w-1/3">ملاحظات</th>
-                                        <th className="px-6 py-3 border-b border-slate-200 w-16"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {lines.map((line, index) => (
-                                        <tr key={line.id} className="group hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-6 py-3 text-center text-slate-400 text-sm font-mono">{index + 1}</td>
-                                            <td className="px-6 py-3 font-medium text-slate-700">{line.name}</td>
-                                            <td className="px-6 py-3">
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    value={line.quantity}
-                                                    onChange={e => updateLine(line.id, 'quantity', parseFloat(e.target.value) || 0)}
-                                                    className="w-full p-1.5 border border-slate-200 rounded text-center focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-bold text-slate-800"
-                                                />
-                                            </td>
-                                            <td className="px-6 py-3">
-                                                <input
-                                                    type="text"
-                                                    value={line.notes}
-                                                    onChange={e => updateLine(line.id, 'notes', e.target.value)}
-                                                    placeholder="ملاحظة..."
-                                                    className="w-full p-1.5 border border-slate-200 rounded text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none"
-                                                />
-                                            </td>
-                                            <td className="px-6 py-3 text-center">
-                                                <button
-                                                    onClick={() => removeLine(line.id)}
-                                                    className="text-slate-300 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {lines.length === 0 && (
-                                        <tr>
-                                            <td colSpan={5} className="py-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                                                <Box size={32} className="text-slate-200" />
-                                                <p>لا توجد مواد مضافة. ابحث في الصندوق أعلاه للإضافة.</p>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Footer Totals or Count */}
-                        <div className="p-4 border-t border-slate-200 bg-slate-50 rounded-b-xl flex justify-between items-center text-sm text-slate-600">
-                            <span>عدد المواد: {lines.length}</span>
-                            <span>إجمالي الكميات: {lines.reduce((s, l) => s + (l.quantity || 0), 0)}</span>
-                        </div>
-                    </div>
-
+                    <DefinitionMasterList
+                        headerIcon={<Box className="h-5 w-5" />}
+                        headerTitle="المواد المطلوبة"
+                        headerSubtitle="إدارة مواد طلب اللوازم مع بحث وفرز وتصفية وتصدير بنفس خصائص الجداول."
+                        headerBadges={lineHeaderBadges}
+                        screenKey="inventory.supplies-request.lines"
+                        data={lines}
+                        loading={loading}
+                        columns={lineColumns}
+                        rowKey={getLineKey}
+                        searchPlaceholder="بحث في مواد الطلب..."
+                        emptyMessage="لا توجد مواد مضافة. ابحث عن مادة من شريط الأدوات لإضافتها."
+                        onDelete={handleDeleteLines}
+                        onRefresh={loadMasterData}
+                        toolbarExtraActions={itemPickerAction}
+                        defaultSort={{ key: 'name', direction: 'asc' }}
+                    />
                 </div>
             </div>
 
-            {/* Overlay to close picker */}
             {showItemPicker && (
-                <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setShowItemPicker(false)}></div>
+                <div className="fixed inset-0 z-40 bg-transparent" onClick={() => setShowItemPicker(false)} />
             )}
         </div>
     );

@@ -134,6 +134,7 @@ import { QuotationList } from '../pages/sales/quotations/QuotationList';
 import { QuotationForm } from '../pages/sales/quotations/QuotationForm';
 import { SalesOrderList } from '../pages/sales/orders/SalesOrderList';
 import { SalesOrderForm } from '../pages/sales/orders/SalesOrderForm';
+import CreditDebitNotesPage from '../pages/sales/creditNotes/CreditDebitNotesPage';
 
 import { ImportDashboard } from '../pages/import-export/ImportDashboard';
 import CommercialInvoiceForm from '../pages/import-export/CommercialInvoiceForm';
@@ -155,6 +156,8 @@ import StockTransferPageDoc from '../src/pages/inventory/StockTransferPage';
 import JournalVoucherListDoc from '../src/pages/accounting/JournalVoucherList';
 import JournalVoucherPageDoc from '../src/pages/accounting/JournalVoucherPage';
 import { POSScreen } from '../pages/pos/POSScreen';
+import VanStockTakePage from '../pages/distribution/VanStockTakePage';
+import SalesRepSettlementPage from '../pages/distribution/SalesRepSettlementPage';
 // import { SalesReturn } from '../pages/sales/operations/SalesReturn'; // TODO: Implement
 // const SalesReturn = () => <PlaceholderPage title="مردودات مبيعات" category="Sales" />; // Placeholder for now
 const SalesReturn = () => <PlaceholderPage title="مردودات مبيعات" category="Sales" />; // Placeholder for now
@@ -469,12 +472,12 @@ const APP_ROUTES_RAW: RouteConfig[] = [
     { path: '/trade/sales/return', description: 'مرتجعات المبيعات', component: <SalesReturnList /> },
     { path: '/sales/returns/new', description: 'مرتجع مبيعات جديد', component: <ReturnInvoice /> },
     { path: '/sales/returns/:id', description: 'تفاصيل المرتجع', component: <ReturnInvoice /> },
-    { path: '/trade/sales/credit-note', description: 'إشعار دائن/مدين', component: <PlaceholderPage title="إشعار دائن / مدين" category="Sales" /> },
+    { path: '/trade/sales/credit-note', description: 'إشعار دائن/مدين', component: <CreditDebitNotesPage /> },
 
     // TRADE - DISTRIBUTION (New Paths)
     { path: '/trade/distribution/routes', description: 'تخطيط المسارات', component: <RoutePlan /> },
-    { path: '/trade/distribution/van-stock', description: 'جرد سيارة المندوب', component: <PlaceholderPage title="جرد سيارة المندوب" category="Distribution" /> },
-    { path: '/trade/distribution/settlement', description: 'تصفية المندوب', component: <PlaceholderPage title="تصفية المندوب" category="Distribution" /> },
+    { path: '/trade/distribution/van-stock', description: 'جرد سيارة المندوب', component: <VanStockTakePage /> },
+    { path: '/trade/distribution/settlement', description: 'تصفية المندوب', component: <SalesRepSettlementPage /> },
 
     // TRADE - AGREEMENTS
     { path: '/trade/agreements/promotions', description: 'قوائم الأسعار والعروض', component: <Promotions /> },

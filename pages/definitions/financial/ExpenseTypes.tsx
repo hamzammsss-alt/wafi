@@ -5,10 +5,11 @@ import {
     Link2,
     Loader2,
     Plus,
-    Search,
+    ReceiptText,
     Trash2,
     X,
 } from 'lucide-react';
+import DefinitionMasterList, { DefinitionListColumn } from '../../../src/components/definitions/DefinitionMasterList';
 import { useCreateIntent } from '../../../src/hooks/useCreateIntent';
 
 type ExpenseTypeRow = {
@@ -51,16 +52,15 @@ const emptyForm = {
 };
 
 const normalizeText = (value: unknown) => String(value || '').trim();
-
 const getExpenseNameAr = (row: ExpenseTypeRow) => normalizeText(row.name_ar || row.name);
+const getCategory = (row: ExpenseTypeRow) => normalizeText(row.category) || 'تشغيلي';
+const getAccountDisplayName = (row: ExpenseTypeRow) => normalizeText(row.account_name) || normalizeText(row.account_id);
+const isLinkedToAccount = (row: ExpenseTypeRow) => Boolean(normalizeText(row.account_id));
 
 export const ExpenseTypes = () => {
     const [types, setTypes] = useState<ExpenseTypeRow[]>([]);
     const [accounts, setAccounts] = useState<AccountRow[]>([]);
     const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
-    const [categoryFilter, setCategoryFilter] = useState<'all' | string>('all');
-    const [linkedFilter, setLinkedFilter] = useState<'all' | 'linked' | 'unlinked'>('all');
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState(emptyForm);
@@ -134,7 +134,7 @@ export const ExpenseTypes = () => {
             code: normalizeText(type.code),
             name_ar: getExpenseNameAr(type),
             name_en: normalizeText(type.name_en),
-            category: normalizeText(type.category) || 'تشغيلي',
+            category: getCategory(type),
             account_id: normalizeText(type.account_id),
             account_name: normalizeText(type.account_name),
         });
@@ -143,8 +143,8 @@ export const ExpenseTypes = () => {
         setIsAdding(true);
     };
 
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSave = async (event: React.FormEvent) => {
+        event.preventDefault();
         setError(null);
 
         if (!normalizeText(formData.name_ar)) {
@@ -196,213 +196,206 @@ export const ExpenseTypes = () => {
         }
     };
 
-    const filteredTypes = useMemo(() => {
-        const query = search.trim().toLowerCase();
+    const handleDeleteRows = async (rows: ExpenseTypeRow[]) => {
+        const ids = rows.map((row) => String(row.id || '').trim()).filter(Boolean);
+        if (ids.length === 0) return;
+        const message = ids.length === 1
+            ? 'هل أنت متأكد من حذف هذا النوع؟'
+            : `هل أنت متأكد من حذف ${ids.length} أنواع مصاريف؟`;
+        if (!confirm(message)) return;
 
-        return types.filter((row) => {
-            const matchesSearch =
-                !query ||
-                getExpenseNameAr(row).toLowerCase().includes(query) ||
-                normalizeText(row.name_en).toLowerCase().includes(query) ||
-                normalizeText(row.code).toLowerCase().includes(query) ||
-                normalizeText(row.account_name).toLowerCase().includes(query);
-
-            if (!matchesSearch) return false;
-
-            if (categoryFilter !== 'all' && normalizeText(row.category || 'تشغيلي') !== categoryFilter) {
-                return false;
+        try {
+            for (const id of ids) {
+                await api.crudOperation({ operation: 'DELETE', table: 'expense_types', id });
             }
+            await loadTypes();
+        } catch (err) {
+            console.error(err);
+            setError('فشل في حذف أنواع المصاريف المحددة.');
+        }
+    };
 
-            const linked = Boolean(normalizeText(row.account_id));
-            if (linkedFilter === 'linked' && !linked) return false;
-            if (linkedFilter === 'unlinked' && linked) return false;
+    const linkedTypesCount = useMemo(
+        () => types.filter((row) => isLinkedToAccount(row)).length,
+        [types],
+    );
 
-            return true;
-        });
-    }, [types, search, categoryFilter, linkedFilter]);
+    const categoryOptions = useMemo(
+        () => CATEGORY_OPTIONS.map((category) => ({ value: category, label: category })),
+        [],
+    );
+
+    const columns = useMemo<DefinitionListColumn<ExpenseTypeRow>[]>(() => [
+        {
+            key: 'code',
+            label: 'الكود',
+            width: 130,
+            defaultVisible: true,
+            getDisplayValue: (row) => normalizeText(row.code) || '-',
+            renderCell: (row) => (
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-700">
+                    {normalizeText(row.code) || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'name_ar',
+            label: 'الاسم (عربي)',
+            width: 260,
+            defaultVisible: true,
+            getValue: getExpenseNameAr,
+            getSearchValue: (row) => `${getExpenseNameAr(row)} ${normalizeText(row.name_en)} ${normalizeText(row.code)}`,
+            renderCell: (row) => (
+                <span className="font-semibold text-slate-800">
+                    {getExpenseNameAr(row) || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'name_en',
+            label: 'الاسم (English)',
+            width: 220,
+            defaultVisible: true,
+            getDisplayValue: (row) => normalizeText(row.name_en) || '-',
+        },
+        {
+            key: 'category',
+            label: 'التصنيف',
+            type: 'enum',
+            filterType: 'enum',
+            width: 150,
+            defaultVisible: true,
+            options: categoryOptions,
+            getValue: getCategory,
+            getDisplayValue: getCategory,
+            renderCell: (row) => {
+                const category = getCategory(row);
+                return (
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        category === 'إداري'
+                            ? 'bg-purple-100 text-purple-700'
+                            : category === 'تسويقي'
+                                ? 'bg-sky-100 text-sky-700'
+                                : category === 'تمويلي'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                        {category}
+                    </span>
+                );
+            },
+        },
+        {
+            key: 'account_status',
+            label: 'حالة الربط',
+            type: 'enum',
+            filterType: 'enum',
+            width: 150,
+            defaultVisible: true,
+            options: [
+                { value: 'linked', label: 'مرتبط بحساب' },
+                { value: 'unlinked', label: 'غير مرتبط' },
+            ],
+            getValue: (row) => isLinkedToAccount(row) ? 'linked' : 'unlinked',
+            getDisplayValue: (row) => isLinkedToAccount(row) ? 'مرتبط بحساب' : 'غير مرتبط',
+            renderCell: (row) => isLinkedToAccount(row) ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                    <Link2 size={12} />
+                    مرتبط بحساب
+                </span>
+            ) : (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                    غير مرتبط
+                </span>
+            ),
+        },
+        {
+            key: 'account_name',
+            label: 'الحساب المرتبط',
+            width: 280,
+            defaultVisible: true,
+            getSearchValue: (row) => `${getAccountDisplayName(row)} ${normalizeText(row.account_id)}`,
+            getDisplayValue: (row) => getAccountDisplayName(row) || '-',
+            renderCell: (row) => getAccountDisplayName(row) ? (
+                <div className="flex min-w-0 items-center gap-2 text-sm text-slate-700">
+                    <Link2 size={14} className="shrink-0 text-sky-600" />
+                    <span className="truncate">{getAccountDisplayName(row)}</span>
+                </div>
+            ) : (
+                <span className="text-sm text-slate-400">غير مرتبط</span>
+            ),
+        },
+        {
+            key: 'actions',
+            label: 'إجراءات',
+            width: 120,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            defaultVisible: true,
+            align: 'center',
+            renderCell: (row) => (
+                <div className="flex justify-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => handleEdit(row)}
+                        className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                        title="تعديل"
+                    >
+                        <Edit size={18} />
+                    </button>
+                    {row.id && (
+                        <button
+                            type="button"
+                            onClick={() => handleDelete(String(row.id))}
+                            className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+                            title="حذف"
+                        >
+                            <Trash2 size={18} />
+                        </button>
+                    )}
+                </div>
+            ),
+        },
+    ], [categoryOptions]);
 
     return (
-        <div className="app-page" dir="rtl">
+        <div className="h-full bg-gray-50 p-4 md:p-6" dir="rtl">
 
             {error && (
                 <div className="mb-4 flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                     <AlertCircle size={18} />
                     <span>{error}</span>
-                    <button onClick={() => setError(null)} className="mr-auto rounded-md p-1 hover:bg-rose-100">
+                    <button type="button" onClick={() => setError(null)} className="mr-auto rounded-md p-1 hover:bg-rose-100">
                         <X size={16} />
                     </button>
                 </div>
             )}
 
-            <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
-                    <div>
-                        <h1 className="text-xl font-extrabold text-slate-900">أنواع المصاريف</h1>
-                        <p className="mt-1 text-sm font-medium text-slate-500">
-                            جدول منظم لأنواع المصاريف مع فلترة وربط مباشر بالحسابات.
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            <span className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-700">
-                                {types.length} نوع
-                            </span>
-                            <span className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">
-                                {filteredTypes.length} نتيجة
-                            </span>
-                            <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-                                {types.filter((row) => normalizeText(row.account_id)).length} مرتبط بحساب
-                            </span>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={openCreate}
-                        className="inline-flex h-10 items-center gap-2 rounded-2xl bg-blue-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700"
-                    >
-                        <Plus size={16} />
-                        <span>إضافة نوع جديد</span>
-                    </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                <div className="relative min-w-[260px] flex-1">
-                    <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="بحث بالاسم أو الكود أو الحساب..."
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white pr-10 pl-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                    />
-                </div>
-
-                <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="h-11 min-w-[170px] rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                >
-                    <option value="all">كل التصنيفات</option>
-                    {CATEGORY_OPTIONS.map((category) => (
-                        <option key={category} value={category}>
-                            {category}
-                        </option>
-                    ))}
-                </select>
-
-                <select
-                    value={linkedFilter}
-                    onChange={(e) => setLinkedFilter(e.target.value as typeof linkedFilter)}
-                    className="h-11 min-w-[170px] rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                >
-                    <option value="all">كل الحالات</option>
-                    <option value="linked">مرتبطة بحساب</option>
-                    <option value="unlinked">غير مرتبطة</option>
-                </select>
-                </div>
-            </div>
-
-            <div className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 bg-gradient-to-l from-sky-50 to-blue-50 px-6 py-4">
-                    <h2 className="text-lg font-bold text-slate-900">قائمة أنواع المصاريف</h2>
-                    <p className="text-sm text-slate-600">
-                        عدد السجلات الحالية: <span className="font-semibold">{filteredTypes.length}</span>
-                    </p>
-                </div>
-
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center p-14 text-slate-400">
-                        <Loader2 size={36} className="mb-3 animate-spin text-sky-500" />
-                        <p>جاري تحميل البيانات...</p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full border-separate border-spacing-0 text-right text-[13px] text-slate-700">
-                            <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
-                                <tr>
-                                    <th className="w-[70px] border-b border-l border-slate-200 bg-slate-50 p-3 text-center">الرقم</th>
-                                    <th className="min-w-[120px] border-b border-l border-slate-200 bg-slate-50 p-3">الكود</th>
-                                    <th className="min-w-[220px] border-b border-l border-slate-200 bg-slate-50 p-3">الاسم (عربي)</th>
-                                    <th className="min-w-[220px] border-b border-l border-slate-200 bg-slate-50 p-3">الاسم (English)</th>
-                                    <th className="min-w-[130px] border-b border-l border-slate-200 bg-slate-50 p-3">التصنيف</th>
-                                    <th className="min-w-[260px] border-b border-l border-slate-200 bg-slate-50 p-3">الحساب المرتبط</th>
-                                    <th className="w-[120px] border-b border-slate-200 bg-slate-50 p-3 text-center">إجراءات</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredTypes.length > 0 ? (
-                                    filteredTypes.map((type, index) => (
-                                        <tr key={type.id || `${type.code}-${index}`} className="group">
-                                            <td className="border-b border-l border-slate-200 bg-white p-3 text-center font-mono font-bold text-slate-500 transition group-hover:bg-sky-50/40">
-                                                {String(index + 1).padStart(2, '0')}
-                                            </td>
-                                            <td className="border-b border-l border-slate-200 bg-white p-3 transition group-hover:bg-sky-50/40">
-                                                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-mono text-slate-700">
-                                                    {normalizeText(type.code) || '-'}
-                                                </span>
-                                            </td>
-                                            <td className="border-b border-l border-slate-200 bg-white p-3 font-medium text-slate-800 transition group-hover:bg-sky-50/40">
-                                                {getExpenseNameAr(type)}
-                                            </td>
-                                            <td className="border-b border-l border-slate-200 bg-white p-3 font-mono text-sm text-slate-600 transition group-hover:bg-sky-50/40">
-                                                {normalizeText(type.name_en) || '-'}
-                                            </td>
-                                            <td className="border-b border-l border-slate-200 bg-white p-3 transition group-hover:bg-sky-50/40">
-                                                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                                                    normalizeText(type.category) === 'إداري'
-                                                        ? 'bg-purple-100 text-purple-700'
-                                                        : 'bg-emerald-100 text-emerald-700'
-                                                }`}>
-                                                    {normalizeText(type.category) || 'تشغيلي'}
-                                                </span>
-                                            </td>
-                                            <td className="border-b border-l border-slate-200 bg-white p-3 transition group-hover:bg-sky-50/40">
-                                                {normalizeText(type.account_id) ? (
-                                                    <div className="flex items-center gap-2 text-sm text-slate-700">
-                                                        <Link2 size={14} className="text-sky-600" />
-                                                        <span className="truncate">
-                                                            {normalizeText(type.account_name) || normalizeText(type.account_id)}
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-sm text-slate-400">غير مرتبط</span>
-                                                )}
-                                            </td>
-                                            <td className="border-b border-slate-200 bg-white p-3 transition group-hover:bg-sky-50/40">
-                                                <div className="flex justify-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                                                    <button
-                                                        onClick={() => handleEdit(type)}
-                                                        className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
-                                                        title="تعديل"
-                                                    >
-                                                        <Edit size={18} />
-                                                    </button>
-                                                    {type.id && (
-                                                        <button
-                                                            onClick={() => handleDelete(String(type.id))}
-                                                            className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-                                                            title="حذف"
-                                                        >
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={7} className="border-b border-slate-200 bg-white py-16 text-center text-slate-400">
-                                            <div className="flex flex-col items-center gap-3">
-                                                <Search size={28} className="text-slate-300" />
-                                                <p>لا توجد أنواع مصاريف مطابقة للفلاتر الحالية.</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+            <DefinitionMasterList
+                headerIcon={<ReceiptText size={24} />}
+                headerTitle="أنواع المصاريف"
+                headerSubtitle="جدول منظم لأنواع المصاريف مع فلترة وربط مباشر بالحسابات."
+                headerBadges={[
+                    { label: `${types.length} نوع`, tone: 'info' },
+                    { label: `${linkedTypesCount} مرتبط بحساب`, tone: 'success' },
+                    { label: `${Math.max(types.length - linkedTypesCount, 0)} غير مرتبط`, tone: 'warning' },
+                ]}
+                screenKey="definitions.expense_types"
+                data={types}
+                loading={loading}
+                columns={columns}
+                rowKey={(row) => String(row.id || row.code || getExpenseNameAr(row))}
+                searchPlaceholder="بحث بالاسم أو الكود أو الحساب"
+                emptyMessage="لا توجد أنواع مصاريف مطابقة للمعايير الحالية"
+                createLabel="إضافة نوع"
+                onCreate={openCreate}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRows}
+                onRefresh={loadTypes}
+                onRowDoubleClick={handleEdit}
+                defaultSort={{ key: 'code', direction: 'asc' }}
+            />
 
             {isAdding && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
@@ -412,7 +405,7 @@ export const ExpenseTypes = () => {
                                 {editingId ? <Edit className="text-blue-600" size={20} /> : <Plus className="text-blue-600" size={20} />}
                                 {editingId ? 'تعديل نوع مصروف' : 'إضافة نوع جديد'}
                             </h3>
-                            <button onClick={handleClose} className="text-gray-400 transition-colors hover:text-gray-600">
+                            <button type="button" onClick={handleClose} className="text-gray-400 transition-colors hover:text-gray-600">
                                 <X size={20} />
                             </button>
                         </div>
@@ -424,7 +417,7 @@ export const ExpenseTypes = () => {
                                     <input
                                         type="text"
                                         value={formData.code}
-                                        onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                                        onChange={(event) => setFormData({ ...formData, code: event.target.value.toUpperCase() })}
                                         className="w-full rounded-lg border px-3 py-2 font-mono outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                         placeholder="EXP-001"
                                         dir="ltr"
@@ -435,7 +428,7 @@ export const ExpenseTypes = () => {
                                     <label className="mb-1.5 block text-sm font-medium text-gray-700">التصنيف</label>
                                     <select
                                         value={formData.category}
-                                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                        onChange={(event) => setFormData({ ...formData, category: event.target.value })}
                                         className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                     >
                                         {CATEGORY_OPTIONS.map((category) => (
@@ -455,7 +448,7 @@ export const ExpenseTypes = () => {
                                     <input
                                         type="text"
                                         value={formData.name_ar}
-                                        onChange={(e) => setFormData({ ...formData, name_ar: e.target.value })}
+                                        onChange={(event) => setFormData({ ...formData, name_ar: event.target.value })}
                                         className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                         placeholder="مثال: كهرباء ومياه"
                                         autoFocus
@@ -467,7 +460,7 @@ export const ExpenseTypes = () => {
                                     <input
                                         type="text"
                                         value={formData.name_en}
-                                        onChange={(e) => setFormData({ ...formData, name_en: e.target.value })}
+                                        onChange={(event) => setFormData({ ...formData, name_en: event.target.value })}
                                         className="w-full rounded-lg border px-3 py-2 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                         placeholder="e.g. Electricity & Water"
                                         dir="ltr"
@@ -479,11 +472,11 @@ export const ExpenseTypes = () => {
                                 <label className="mb-1.5 block text-sm font-medium text-gray-700">ربط بالحساب</label>
                                 <select
                                     value={formData.account_id}
-                                    onChange={(e) => {
-                                        const selected = accounts.find((account) => account.id === e.target.value);
+                                    onChange={(event) => {
+                                        const selected = accounts.find((account) => account.id === event.target.value);
                                         setFormData({
                                             ...formData,
-                                            account_id: e.target.value,
+                                            account_id: event.target.value,
                                             account_name: selected
                                                 ? `${normalizeText(selected.accountCode)} - ${normalizeText(selected.name_ar || selected.name)}`
                                                 : '',
