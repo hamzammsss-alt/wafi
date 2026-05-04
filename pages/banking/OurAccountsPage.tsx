@@ -1,15 +1,43 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit, Building, CreditCard, X, Search, Loader2, Save, Printer, ArrowRight, Check, AlertCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Building, Edit, Printer, Save, Search, Trash2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AccountPicker } from '../../components/AccountPicker';
+import DefinitionMasterList, { DefinitionListColumn } from '../../src/components/definitions/DefinitionMasterList';
+
+type BankAccountRow = {
+    id: string;
+    code?: string;
+    bank_name?: string;
+    branch?: string;
+    account_name?: string;
+    account_number?: string;
+    iban?: string;
+    currency_id?: string;
+    currency?: string;
+    gl_account_id?: string;
+    gl_account_code?: string;
+    gl_account_name?: string;
+    commission_account_id?: string;
+    commission_account_name?: string;
+    sub_account_code?: string;
+    sub_account_name?: string;
+    is_active?: number | boolean;
+};
+
+function text(value: unknown) {
+    return String(value || '').trim();
+}
+
+function isActive(value: unknown) {
+    return value !== 0 && value !== false;
+}
 
 export const OurAccountsPage = () => {
-    const [accounts, setAccounts] = useState<any[]>([]);
+    const [accounts, setAccounts] = useState<BankAccountRow[]>([]);
     const [banks, setBanks] = useState<any[]>([]);
     const [currencies, setCurrencies] = useState<any[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [current, setCurrent] = useState<any>({});
-    const [search, setSearch] = useState('');
 
     // Picker State: 'gl' or 'commission' or 'parent' or null
     const [pickerTarget, setPickerTarget] = useState<'gl' | 'commission' | 'parent' | null>(null);
@@ -17,7 +45,7 @@ export const OurAccountsPage = () => {
 
     const api = (window as any).electronAPI;
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
         // Fetch independently to avoid one failure blocking all
         try {
@@ -47,9 +75,9 @@ export const OurAccountsPage = () => {
         }
 
         setLoading(false);
-    };
+    }, [api]);
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { void fetchData(); }, [fetchData]);
 
     const handleSave = async () => {
         if (!current.bank_id || !current.account_number) return alert("البنك ورقم الحساب مطلوبان");
@@ -57,7 +85,7 @@ export const OurAccountsPage = () => {
             const res = await api.masterData.saveBankAccount(current);
             if (res && res.success) {
                 setIsModalOpen(false);
-                fetchData();
+                void fetchData();
             } else {
                 alert("حدث خطأ أثناء الحفظ");
                 console.error("Save response:", res);
@@ -79,110 +107,264 @@ export const OurAccountsPage = () => {
         setPickerTarget(null);
     };
 
-    const filteredAccounts = accounts.filter(a =>
-        a.bank_name?.toLowerCase().includes(search.toLowerCase()) ||
-        a.account_number?.includes(search) ||
-        a.branch?.toLowerCase().includes(search.toLowerCase())
-    );
+    const openCreateModal = useCallback(() => {
+        setCurrent({ is_active: 1, currency_id: 'ILS' });
+        setIsModalOpen(true);
+    }, []);
+
+    const openEditModal = useCallback((account: BankAccountRow) => {
+        setCurrent(account);
+        setIsModalOpen(true);
+    }, []);
+
+    const deleteAccounts = useCallback(async (rows: BankAccountRow[]) => {
+        if (rows.length === 0) return;
+        const message = rows.length === 1
+            ? 'هل أنت متأكد من حذف الحساب البنكي المحدد؟'
+            : `هل أنت متأكد من حذف ${rows.length} حسابات بنكية؟`;
+        if (!confirm(message)) return;
+
+        await Promise.all(rows.filter((row) => row.id).map((row) => api.masterData.deleteBankAccount(row.id)));
+        await fetchData();
+    }, [api, fetchData]);
+
+    const headerStats = useMemo(() => {
+        const active = accounts.filter((account) => isActive(account.is_active)).length;
+        const linked = accounts.filter((account) => text(account.gl_account_id)).length;
+        const currenciesCount = new Set(accounts.map((account) => text(account.currency_id || account.currency)).filter(Boolean)).size;
+        return { active, linked, currenciesCount };
+    }, [accounts]);
+
+    const columns = useMemo<DefinitionListColumn<BankAccountRow>[]>(() => [
+        {
+            key: 'code',
+            label: '#',
+            type: 'text',
+            filterType: 'text',
+            width: 90,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (account) => account.code || account.account_number || account.id,
+            getDisplayValue: (account) => text(account.code || account.account_number || account.id),
+            renderCell: (account) => (
+                <span className="font-mono text-xs font-bold text-slate-500">
+                    {account.code || account.account_number || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'account_name',
+            label: 'اسم الحساب',
+            type: 'text',
+            filterType: 'text',
+            width: 240,
+            defaultVisible: true,
+            align: 'right',
+            getValue: (account) => account.account_name || '',
+            getSearchValue: (account) => [
+                account.account_name,
+                account.bank_name,
+                account.branch,
+                account.account_number,
+                account.iban,
+                account.gl_account_name,
+                account.gl_account_code,
+            ].map(text).join(' '),
+            getDisplayValue: (account) => text(account.account_name || '-'),
+            renderCell: (account) => (
+                <div className="min-w-0">
+                    <div className="truncate font-extrabold text-slate-800">{account.account_name || '-'}</div>
+                    <div className="mt-1 truncate font-mono text-[11px] text-slate-400" dir="ltr">
+                        {account.account_number || ''}
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'bank_name',
+            label: 'البنك / الفرع',
+            type: 'text',
+            filterType: 'text',
+            width: 210,
+            defaultVisible: true,
+            align: 'right',
+            getValue: (account) => `${account.bank_name || ''} ${account.branch || ''}`,
+            getDisplayValue: (account) => text([account.bank_name, account.branch].filter(Boolean).join(' / ') || '-'),
+            renderCell: (account) => (
+                <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-extrabold text-blue-700">
+                        {(account.bank_name?.[0] || 'ب').toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                        <div className="truncate font-bold text-slate-700">{account.bank_name || '-'}</div>
+                        {account.branch && <div className="truncate text-[11px] text-slate-400">{account.branch}</div>}
+                    </div>
+                </div>
+            ),
+        },
+        {
+            key: 'currency_id',
+            label: 'العملة',
+            type: 'enum',
+            filterType: 'enum',
+            width: 110,
+            defaultVisible: true,
+            align: 'center',
+            options: currencies.map((currency: any) => ({
+                value: text(currency.code || currency.id),
+                label: text(currency.code || currency.name || currency.id),
+            })).filter((option) => option.value),
+            getValue: (account) => text(account.currency_id || account.currency),
+            getDisplayValue: (account) => text(account.currency_id || account.currency || '-'),
+            renderCell: (account) => (
+                <span className="inline-flex rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-1 font-mono text-xs font-extrabold text-emerald-700">
+                    {account.currency_id || account.currency || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'account_number',
+            label: 'رقم الحساب',
+            type: 'text',
+            filterType: 'text',
+            width: 160,
+            defaultVisible: true,
+            align: 'left',
+            getValue: (account) => account.account_number || '',
+            getDisplayValue: (account) => text(account.account_number || '-'),
+            renderCell: (account) => <span className="font-mono text-sm text-slate-700" dir="ltr">{account.account_number || '-'}</span>,
+        },
+        {
+            key: 'iban',
+            label: 'IBAN',
+            type: 'text',
+            filterType: 'text',
+            width: 210,
+            defaultVisible: true,
+            align: 'left',
+            getValue: (account) => account.iban || '',
+            getDisplayValue: (account) => text(account.iban || '-'),
+            renderCell: (account) => (
+                <span className={`font-mono text-xs ${account.iban ? 'text-slate-600' : 'text-slate-300'}`} dir="ltr">
+                    {account.iban || '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'gl_account',
+            label: 'حساب GL',
+            type: 'text',
+            filterType: 'text',
+            width: 230,
+            defaultVisible: true,
+            align: 'right',
+            getValue: (account) => `${account.gl_account_code || ''} ${account.gl_account_name || ''} ${account.gl_account_id || ''}`,
+            getDisplayValue: (account) => text(account.gl_account_name || account.gl_account_id || 'غير مربوط'),
+            renderCell: (account) => account.gl_account_id ? (
+                <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                    <span className="truncate">{account.gl_account_code ? `${account.gl_account_code} - ` : ''}{account.gl_account_name || account.gl_account_id}</span>
+                </span>
+            ) : (
+                <span className="text-xs italic text-slate-300">غير مربوط</span>
+            ),
+        },
+        {
+            key: 'is_active',
+            label: 'الحالة',
+            type: 'boolean',
+            filterType: 'boolean',
+            width: 120,
+            defaultVisible: true,
+            align: 'center',
+            getValue: (account) => (isActive(account.is_active) ? 1 : 0),
+            getDisplayValue: (account) => (isActive(account.is_active) ? 'نشط' : 'غير نشط'),
+            renderCell: (account) => (
+                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${isActive(account.is_active) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-500'}`}>
+                    {isActive(account.is_active) ? 'نشط' : 'غير نشط'}
+                </span>
+            ),
+        },
+        {
+            key: 'sub_account',
+            label: 'الحساب الفرعي',
+            type: 'text',
+            filterType: 'text',
+            width: 190,
+            defaultVisible: false,
+            align: 'right',
+            getValue: (account) => `${account.sub_account_code || ''} ${account.sub_account_name || ''}`,
+            getDisplayValue: (account) => text(account.sub_account_name || account.sub_account_code || '-'),
+        },
+        {
+            key: 'actions',
+            label: 'الإجراءات',
+            width: 120,
+            defaultVisible: true,
+            sortable: false,
+            filterable: false,
+            searchable: false,
+            align: 'center',
+            getValue: () => '',
+            getDisplayValue: () => '',
+            renderCell: (account) => (
+                <div className="flex justify-center gap-1.5">
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            openEditModal(account);
+                        }}
+                        className="rounded-lg p-2 text-blue-600 transition hover:bg-blue-50"
+                        title="تعديل"
+                        aria-label="تعديل"
+                    >
+                        <Edit size={16} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            void deleteAccounts([account]);
+                        }}
+                        className="rounded-lg p-2 text-red-600 transition hover:bg-red-50"
+                        title="حذف"
+                        aria-label="حذف"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                </div>
+            ),
+        },
+    ], [currencies, deleteAccounts, openEditModal]);
 
     return (
-        <div className="p-6 md:p-8 bg-gray-50/50 min-h-screen font-sans" dir="rtl">
-            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3 mb-8">
-                <div className="bg-emerald-100 p-2.5 rounded-xl text-emerald-600 shadow-sm">
-                    <Building size={28} />
-                </div>
-                حساباتنا في البنوك
-            </h1>
-
-            {/* Toolbar */}
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm checkbox-wrapper">
-                <div className="relative w-full md:w-96 group">
-                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors" size={18} />
-                    <input
-                        type="text"
-                        placeholder="بحث عن حساب بنكي..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full pr-10 pl-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                    />
-                </div>
-                <button onClick={() => { setCurrent({}); setIsModalOpen(true); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold shadow-sm hover:shadow-md transition-all active:scale-95">
-                    <Plus size={18} /> إضافة حساب جديد
-                </button>
-            </div>
-
-            {/* Data Grid */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200/60 overflow-hidden">
-                {loading ? (
-                    <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center">
-                        <Loader2 className="animate-spin mb-3 text-emerald-500" size={40} />
-                        <p className="font-medium animate-pulse">جاري تحميل البيانات...</p>
-                    </div>
-                ) : (
-                    <table className="w-full text-right">
-                        <thead className="bg-gray-50 border-b border-gray-100 text-gray-600 font-bold text-sm">
-                            <tr>
-                                <th className="p-4 w-16 text-center">#</th>
-                                <th className="p-4">اسم الحساب</th>
-                                <th className="p-4">البنك / الفرع</th>
-                                <th className="p-4 w-24 text-center">العملة</th>
-                                <th className="p-4 font-mono text-left" dir="ltr">رقم الحساب</th>
-                                <th className="p-4 font-mono text-left" dir="ltr">IBAN</th>
-                                <th className="p-4">حساب GL</th>
-                                <th className="p-4 w-28 text-center">إجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {filteredAccounts.length > 0 ? (
-                                filteredAccounts.map((acc, idx) => (
-                                    <tr key={acc.id} className="hover:bg-blue-50/30 transition-colors group">
-                                        <td className="p-4 text-center text-gray-400 font-mono text-xs">{acc.code || idx + 1}</td>
-                                        <td className="p-4 font-bold text-gray-800">{acc.account_name || '-'}</td>
-                                        <td className="p-4 font-medium text-gray-600">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">
-                                                    {(acc.bank_name?.[0] || 'B').toUpperCase()}
-                                                </div>
-                                                {acc.bank_name}
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md text-xs font-bold border border-emerald-100">{acc.currency_id}</span>
-                                        </td>
-                                        <td className="p-4 font-mono text-gray-700 text-sm text-left" dir="ltr">{acc.account_number}</td>
-                                        <td className="p-4 font-mono text-xs text-gray-500 text-left" dir="ltr">{acc.iban || '-'}</td>
-                                        <td className="p-4 text-sm">
-                                            {acc.gl_account_id ? (
-                                                <div className="flex items-center gap-1.5 text-blue-600 bg-blue-50 px-2 py-1 rounded max-w-fit">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                                    <span className="truncate max-w-[150px]">{acc.gl_account_name || acc.gl_account_id}</span>
-                                                </div>
-                                            ) : <span className="text-gray-300 italic text-xs">غير مربوط</span>}
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                                                <button onClick={() => { setCurrent(acc); setIsModalOpen(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm" title="تعديل"><Edit size={16} /></button>
-                                                <button onClick={() => { if (confirm("هل أنت متأكد من الحذف؟")) { api.masterData.deleteBankAccount(acc.id); fetchData(); } }} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all shadow-sm" title="حذف"><Trash2 size={16} /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={8} className="p-16 text-center text-gray-400">
-                                        <div className="flex flex-col items-center gap-3">
-                                            <div className="p-4 bg-gray-50 rounded-full">
-                                                <Building size={32} className="opacity-20" />
-                                            </div>
-                                            <p>لا توجد حسابات بنكية مضافة حتى الآن</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                )}
-            </div>
+        <div className="h-full overflow-auto bg-slate-50 p-6 font-sans" dir="rtl">
+            <DefinitionMasterList
+                headerIcon={<Building className="h-5 w-5" />}
+                headerTitle="حساباتنا في البنوك"
+                headerSubtitle="إدارة الحسابات البنكية وربطها بالحسابات العامة والعملات بنفس خصائص الجداول الموحدة."
+                headerBadges={[
+                    { label: `${accounts.length} حساب`, tone: 'info', mono: true },
+                    { label: `${headerStats.active} نشط`, tone: 'success', mono: true },
+                    { label: `${headerStats.linked} مربوط`, tone: 'neutral', mono: true },
+                    { label: `${headerStats.currenciesCount} عملات`, tone: 'warning', mono: true },
+                ]}
+                screenKey="banking.our-accounts"
+                data={accounts}
+                loading={loading}
+                columns={columns}
+                rowKey={(account) => String(account.id || account.code || account.account_number)}
+                searchPlaceholder="بحث باسم الحساب أو البنك أو رقم الحساب أو IBAN..."
+                emptyMessage="لا توجد حسابات بنكية مطابقة للمعايير الحالية"
+                createLabel="إضافة حساب جديد"
+                onCreate={openCreateModal}
+                onEdit={openEditModal}
+                onDelete={deleteAccounts}
+                onRefresh={fetchData}
+                onRowDoubleClick={openEditModal}
+                defaultSort={{ key: 'bank_name', direction: 'asc' }}
+            />
 
             {/* Modal */}
             <AnimatePresence>

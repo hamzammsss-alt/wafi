@@ -543,6 +543,9 @@ const APP_ROUTES_RAW: RouteConfig[] = [
     { path: '/gl/budgets', description: 'الموازنات', component: <BudgetList /> },
     { path: '/gl/budgets/new', description: 'موازنة جديدة', component: <BudgetForm /> },
     { path: '/gl/budgets/:id', description: 'تفاصيل الموازنة', component: <BudgetForm /> },
+    { path: '/financials/budgets', description: 'الموازنات', component: <BudgetList /> },
+    { path: '/financials/budgets/new', description: 'موازنة جديدة', component: <BudgetForm /> },
+    { path: '/financials/budgets/:id', description: 'تفاصيل الموازنة', component: <BudgetForm /> },
     { path: '/reports/financial/budget-variance', description: 'تقرير انحراف الموازنة', component: <BudgetReport /> },
     { path: '/gl/estimated-budgets', description: 'الموازنات التقديرية', component: <EstimatedBudgets /> },
 
